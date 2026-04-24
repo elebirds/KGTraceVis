@@ -9,6 +9,8 @@ a source-constrained industrial knowledge graph to support entity linking,
 evidence consistency scoring, noisy evidence correction, relation-weighted
 root-cause path ranking, and visual analytics.
 
+For the current Chinese research design draft, see [`docs/paper_idea_cn.md`](docs/paper_idea_cn.md). This document is a living draft and may change as the project evolves.
+
 ## Design Position
 
 KGTraceVis should stay small and reproducible in v0.
