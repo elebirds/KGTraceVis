@@ -1,0 +1,1 @@
+"""Mask feature extraction placeholder."""

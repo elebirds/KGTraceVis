@@ -1,0 +1,1 @@
+"""Wafer data adapter placeholder."""

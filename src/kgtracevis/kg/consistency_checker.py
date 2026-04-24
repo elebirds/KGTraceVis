@@ -1,0 +1,1 @@
+"""KG consistency checking helpers."""
