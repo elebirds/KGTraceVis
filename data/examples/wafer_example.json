@@ -1,0 +1,29 @@
+{
+  "case_id": "wafer_0001",
+  "dataset": "wafer",
+  "source": "multimodal",
+  "object": "wafer",
+  "anomaly_type": "nearfull",
+  "location": "wafer_surface",
+  "morphology": "dense_particles",
+  "severity": 0.7,
+  "confidence": 0.72,
+  "timestamp": null,
+  "raw_evidence": {
+    "image_region": null,
+    "heatmap_path": null,
+    "variables": [],
+    "variable_contributions": {},
+    "log_events": ["example_alarm"],
+    "description": "Example wafer image-log evidence."
+  },
+  "normalized_evidence": {},
+  "kg_analysis": {
+    "linked_entities": [],
+    "consistency_score": null,
+    "inconsistent_fields": [],
+    "correction_candidates": [],
+    "top_k_paths": []
+  },
+  "human_feedback": null
+}

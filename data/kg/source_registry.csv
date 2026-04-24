@@ -1,0 +1,2 @@
+source_id,title,type,path_or_url,used_for,notes
+example_seed,Minimal seed examples,manual,data/kg,nodes and edges schema validation,Only for repository skeleton tests

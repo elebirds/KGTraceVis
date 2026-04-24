@@ -1,0 +1,31 @@
+{
+  "case_id": "tep_0001",
+  "dataset": "tep",
+  "source": "time_series",
+  "object": "process",
+  "anomaly_type": "process_fault",
+  "location": "reactor",
+  "morphology": null,
+  "severity": 0.6,
+  "confidence": 0.75,
+  "timestamp": null,
+  "raw_evidence": {
+    "image_region": null,
+    "heatmap_path": null,
+    "variables": ["XMEAS_1"],
+    "variable_contributions": {
+      "XMEAS_1": 0.42
+    },
+    "log_events": [],
+    "description": "Example TEP variable anomaly evidence."
+  },
+  "normalized_evidence": {},
+  "kg_analysis": {
+    "linked_entities": [],
+    "consistency_score": null,
+    "inconsistent_fields": [],
+    "correction_candidates": [],
+    "top_k_paths": []
+  },
+  "human_feedback": null
+}

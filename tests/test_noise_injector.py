@@ -1,0 +1,1 @@
+"""Noise injector tests placeholder."""

@@ -1,0 +1,29 @@
+{
+  "case_id": "mvtec_0001",
+  "dataset": "mvtec",
+  "source": "image",
+  "object": "bottle",
+  "anomaly_type": "scratch",
+  "location": "surface",
+  "morphology": "linear",
+  "severity": 0.4,
+  "confidence": 0.8,
+  "timestamp": null,
+  "raw_evidence": {
+    "image_region": "mask_region_001",
+    "heatmap_path": null,
+    "variables": [],
+    "variable_contributions": {},
+    "log_events": [],
+    "description": "Example visual defect evidence."
+  },
+  "normalized_evidence": {},
+  "kg_analysis": {
+    "linked_entities": [],
+    "consistency_score": null,
+    "inconsistent_fields": [],
+    "correction_candidates": [],
+    "top_k_paths": []
+  },
+  "human_feedback": null
+}

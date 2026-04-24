@@ -1,0 +1,5 @@
+id,name,label,scenario,aliases,description
+ScratchDefect,Scratch defect,AnomalyType,mvtec,scratch,Example visual anomaly type
+LinearMorphology,Linear morphology,Morphology,mvtec,linear,Example morphology
+ProcessFault,Process fault,AnomalyType,tep,process_fault,Example TEP anomaly type
+NearfullDefect,Nearfull defect,AnomalyType,wafer,nearfull,Example wafer defect type

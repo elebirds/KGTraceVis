@@ -1,0 +1,2 @@
+head,relation,tail,scenario,source,evidence,confidence,weight,review_status,feedback_count,accepted_count,rejected_count
+ScratchDefect,HAS_MORPHOLOGY,LinearMorphology,mvtec,example_seed,Minimal example edge for schema verification,0.80,0.20,auto,0,0,0
