@@ -1,0 +1,9 @@
+data_root: data
+external_data_dir: data/external
+interim_data_dir: data/interim
+processed_data_dir: data/processed
+kg_dir: data/kg
+example_dir: data/examples
+runs_dir: runs
+outputs_dir: outputs
+artifacts_dir: artifacts

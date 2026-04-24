@@ -1,0 +1,14 @@
+seed: 42
+noise_levels:
+  - 0.1
+  - 0.2
+  - 0.3
+supported_noise_types:
+  - anomaly_type_replacement
+  - location_replacement
+  - morphology_replacement
+  - variable_deletion
+  - variable_name_perturbation
+  - log_event_deletion
+  - synonym_substitution
+  - contradiction_injection

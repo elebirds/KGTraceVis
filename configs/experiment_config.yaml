@@ -1,0 +1,7 @@
+experiment_name: v0_examples
+seed: 42
+input_dir: data/examples
+kg_nodes: data/kg/nodes.csv
+kg_edges: data/kg/edges.csv
+output_dir: runs
+top_k: 5
