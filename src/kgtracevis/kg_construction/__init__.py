@@ -17,6 +17,7 @@ from kgtracevis.kg_construction.export_kg_csv import (
     validate_kg_csv_contract,
     validate_nodes,
 )
+from kgtracevis.kg_construction.qa import KGQAFinding, KGQAReport, run_kg_qa
 from kgtracevis.kg_construction.source_loader import (
     SourceRecord,
     load_source_registry,
@@ -31,6 +32,8 @@ from kgtracevis.kg_construction.triple_cleaner import (
 __all__ = [
     "CandidateEntity",
     "CandidateTriple",
+    "KGQAFinding",
+    "KGQAReport",
     "SourceRecord",
     "assign_confidence",
     "clean_candidate_nodes",
@@ -44,6 +47,7 @@ __all__ = [
     "load_source_registry",
     "load_source_text",
     "load_structured_records",
+    "run_kg_qa",
     "validate_edges",
     "validate_kg_csv_contract",
     "validate_nodes",

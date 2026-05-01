@@ -7,7 +7,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from kgtracevis.kg.graph import KnowledgeGraph
+from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
 from kgtracevis.kg_construction.export_kg_csv import export_kg_csv, validate_kg_csv_contract
 from kgtracevis.kg_construction.source_loader import load_source_registry
 
@@ -30,8 +30,16 @@ def summarize_graph(graph: KnowledgeGraph, source_count: int) -> dict[str, objec
 def main() -> None:
     """Validate curated KG files and optionally export a normalized copy."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--nodes", nargs="+", default=["data/kg/nodes.csv"])
-    parser.add_argument("--edges", nargs="+", default=["data/kg/edges.csv"])
+    parser.add_argument(
+        "--nodes",
+        nargs="+",
+        default=[str(path) for path in DEFAULT_NODE_PATHS],
+    )
+    parser.add_argument(
+        "--edges",
+        nargs="+",
+        default=[str(path) for path in DEFAULT_EDGE_PATHS],
+    )
     parser.add_argument("--source-registry", default="data/kg/source_registry.csv")
     parser.add_argument(
         "--output-dir",

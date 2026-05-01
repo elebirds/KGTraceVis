@@ -20,6 +20,11 @@ outputs under `runs/` or `outputs/`.
 - `uv run python scripts/run_path_ranking.py --evidence <path> --write-json`
   analyzes one evidence file and writes a provenance-rich JSON summary under
   `outputs/path_ranking_v0/`.
+- `uv run python scripts/run_kg_qa.py --output outputs/kg_qa_report.json`
+  writes structured KG CSV issues and warnings without editing KG facts.
+- `uv run python scripts/run_experiment_suite.py` runs the local v0 script
+  suite and writes a consolidated JSON summary plus `table_summary.csv` under
+  `runs/v0_experiment_suite/`.
 
 Generated `runs/`, `outputs/`, and `artifacts/` content is ignored by Git. Do
 not commit these raw generated outputs. If a generated table, figure, or JSON

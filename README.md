@@ -182,6 +182,13 @@ Run noise experiment:
 uv run python scripts/run_noise_experiment.py
 ```
 
+Run KG QA and the consolidated v0 suite:
+
+```bash
+uv run python scripts/run_kg_qa.py --output outputs/kg_qa_report.json
+uv run python scripts/run_experiment_suite.py
+```
+
 Start the Streamlit demo:
 
 ```bash
