@@ -1,8 +1,8 @@
 {
-  "id": "implement-optional-neo4j-import-v0",
-  "name": "implement-optional-neo4j-import-v0",
-  "title": "Implement Optional Neo4j Import V0",
-  "description": "Implement optional Neo4j CSV import support without making local tests or examples require a database.",
+  "id": "finalize-experiment-scripts-v0",
+  "name": "finalize-experiment-scripts-v0",
+  "title": "Finalize Experiment Scripts V0",
+  "description": "Finalize reproducible v0 experiment scripts and paper asset generation notes without committing generated runs.",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,

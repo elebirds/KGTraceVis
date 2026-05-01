@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Review against backend/script checklist and invariants."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify script/core separation."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify quality gates and no generated outputs tracked."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify concise script output."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review generated output and paper asset provenance boundaries."}
