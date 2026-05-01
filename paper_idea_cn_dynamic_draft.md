@@ -74,22 +74,39 @@ flowchart TD
 
 本研究暂定围绕三个 use case 展开。三个 use case 不要求使用同一个异常检测模型，而是共享统一的证据表示、KG 分析和可视溯源框架。
 
-### 4.1 DS-MVTec / Defect Spectrum：视觉缺陷语义证据与噪声纠偏
+### 4.1 DS-MVTec / MVTec：人工增强视觉缺陷 RCA 子基准
 
-该 use case 用于验证图像、caption 和 mask 共同支持下的异常证据抽取与高噪声证据纠偏能力。
+该 use case 用于验证视觉缺陷场景下的结构化证据抽取、知识约束纠偏和候选根因路径排序能力。由于 MVTec 原始数据集不包含真实生产根因标注，本文不将其直接视为真实工艺 RCA benchmark，而是从其中选择若干具有明确视觉制造语义的对象和缺陷子类，人工构建一个可审查的 RCA reference layer。
 
-主要输入包括工业图像、缺陷 caption、细粒度 mask、缺陷类型或语义标签。
+候选对象可优先考虑 cable、metal_nut、screw、bottle、capsule 或 pill 等较容易解释制造/装配/污染/损伤原因的类别。人工增强层不追求还原真实工厂过程，而是为每类视觉缺陷建立 plausible root-cause categories，例如 MechanicalDamage、HandlingDamage、AssemblyError、MaterialDefect、Contamination、MissingComponent、SurfaceWear、ProcessMisalignment 和 PackagingPressure。
+
+主要输入包括工业图像、缺陷 caption、细粒度 mask、缺陷类型或语义标签，以及人工审核的视觉缺陷-候选根因映射。
 
 主要任务包括：
 
-1. 从 caption 中抽取 anomaly_type、location、morphology 等字段；
-2. 从 mask 中提取缺陷位置、形态和严重度；
-3. 构造 clean evidence；
-4. 注入字段级噪声；
-5. 利用 KG 判断 caption、mask 与缺陷语义之间是否一致；
-6. 输出纠偏候选。
+1. 选择具有 RCA 解释价值的 MVTec 对象和缺陷子类；
+2. 从 caption、mask 或人工规则中抽取 anomaly_type、location、morphology、severity 等字段；
+3. 为缺陷类型、形态、位置与候选根因类别建立人工审核映射；
+4. 将人工映射写入 KG，并为每条边保留 source、evidence、confidence 和 review_status；
+5. 构造 clean evidence，并注入字段级噪声；
+6. 利用 KG 判断视觉证据之间是否一致，并生成纠偏候选；
+7. 在人工增强 RCA reference layer 上搜索并排序 top-k 候选根因路径。
 
-该 use case 不承担真实工艺根因验证，而是用于验证视觉异常证据的语义规范化与高噪声纠偏。
+示例映射如下：
+
+```text
+object = metal_nut
+defect = scratch
+morphology = linear
+location = surface
+candidate_root_cause = MechanicalContact / HandlingDamage
+source = manual_curation + visual inspection rule
+evidence = "A scratch is a linear surface defect consistent with contact or handling damage."
+confidence = 0.75
+review_status = reviewed
+```
+
+该 use case 承担视觉缺陷 RCA 的方法验证，但其 ground truth 来源是人工审核的候选根因参考层，而不是 MVTec 原生真实生产根因。论文中需要明确将其表述为 curated plausible RCA reference，而不是 verified factory root cause。
 
 ### 4.2 Tennessee Eastman Process：过程时序异常与故障诊断
 
@@ -200,7 +217,7 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A[数据集标签/Caption/Mask/变量表/故障表/日志/旧论文] --> B[候选实体抽取]
+    A[数据集标签/Caption/Mask/变量表/故障表/日志/旧论文/人工审核记录] --> B[候选实体抽取]
     A --> C[候选三元组抽取]
     B --> D[实体规范化与别名合并]
     C --> E[关系清洗与置信度赋值]
@@ -224,6 +241,7 @@ NearfullDefect,Nearfull Defect,几乎全满缺陷,AnomalyType,wafer,"nearfull|de
 ```csv
 head,relation,tail,scenario,source,evidence,confidence,weight,review_status
 ScratchDefect,HAS_MORPHOLOGY,LineShape,mvtec,caption_mask_stats,"scratch captions and elongated masks",0.90,0.10,auto
+ScratchDefect,HAS_PLAUSIBLE_CAUSE,HandlingDamage,mvtec,manual_curation,"scratch is a linear surface defect consistent with handling or contact damage",0.75,0.25,reviewed
 GlueRemovalInsufficient,CAUSES,NearfullDefect,wafer,wafer_thesis,"insufficient glue removal may cause nearfull defect",0.88,0.12,reviewed
 ```
 
@@ -337,6 +355,19 @@ NMPOriginalBarrelLowLevel
 → NearfullDefect
 ```
 
+对于人工增强的 MVTec 视觉 RCA 场景，候选路径可表示为：
+
+```text
+MetalNut
+→ ScratchDefect
+→ LinearMorphology
+→ SurfaceLocation
+→ MechanicalContact
+→ HandlingDamage
+```
+
+该路径的评价目标不是证明 MVTec 样本真实发生了 HandlingDamage，而是验证系统能否从视觉证据、KG 约束和人工审核 reference layer 中恢复合理且可解释的候选根因路径。
+
 ---
 
 ## 10. 噪声建模与实验设计
@@ -369,6 +400,12 @@ r \in \{0.1,0.2,0.3,0.4,0.5\}
 3. KG consistency scoring；
 4. KG consistency scoring + correction；
 5. 完整 pipeline。
+
+针对 MVTec 人工增强 RCA 子基准，实验分为三类：
+
+1. Clean evidence RCA：输入未污染的视觉 evidence，评估 top-1 / top-3 候选根因是否命中人工审核 reference layer；
+2. Noisy evidence RCA：对 anomaly_type、location、morphology 等字段注入噪声，评估系统能否检测冲突、生成纠偏候选并恢复正确 RCA 路径；
+3. Case study：展示原图或缺陷区域、结构化 evidence、冲突字段、纠偏建议和 top-k 根因路径，强调可解释性和可审查性。
 
 ---
 
@@ -455,6 +492,8 @@ EntityLinkingAccuracy=\frac{\#CorrectLinkedEntities}{\#AllLinkedEntities}
 - Path hit rate；
 - Expert acceptance rate。
 
+其中，MVTec / DS-MVTec 的 root-cause accuracy 以人工审核的 curated plausible RCA reference layer 为评价参照；TEP 的 root-cause accuracy 以过程故障标签或故障类型映射为评价参照；晶圆场景若缺少大规模真实根因标签，则以 case study、专家接受率和路径解释质量为主。
+
 MRR 定义为：
 
 \[
@@ -477,18 +516,19 @@ MRR=\frac{1}{N}\sum_{i=1}^{N}\frac{1}{rank_i}
 
 1. **统一异常证据表示**：提出面向图像、时序、日志和文本描述的 anomaly evidence JSON schema。
 2. **来源约束的半自动 KG 构建流程**：提出一种面向工业异常检测与溯源任务的 lightweight KG 构建流程，使每条知识边均可追溯来源、证据和置信度。
-3. **知识约束的证据一致性评分与纠偏方法**：利用 KG 约束识别字段级噪声，并生成可解释纠偏候选。
-4. **关系加权的根因路径排序方法**：在 KG 中搜索候选原因路径，并结合关系置信度、证据匹配度和路径长度进行排序。
-5. **人在回路的可视分析系统原型**：支持工程人员查看异常证据、比较候选原因、进行 what-if 分析，并通过人工反馈修正系统结果。
+3. **人工增强的视觉缺陷 RCA reference layer**：针对缺少原生根因标注的 MVTec 视觉缺陷子类，构建可审查的 defect/morphology/location 到候选根因类别映射。
+4. **知识约束的证据一致性评分与纠偏方法**：利用 KG 约束识别字段级噪声，并生成可解释纠偏候选。
+5. **关系加权的根因路径排序方法**：在 KG 中搜索候选原因路径，并结合关系置信度、证据匹配度和路径长度进行排序。
+6. **人在回路的可视分析系统原型**：支持工程人员查看异常证据、比较候选原因、进行 what-if 分析，并通过人工反馈修正系统结果。
 
 ---
 
 ## 14. 当前边界与注意事项
 
 1. 本项目不追求统一底层异常检测模型，而是统一异常证据表示与 KG 分析流程。
-2. MVTec / DS-MVTec 主要用于视觉语义证据和噪声纠偏，不用于真实工艺根因验证。
-3. TEP 用于过程故障诊断和变量级故障解释。
-4. 晶圆数据用于完整的图像-日志-KG 溯源闭环验证。
+2. MVTec / DS-MVTec 用于人工增强的视觉缺陷 RCA 子基准、视觉证据纠偏和可解释路径推理；MVTec 原始数据不包含真实生产根因，本文只使用人工审核的 plausible RCA reference layer 作为评价参照。
+3. TEP 用于过程故障诊断和变量级故障解释，是更适合进行定量 RCA 指标评估的场景。
+4. 晶圆数据用于完整的图像-日志-KG 溯源闭环验证；若真实标签不足，则优先作为 case study 和可视分析展示。
 5. KG 是 task-oriented lightweight KG，不是全面工业百科知识库。
 6. LLM 只能用于候选抽取或 caption adapter，不能作为工业因果知识的唯一依据。
 7. 所有 KG 边必须保留 source、evidence、confidence 和 review_status。

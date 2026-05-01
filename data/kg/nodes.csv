@@ -1,5 +1,18 @@
 id,name,label,scenario,aliases,description
-ScratchDefect,Scratch defect,AnomalyType,mvtec,scratch,Example visual anomaly type
-LinearMorphology,Linear morphology,Morphology,mvtec,linear,Example morphology
-ProcessFault,Process fault,AnomalyType,tep,process_fault,Example TEP anomaly type
-NearfullDefect,Nearfull defect,AnomalyType,wafer,nearfull,Example wafer defect type
+BottleObject,Bottle,Object,mvtec,bottle,Example MVTec object
+ScratchDefect,Scratch defect,AnomalyType,mvtec,scratch|scratch defect,Linear surface defect used in the visual RCA example
+LinearMorphology,Linear morphology,Morphology,mvtec,linear|line-shaped|line,Elongated visual morphology
+SurfaceLocation,Surface location,Location,mvtec,surface|outer surface,Generic surface location
+MechanicalContact,Mechanical contact,RootCause,mvtec,contact damage|mechanical contact,Plausible contact-related root cause
+HandlingDamage,Handling damage,CauseCategory,mvtec,handling|handling damage,Plausible damage during handling or transport
+ProcessObject,Process,Object,tep,process|tep,Tennessee Eastman process object
+ProcessFault,Process fault,AnomalyType,tep,process_fault|fault,Example TEP anomaly type
+XMEAS1,XMEAS 1,Variable,tep,XMEAS_1|xmeas1,Example measured process variable
+ReactorUnit,Reactor unit,ProcessUnit,tep,reactor|reactor unit,Example TEP process unit
+FeedFlowDisturbance,Feed flow disturbance,RootCause,tep,feed disturbance|feed flow disturbance,Plausible process root cause for example fault
+WaferObject,Wafer,Object,wafer,wafer,Example wafer object
+NearfullDefect,Nearfull defect,AnomalyType,wafer,nearfull|full contamination|dense wafer contamination,Example wafer defect type
+DenseParticles,Dense particles,Morphology,wafer,dense_particles|dense particles,Dense particle morphology
+WaferSurface,Wafer surface,Location,wafer,wafer_surface|wafer surface,Surface location on wafer
+ExampleAlarm,Example alarm,LogEvent,wafer,example_alarm|example alarm,Example log alarm
+GlueRemovalInsufficient,Glue removal insufficient,RootCause,wafer,insufficient glue removal|glue removal issue,Plausible wafer process root cause

@@ -1,1 +1,102 @@
 """Relation-weighted root-cause path ranking helpers."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import networkx as nx
+
+from kgtracevis.kg.entity_linker import selected_entities_by_field
+from kgtracevis.kg.graph import KGEdge, KnowledgeGraph
+from kgtracevis.schema.evidence_schema import Evidence
+
+ROOT_CAUSE_LABELS = {"RootCause", "CauseCategory", "FaultType"}
+SOURCE_FIELDS = {"anomaly_type", "variable", "log_event"}
+
+
+def rank_root_cause_paths(
+    evidence: Evidence,
+    graph: KnowledgeGraph,
+    linked_entities: list[dict[str, Any]],
+    *,
+    top_k: int = 5,
+    max_depth: int = 5,
+    alpha: float = 0.55,
+    beta: float = 0.35,
+    gamma: float = 0.10,
+) -> list[dict[str, Any]]:
+    """Rank candidate RCA paths using relation confidence and evidence match."""
+    selected = selected_entities_by_field(linked_entities)
+    selected_ids = set(selected.values())
+    source_ids = {
+        entity_id
+        for field, entity_id in selected.items()
+        if field in SOURCE_FIELDS and entity_id in graph.nodes
+    }
+    target_ids = {
+        node.id
+        for node in graph.nodes.values()
+        if node.label in ROOT_CAUSE_LABELS or node.id.endswith("Cause")
+    }
+
+    ranked: list[dict[str, Any]] = []
+    for source_id in sorted(source_ids):
+        for target_id in sorted(target_ids - {source_id}):
+            for path in _simple_paths(graph, source_id, target_id, max_depth):
+                edges = _path_edges(graph, path)
+                if not edges:
+                    continue
+                conf = sum(edge.confidence for edge in edges) / len(edges)
+                evidence_match = len(set(path) & selected_ids) / max(1, len(selected_ids))
+                length_penalty = (len(path) - 1) / max_depth
+                score = alpha * conf + beta * evidence_match - gamma * length_penalty
+                ranked.append(
+                    {
+                        "path_id": "",
+                        "source_entity_id": source_id,
+                        "target_entity_id": target_id,
+                        "nodes": path,
+                        "node_names": [graph.nodes[node_id].name for node_id in path],
+                        "relations": [edge.relation for edge in edges],
+                        "score": round(score, 4),
+                        "confidence": round(conf, 4),
+                        "evidence_match": round(evidence_match, 4),
+                        "length": len(path) - 1,
+                        "supporting_evidence": [edge.evidence for edge in edges],
+                        "source_edges": [edge.model_dump() for edge in edges],
+                    }
+                )
+
+    ranked.sort(key=lambda item: (-float(item["score"]), item["nodes"]))
+    for index, item in enumerate(ranked[:top_k], start=1):
+        item["path_id"] = f"path_{evidence.case_id}_{index:03d}"
+    return ranked[:top_k]
+
+
+def _simple_paths(
+    graph: KnowledgeGraph,
+    source_id: str,
+    target_id: str,
+    max_depth: int,
+) -> list[list[str]]:
+    try:
+        return list(
+            nx.all_simple_paths(
+                graph.graph,
+                source=source_id,
+                target=target_id,
+                cutoff=max_depth,
+            )
+        )
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return []
+
+
+def _path_edges(graph: KnowledgeGraph, path: list[str]) -> list[KGEdge]:
+    edges: list[KGEdge] = []
+    for head, tail in zip(path, path[1:], strict=False):
+        edge_options = graph.edge_between(head, tail)
+        if not edge_options:
+            return []
+        edges.append(max(edge_options, key=lambda edge: edge.confidence))
+    return edges

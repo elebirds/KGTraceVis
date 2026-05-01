@@ -1,2 +1,15 @@
 head,relation,tail,scenario,source,evidence,confidence,weight,review_status,feedback_count,accepted_count,rejected_count
-ScratchDefect,HAS_MORPHOLOGY,LinearMorphology,mvtec,example_seed,Minimal example edge for schema verification,0.80,0.20,auto,0,0,0
+BottleObject,HAS_ANOMALY,ScratchDefect,mvtec,example_seed,Bottle example can contain scratch defect evidence,0.70,0.30,auto,0,0,0
+ScratchDefect,HAS_MORPHOLOGY,LinearMorphology,mvtec,caption_mask_stats,Scratch captions and elongated masks support linear morphology,0.90,0.10,auto,0,0,0
+ScratchDefect,OCCURS_ON,SurfaceLocation,mvtec,manual_curation,Scratch is treated as a surface defect in the visual RCA reference layer,0.82,0.18,reviewed,0,0,0
+ScratchDefect,HAS_PLAUSIBLE_CAUSE,MechanicalContact,mvtec,manual_curation,Scratch is a linear surface defect consistent with contact damage,0.75,0.25,reviewed,0,0,0
+MechanicalContact,PART_OF,HandlingDamage,mvtec,manual_curation,Mechanical contact is grouped under handling-related damage,0.70,0.30,reviewed,0,0,0
+XMEAS1,MEASURED_IN,ReactorUnit,tep,example_seed,XMEAS_1 is used as a reactor-related example variable,0.70,0.30,auto,0,0,0
+XMEAS1,INDICATES,ProcessFault,tep,example_seed,Abnormal XMEAS_1 can indicate the example process fault,0.65,0.35,auto,0,0,0
+ProcessFault,OCCURS_ON,ReactorUnit,tep,example_seed,The example process fault is associated with the reactor unit,0.76,0.24,auto,0,0,0
+ProcessFault,HAS_PLAUSIBLE_CAUSE,FeedFlowDisturbance,tep,example_seed,The example process fault may be explained by a feed flow disturbance,0.68,0.32,auto,0,0,0
+WaferObject,HAS_ANOMALY,NearfullDefect,wafer,example_seed,Wafer example contains nearfull defect evidence,0.70,0.30,auto,0,0,0
+NearfullDefect,HAS_MORPHOLOGY,DenseParticles,wafer,example_seed,Nearfull defects are represented with dense particle morphology in the example KG,0.85,0.15,auto,0,0,0
+NearfullDefect,OCCURS_ON,WaferSurface,wafer,example_seed,Nearfull defect affects the wafer surface in the example case,0.80,0.20,auto,0,0,0
+NearfullDefect,ASSOCIATED_WITH_EVENT,ExampleAlarm,wafer,example_seed,Example alarm is associated with the nearfull wafer case,0.60,0.40,auto,0,0,0
+NearfullDefect,HAS_PLAUSIBLE_CAUSE,GlueRemovalInsufficient,wafer,wafer_thesis,Insufficient glue removal may cause nearfull-like dense contamination,0.78,0.22,reviewed,0,0,0

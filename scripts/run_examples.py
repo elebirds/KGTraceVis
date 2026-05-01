@@ -34,7 +34,13 @@ def main() -> None:
         evidence = load_evidence_json(path)
         result = pipeline.analyze(evidence)
         results.append(result.model_dump())
-        print(f"validated {path}: case_id={evidence.case_id}")
+        print(
+            "analyzed "
+            f"{path}: case_id={evidence.case_id}, "
+            f"linked={len(result.linked_entities)}, "
+            f"consistency={result.consistency_score}, "
+            f"paths={len(result.top_k_paths)}"
+        )
 
     if not results:
         raise SystemExit(f"no example JSON files found in {example_dir}")
