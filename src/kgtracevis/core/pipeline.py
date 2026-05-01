@@ -24,7 +24,7 @@ class KGTracePipeline:
         """Create a pipeline backed by an in-memory KG."""
         self.graph = graph or KnowledgeGraph.from_default_paths()
 
-    def analyze(self, evidence: Evidence) -> AnalysisResult:
+    def analyze(self, evidence: Evidence, *, top_k: int = 5) -> AnalysisResult:
         """Analyze one evidence object.
 
         The v0 pipeline runs entity linking, consistency checking, correction
@@ -38,7 +38,7 @@ class KGTracePipeline:
             linked_entities,
             consistency,
         )
-        top_k_paths = rank_root_cause_paths(evidence, self.graph, linked_entities)
+        top_k_paths = rank_root_cause_paths(evidence, self.graph, linked_entities, top_k=top_k)
         return AnalysisResult(
             case_id=evidence.case_id,
             linked_entities=linked_entities,
