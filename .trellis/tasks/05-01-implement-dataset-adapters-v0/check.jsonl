@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Review adapter changes against core backend checklist and invariants."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify adapter logic is reusable and not duplicated in scripts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify validation behavior and unknown-field handling."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify tests and command quality gates pass."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review raw-record to unified-schema boundary behavior."}

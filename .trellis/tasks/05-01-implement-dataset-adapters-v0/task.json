@@ -1,8 +1,8 @@
 {
-  "id": "implement-noise-and-metrics-v0",
-  "name": "implement-noise-and-metrics-v0",
-  "title": "Implement Noise and Metrics V0",
-  "description": "Implement deterministic noise injection, core metric functions, and reproducible noise experiment script wiring for KGTraceVis v0.",
+  "id": "implement-dataset-adapters-v0",
+  "name": "implement-dataset-adapters-v0",
+  "title": "Implement Dataset Adapters V0",
+  "description": "Implement MVTec, TEP, and wafer adapter helpers that produce validated unified Evidence objects without dataset-specific schemas.",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,

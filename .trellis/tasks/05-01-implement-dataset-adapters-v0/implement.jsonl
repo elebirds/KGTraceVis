@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist and KGTraceVis invariants for adapter implementation."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Dataset adapters belong under src/kgtracevis/adapters and reusable logic must stay out of scripts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Adapters should rely on deterministic validation and avoid silent malformed evidence."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Defines pytest, ruff, mypy, and example-run quality gates."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Adapters connect raw records to schema, pipeline, metrics, and future scripts."}
