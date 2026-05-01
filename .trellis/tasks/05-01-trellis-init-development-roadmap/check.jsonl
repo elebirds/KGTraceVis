@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Top-level backend quality checklist and core invariants for review."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Check that code remains in the expected package/script/app boundaries."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Check KG CSV contracts, source-constrained edges, and Neo4j optionality."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check validation, ambiguity handling, and reviewed-edge protections."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required verification commands and test expectations for future tasks."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Review script/demo output style and logging boundaries."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Review whether new utilities duplicate existing patterns."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review cross-layer data flow for schema/KG/pipeline/app changes."}

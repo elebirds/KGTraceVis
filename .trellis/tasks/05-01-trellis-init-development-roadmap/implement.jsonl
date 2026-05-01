@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and KGTraceVis invariants for future implementation tasks."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Ensures reusable logic stays under src/kgtracevis and scripts/apps remain clients."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "KG CSV, in-memory graph, and Neo4j rules are central to the planned roadmap."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Future tasks must preserve schema validation, ambiguity recording, and reviewed-edge safety."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Defines required tests, lint, example runs, and traceability checks."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Guides script output and future logging boundaries for experiments and demos."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Roadmap tasks will add helpers and should search existing patterns before adding abstractions."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Planned work spans schema, KG, scripts, metrics, app, and service boundaries."}

@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Review against core backend checklist and KGTraceVis invariants."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify implementation respects package/script/app boundaries."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify source edge payloads keep required provenance and feedback fields."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify ambiguity, validation, and non-mutation behavior."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Review required tests and command checks."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review downstream contract implications across metrics, feedback, UI, and service layers."}

@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Core backend checklist and KGTraceVis invariants for pipeline contract changes."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Keeps reusable pipeline/result logic under src/kgtracevis and scripts/apps as clients."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Source edge payloads and KG feedback counters are part of the output contract."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Pipeline outputs must preserve ambiguity and validation behavior without silent mutation."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Defines pytest, ruff, examples, and traceability requirements."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Pipeline contracts affect scripts, future metrics, feedback, Streamlit, and service handlers."}
