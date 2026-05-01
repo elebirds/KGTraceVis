@@ -21,7 +21,8 @@
   "children": [
     "05-01-harden-pipeline-output-contracts",
     "05-01-implement-noise-and-metrics-v0",
-    "05-01-implement-dataset-adapters-v0"
+    "05-01-implement-dataset-adapters-v0",
+    "05-01-implement-kg-construction-helpers"
   ],
   "parent": null,
   "relatedFiles": [],
