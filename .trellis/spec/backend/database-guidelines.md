@@ -71,6 +71,21 @@ result = KGTracePipeline(graph=graph).analyze(evidence)
   `allow_reviewed_overwrite=True`.
 - Allow missing default reference files only when `skip_missing=True`.
 
+## KG Construction Helper Rules
+
+Use helpers under `src/kgtracevis/kg_construction/` for source-constrained KG
+construction:
+
+- Candidate entities and triples must include `source_id` or `source`.
+- Candidate triples must include evidence text or a source row reference.
+- Assign confidence from source type, then set `weight` to `1 - confidence`
+  unless an explicit reviewed value is provided.
+- Run `validate_kg_csv_contract()` before exporting KG CSV rows.
+- `scripts/build_kg.py` validates and summarizes the merged development KG by
+  default; exact duplicate rows may already be collapsed by
+  `KnowledgeGraph.from_paths()`, so use focused tests when source-row duplicate
+  detection itself matters.
+
 ## Neo4j Rules
 
 Neo4j code should remain optional for v0:
