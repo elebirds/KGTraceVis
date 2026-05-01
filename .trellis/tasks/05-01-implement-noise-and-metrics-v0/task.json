@@ -1,8 +1,8 @@
 {
-  "id": "harden-pipeline-output-contracts",
-  "name": "harden-pipeline-output-contracts",
-  "title": "Harden Pipeline Output Contracts",
-  "description": "Stabilize pipeline output IDs and feedback-compatible references before metrics, demos, and experiments.",
+  "id": "implement-noise-and-metrics-v0",
+  "name": "implement-noise-and-metrics-v0",
+  "title": "Implement Noise and Metrics V0",
+  "description": "Implement deterministic noise injection, core metric functions, and reproducible noise experiment script wiring for KGTraceVis v0.",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,

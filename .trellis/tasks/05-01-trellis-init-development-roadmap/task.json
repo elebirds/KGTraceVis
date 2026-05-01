@@ -19,7 +19,8 @@
   "pr_url": null,
   "subtasks": [],
   "children": [
-    "05-01-harden-pipeline-output-contracts"
+    "05-01-harden-pipeline-output-contracts",
+    "05-01-implement-noise-and-metrics-v0"
   ],
   "parent": null,
   "relatedFiles": [],

@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Review against backend checklist and core KGTraceVis invariants."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify scripts call reusable src/kgtracevis modules without duplicating logic."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify experiment/metric code does not add unsupported KG facts or require Neo4j."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify deterministic handling of empty inputs, invalid data, and low-confidence outputs."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify tests and command quality gates pass."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify CLI experiment output remains concise and reproducible."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Review helper reuse and duplicate metric patterns."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review schema/pipeline/script/experiment boundary consistency."}

@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist and KGTraceVis invariants for implementing noise, metrics, and scripts."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Keeps reusable noise/metric logic under src/kgtracevis and scripts as clients."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Metrics and experiments consume KG-backed source edge/path contracts without changing KG facts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Noise and metrics should handle invalid or empty data deterministically and explicitly."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Defines pytest, ruff, mypy, and example-run quality gates."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Guides concise script output and avoids noisy experiment logging."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "New metric helpers should avoid duplicated counting/ranking patterns."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Noise and metrics touch schema, pipeline results, scripts, and future experiment/UI layers."}
