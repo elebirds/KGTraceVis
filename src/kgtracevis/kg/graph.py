@@ -7,17 +7,19 @@ tests, and the Streamlit app a fast backend before Neo4j is required.
 from __future__ import annotations
 
 import csv
+import importlib
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import networkx as nx
 
 try:  # pragma: no cover - exercised only when rapidfuzz is installed.
-    from rapidfuzz import fuzz
+    _rapidfuzz_fuzz: Any | None = importlib.import_module("rapidfuzz.fuzz")
 except ImportError:  # pragma: no cover
-    fuzz = None
+    _rapidfuzz_fuzz = None
 
 REQUIRED_NODE_COLUMNS = {"id", "name", "label", "scenario", "aliases", "description"}
 REQUIRED_EDGE_COLUMNS = {
@@ -352,7 +354,7 @@ def _merge_edges(
     return merged
 
 
-def _require_columns(path: Path, actual: list[str] | None, required: set[str]) -> None:
+def _require_columns(path: Path, actual: Sequence[str] | None, required: set[str]) -> None:
     actual_set = set(actual or [])
     missing = sorted(required - actual_set)
     if missing:
@@ -371,8 +373,8 @@ def _match_score(normalized_mention: str, term: str, node: KGNode) -> tuple[floa
         return 0.95, "alias"
     if normalized_mention in normalized_term or normalized_term in normalized_mention:
         return 0.82, "partial"
-    if fuzz is not None:
-        return fuzz.WRatio(normalized_mention, normalized_term) / 100.0, "fuzzy"
+    if _rapidfuzz_fuzz is not None:
+        return _rapidfuzz_fuzz.WRatio(normalized_mention, normalized_term) / 100.0, "fuzzy"
     return _fallback_ratio(normalized_mention, normalized_term), "fuzzy"
 
 

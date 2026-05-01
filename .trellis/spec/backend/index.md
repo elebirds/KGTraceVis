@@ -33,6 +33,7 @@ Run at minimum:
 ```bash
 uv run --extra dev pytest
 uv run --extra dev ruff check .
+uv run --extra dev mypy src tests scripts
 uv run python scripts/run_examples.py
 ```
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 import networkx as nx
@@ -46,6 +47,7 @@ def rank_root_cause_paths(
                 edges = _path_edges(graph, path)
                 if not edges:
                     continue
+                relations = [edge.relation for edge in edges]
                 conf = sum(edge.confidence for edge in edges) / len(edges)
                 evidence_match = len(set(path) & selected_ids) / max(1, len(selected_ids))
                 length_penalty = (len(path) - 1) / max_depth
@@ -57,19 +59,24 @@ def rank_root_cause_paths(
                         "target_entity_id": target_id,
                         "nodes": path,
                         "node_names": [graph.nodes[node_id].name for node_id in path],
-                        "relations": [edge.relation for edge in edges],
+                        "relations": relations,
                         "score": round(score, 4),
                         "confidence": round(conf, 4),
                         "evidence_match": round(evidence_match, 4),
                         "length": len(path) - 1,
                         "supporting_evidence": [edge.evidence for edge in edges],
+                        "source_edge_ids": [edge.edge_id for edge in edges],
                         "source_edges": [edge.model_dump() for edge in edges],
                     }
                 )
 
     ranked.sort(key=lambda item: (-float(item["score"]), item["nodes"]))
-    for index, item in enumerate(ranked[:top_k], start=1):
-        item["path_id"] = f"path_{evidence.case_id}_{index:03d}"
+    for item in ranked[:top_k]:
+        item["path_id"] = _path_id(
+            evidence.case_id,
+            item["nodes"],
+            item["relations"],
+        )
     return ranked[:top_k]
 
 
@@ -100,3 +107,9 @@ def _path_edges(graph: KnowledgeGraph, path: list[str]) -> list[KGEdge]:
             return []
         edges.append(max(edge_options, key=lambda edge: edge.confidence))
     return edges
+
+
+def _path_id(case_id: str, nodes: list[str], relations: list[str]) -> str:
+    signature = "|".join((*nodes, *relations))
+    digest = hashlib.sha1(signature.encode("utf-8")).hexdigest()[:10]
+    return f"path_{case_id}_{digest}"

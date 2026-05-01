@@ -38,15 +38,22 @@ def generate_correction_candidates(
                 if key in seen:
                     continue
                 seen.add(key)
+                original_value = _field_value(evidence, target_field)
                 candidates.append(
                     {
                         "candidate_id": _candidate_id(evidence.case_id, target_field, target.id),
+                        "source_field": source_field,
+                        "source_entity_id": source_id,
+                        "target_field": target_field,
                         "field": target_field,
-                        "original": _field_value(evidence, target_field),
+                        "original_value": original_value,
+                        "original": original_value,
                         "suggested_entity_id": target.id,
+                        "suggested_value": target.name,
                         "suggested": target.name,
                         "score": round(edge.confidence, 4),
                         "reason": f"{source_id} {relation} {target.id}",
+                        "supporting_edge_ids": [edge.edge_id],
                         "supporting_edges": [edge.model_dump()],
                     }
                 )

@@ -21,7 +21,11 @@ def link_evidence_entities(
     matches. Downstream modules can choose how conservative they want to be.
     """
     links: list[dict[str, Any]] = []
+    occurrences: dict[tuple[str, str], int] = {}
     for field, mention in _iter_mentions(evidence):
+        occurrence_key = (field, mention)
+        occurrences[occurrence_key] = occurrences.get(occurrence_key, 0) + 1
+        link_id = _link_id(evidence.case_id, field, mention, occurrences[occurrence_key])
         candidates = graph.candidates(
             mention,
             scenario=evidence.dataset,
@@ -31,6 +35,7 @@ def link_evidence_entities(
         if not candidates:
             links.append(
                 {
+                    "link_id": link_id,
                     "field": field,
                     "mention": mention,
                     "selected_entity_id": None,
@@ -45,6 +50,7 @@ def link_evidence_entities(
         second_score = candidates[1].score if len(candidates) > 1 else 0.0
         links.append(
             {
+                "link_id": link_id,
                 "field": field,
                 "mention": mention,
                 "selected_entity_id": selected.entity_id,
@@ -81,3 +87,15 @@ def _iter_mentions(evidence: Evidence) -> list[tuple[str, str]]:
     for event in evidence.raw_evidence.log_events:
         mentions.append(("log_event", event))
     return [(field, mention) for field, mention in mentions if mention]
+
+
+def _link_id(case_id: str, field: str, mention: str, occurrence: int) -> str:
+    mention_token = _stable_token(mention) or "unknown"
+    base = f"link_{case_id}_{field}_{mention_token}"
+    if occurrence > 1:
+        return f"{base}_{occurrence:02d}"
+    return base
+
+
+def _stable_token(value: str) -> str:
+    return "_".join("".join(ch.lower() if ch.isalnum() else " " for ch in value).split())

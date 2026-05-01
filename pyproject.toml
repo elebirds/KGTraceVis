@@ -78,3 +78,7 @@ ignore = []
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.mypy]
+explicit_package_bases = true
+ignore_missing_imports = true

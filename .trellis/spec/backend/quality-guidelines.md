@@ -12,10 +12,11 @@ uv run --extra dev pytest
 uv run python scripts/run_examples.py
 ```
 
-Also run lint when Python code or config changes:
+Also run lint and type-check when Python code or config changes:
 
 ```bash
 uv run --extra dev ruff check .
+uv run --extra dev mypy src tests scripts
 ```
 
 If Neo4j-related code is modified, also run:

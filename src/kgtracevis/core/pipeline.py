@@ -6,6 +6,8 @@ duplicating analysis logic in their own entry points.
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from kgtracevis.core.result import AnalysisResult
 from kgtracevis.kg.consistency_checker import check_consistency
 from kgtracevis.kg.correction_generator import generate_correction_candidates
@@ -44,5 +46,5 @@ class KGTracePipeline:
             inconsistent_fields=consistency["inconsistent_fields"],
             correction_candidates=correction_candidates,
             top_k_paths=top_k_paths,
-            human_feedback=evidence.human_feedback,
+            human_feedback=deepcopy(evidence.human_feedback),
         )
