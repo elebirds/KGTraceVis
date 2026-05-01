@@ -90,6 +90,8 @@ Acceptance:
   candidates, ranked paths, and supporting KG edges.
 - Existing examples still pass.
 
+Status: completed and archived.
+
 ### 2. Implement Noise And Metrics V0
 
 Purpose: enable reproducible paper experiments on clean/noisy evidence.
@@ -104,6 +106,8 @@ Acceptance:
 - Tests cover deterministic corruption and metric edge cases.
 - Script output records `is_noisy`, `noise_level`, `corrupted_fields`, and
   `clean_reference`.
+
+Status: completed and archived.
 
 ### 3. Implement Dataset Adapter V0s
 
@@ -121,6 +125,8 @@ Acceptance:
 - Adapters return validated `Evidence` objects.
 - Dataset-specific details remain inside `raw_evidence`.
 
+Status: completed and archived.
+
 ### 4. Expand Source-Constrained KG Construction
 
 Purpose: support curated KG growth while preserving provenance.
@@ -136,6 +142,8 @@ Acceptance:
   review_status, and feedback counters.
 - Tests cover deduplication and reviewed-edge protection.
 
+Status: completed and archived.
+
 ### 5. Build Streamlit Demo V0
 
 Purpose: expose the full reasoning loop for visual analytics review.
@@ -150,6 +158,8 @@ Acceptance:
 - Demo calls `KGTracePipeline` instead of duplicating pipeline logic.
 - The app starts locally with `uv run streamlit run src/kgtracevis/app/streamlit_app.py`.
 
+Status: completed and archived.
+
 ### 6. Add Neo4j Backend After In-Memory Stability
 
 Purpose: provide graph database import/query support once the v0 loop is stable.
@@ -162,6 +172,24 @@ Acceptance:
 
 - Neo4j code is optional and environment-driven.
 - Neo4j changes pass the extra import/example commands required by project docs.
+
+Status: completed and archived.
+
+### 7. Finalize Experiment Scripts V0
+
+Purpose: make the v0 script surface reproducible and document paper asset
+provenance.
+
+- Implement path ranking CLI over checked-in examples or one evidence file.
+- Keep generated outputs under ignored `runs/` or `outputs/`.
+- Document how selected generated outputs become paper assets.
+
+Acceptance:
+
+- `scripts/run_path_ranking.py` runs locally and can write provenance-rich JSON.
+- Generated outputs remain ignored by Git.
+
+Status: completed and archived.
 
 ## Out Of Scope
 
@@ -180,6 +208,7 @@ Acceptance:
 - [x] `implement.jsonl` has agent-curated spec context.
 - [x] `check.jsonl` has agent-curated spec context.
 - [x] User confirms this development path or requests edits.
+- [x] All planned v0 implementation subtasks completed and archived.
 
 ## Technical Notes
 
