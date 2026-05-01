@@ -1,51 +1,90 @@
 # Database Guidelines
 
-> Database patterns and conventions for this project.
+KGTraceVis currently uses CSV-backed source-constrained KG files as the primary
+development backend. Neo4j is supported as a future/import backend, but the v0
+pipeline should remain runnable without a database service.
 
----
+## Current Backends
 
-## Overview
+| Backend | Purpose | Example |
+|---|---|---|
+| CSV files | tracked curated KG source of truth | `data/kg/nodes.csv`, `data/kg/edges.csv` |
+| In-memory NetworkX graph | default analysis backend for tests/scripts/app | `KnowledgeGraph.from_default_paths()` |
+| Neo4j | optional graph database import/query target | `scripts/import_kg.py` |
 
-<!--
-Document your project's database conventions here.
+## CSV Node Contract
 
-Questions to answer:
-- What ORM/query library do you use?
-- How are migrations managed?
-- What are the naming conventions for tables/columns?
-- How do you handle transactions?
--->
+Node CSV files must include:
 
-(To be filled by the team)
+```csv
+id,name,label,scenario,aliases,description
+```
 
----
+Rules:
 
-## Query Patterns
+- `id` uses PascalCase, e.g. `ScratchDefect`.
+- `scenario` is one of `mvtec`, `tep`, `wafer`, or `shared`.
+- `aliases` uses `|`, `;`, or `,` separated aliases.
+- Do not create dataset-specific node schemas.
 
-<!-- How should queries be written? Batch operations? -->
+## CSV Edge Contract
 
-(To be filled by the team)
+Edge CSV files must include:
 
----
+```csv
+head,relation,tail,scenario,source,evidence,confidence,weight,review_status,feedback_count,accepted_count,rejected_count
+```
 
-## Migrations
+Rules:
 
-<!-- How to create and run migrations -->
+- `relation` uses uppercase snake case, e.g. `HAS_MORPHOLOGY`.
+- `confidence` is a float in `[0, 1]`.
+- `weight` is normally `1 - confidence`.
+- `review_status` is `auto`, `reviewed`, or `rejected`.
+- Feedback counters are non-negative integers.
+- Every edge must preserve source and evidence text.
+- Do not overwrite reviewed triples automatically.
 
-(To be filled by the team)
+## Loading Pattern
 
----
+Use `KnowledgeGraph.from_default_paths()` for the default development pipeline.
+It loads the base KG plus development reference layers such as
+`data/kg/mvtec_rca_reference.csv`.
 
-## Naming Conventions
+Use `KnowledgeGraph.from_csv()` only when a test intentionally wants a single
+node/edge CSV pair without reference layers.
 
-<!-- Table names, column names, index names -->
+Example:
 
-(To be filled by the team)
+```python
+graph = KnowledgeGraph.from_default_paths()
+result = KGTracePipeline(graph=graph).analyze(evidence)
+```
 
----
+## Merge Rules
+
+`KnowledgeGraph.from_paths()` supports multi-file loading:
+
+- Deduplicate identical nodes and edges.
+- Raise on conflicting node definitions.
+- Raise if a reviewed edge would be overwritten unless
+  `allow_reviewed_overwrite=True`.
+- Allow missing default reference files only when `skip_missing=True`.
+
+## Neo4j Rules
+
+Neo4j code should remain optional for v0:
+
+- Do not make tests or scripts require a running Neo4j instance unless the script
+  explicitly uses `--with-neo4j`.
+- Keep CSV as the reproducible source of truth.
+- Import scripts may read configs from `configs/neo4j.example.yaml` or
+  environment variables.
 
 ## Common Mistakes
 
-<!-- Database-related mistakes your team has made -->
-
-(To be filled by the team)
+- Treating MVTec plausible RCA edges as verified factory root causes.
+- Adding KG edges without `source`, `evidence`, `confidence`, or
+  `review_status`.
+- Putting generated experiment output into tracked KG CSV files.
+- Requiring Neo4j for tests that should run against the in-memory graph.

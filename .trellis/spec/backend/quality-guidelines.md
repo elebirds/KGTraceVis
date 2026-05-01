@@ -1,51 +1,123 @@
 # Quality Guidelines
 
-> Code quality standards for backend development.
+KGTraceVis prioritizes clarity, reproducibility, and traceability over complex
+model design.
 
----
+## Required Commands
 
-## Overview
+Before submitting code changes, run:
 
-<!--
-Document your project's quality standards here.
+```bash
+uv run --extra dev pytest
+uv run python scripts/run_examples.py
+```
 
-Questions to answer:
-- What patterns are forbidden?
-- What linting rules do you enforce?
-- What are your testing requirements?
-- What code review standards apply?
--->
+Also run lint when Python code or config changes:
 
-(To be filled by the team)
+```bash
+uv run --extra dev ruff check .
+```
 
----
+If Neo4j-related code is modified, also run:
 
-## Forbidden Patterns
+```bash
+uv run python scripts/import_kg.py
+uv run python scripts/run_examples.py --with-neo4j
+```
 
-<!-- Patterns that should never be used and why -->
+## Test Expectations
 
-(To be filled by the team)
+Tests should cover behavior, not placeholders:
 
----
+- schema validation,
+- KG CSV loading and merge behavior,
+- entity linking,
+- consistency checking,
+- correction generation,
+- path ranking,
+- noise injection,
+- metric calculation.
 
-## Required Patterns
+Current examples:
 
-<!-- Patterns that must always be used -->
+- `tests/test_kg_graph.py`
+- `tests/test_entity_linker.py`
+- `tests/test_consistency_checker.py`
+- `tests/test_path_ranker.py`
+- `tests/test_pipeline.py`
 
-(To be filled by the team)
+## Coding Rules
 
----
+- Use Python 3.10+ syntax.
+- Use Pydantic for JSON schema validation.
+- Use `uv` for dependency management.
+- Use type hints where practical.
+- Keep public functions documented with short docstrings.
+- Keep core logic under `src/kgtracevis/`.
+- Avoid hidden global state.
+- Avoid hard-coded absolute paths.
+- Read paths from config, arguments, or relative project defaults.
 
-## Testing Requirements
+## KG Quality Rules
 
-<!-- What level of testing is expected -->
+- Never add unsupported industrial facts.
+- Every KG edge must include `source`, `evidence`, `confidence`, and
+  `review_status`.
+- Do not claim MVTec has native real root-cause labels.
+- MVTec RCA edges are curated plausible reference edges unless formal review
+  proves otherwise.
+- Do not overwrite reviewed triples automatically.
 
-(To be filled by the team)
+## Lint Scope
 
----
+Ruff applies to KGTraceVis source, tests, scripts, and project config. Trellis
+and tool-generated scaffolding is excluded in `pyproject.toml`:
 
-## Code Review Checklist
+```toml
+extend-exclude = [
+    ".agents",
+    ".claude",
+    ".codex",
+    ".cursor",
+    ".opencode",
+    ".trellis",
+]
+```
 
-<!-- What reviewers should check -->
+Do not "fix" generated Trellis files just to satisfy KGTraceVis lint.
 
-(To be filled by the team)
+## Wrong vs Correct
+
+Wrong:
+
+```python
+# silently choose a weak match
+return candidates[0]
+```
+
+Correct:
+
+```python
+# return top-k candidates and record ambiguity
+return {
+    "selected_entity_id": selected.entity_id,
+    "ambiguous": selected.score - second_score < 0.08,
+    "candidates": [candidate.model_dump() for candidate in candidates],
+}
+```
+
+Wrong:
+
+```python
+# script owns reusable analysis logic
+def rank_paths(...):
+    ...
+```
+
+Correct:
+
+```python
+from kgtracevis.kg.path_ranker import rank_root_cause_paths
+```
+
+Scripts call reusable modules; they do not duplicate the core pipeline.

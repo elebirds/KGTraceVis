@@ -1,51 +1,67 @@
 # Logging Guidelines
 
-> How logging is done in this project.
+KGTraceVis currently uses lightweight script output instead of a structured
+logging framework. Keep this simple until a service or long-running experiment
+runner needs richer logs.
 
----
+## Current Pattern
 
-## Overview
+- CLI scripts print concise progress summaries.
+- Core library functions should not print during normal execution.
+- Tests should assert returned data, not parse logs.
 
-<!--
-Document your project's logging conventions here.
+Example:
 
-Questions to answer:
-- What logging library do you use?
-- What are the log levels and when to use each?
-- What should be logged?
-- What should NOT be logged (PII, secrets)?
--->
+```python
+print(
+    "analyzed "
+    f"{path}: case_id={evidence.case_id}, "
+    f"linked={len(result.linked_entities)}, "
+    f"consistency={result.consistency_score}, "
+    f"paths={len(result.top_k_paths)}"
+)
+```
 
-(To be filled by the team)
+This pattern is used in `scripts/run_examples.py`.
 
----
+## What To Log Or Print
 
-## Log Levels
+For scripts:
 
-<!-- When to use each level: debug, info, warn, error -->
+- input file or case ID,
+- number of validated/analyzed examples,
+- consistency score,
+- number of linked entities,
+- number of returned paths,
+- output path when writing files.
 
-(To be filled by the team)
+For future experiment runners:
 
----
+- config path,
+- random seed,
+- noise level,
+- metric output path,
+- summary metrics.
 
-## Structured Logging
+## What Not To Log
 
-<!-- Log format, required fields -->
+- Full raw datasets.
+- Secrets or credentials from `.env`.
+- Long evidence payloads by default.
+- Full stack traces in user-facing app views.
 
-(To be filled by the team)
+## Future Service Pattern
 
----
+When FastAPI or another service layer becomes active:
 
-## What to Log
+- Use Python `logging`.
+- Log request/case IDs and high-level status.
+- Keep core modules free of logger configuration.
+- Configure log formatting at the application boundary.
 
-<!-- Important events to log -->
+## Common Mistakes
 
-(To be filled by the team)
-
----
-
-## What NOT to Log
-
-<!-- Sensitive data, PII, secrets -->
-
-(To be filled by the team)
+- Printing inside reusable core functions such as `KGTracePipeline.analyze()`.
+- Logging entire raw evidence blobs when only a case ID is needed.
+- Treating logs as experiment artifacts; metrics and configs should be written
+  as structured files under `runs/` or `outputs/`.
