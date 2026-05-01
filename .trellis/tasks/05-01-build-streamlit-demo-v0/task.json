@@ -1,8 +1,8 @@
 {
-  "id": "implement-kg-construction-helpers",
-  "name": "implement-kg-construction-helpers",
-  "title": "Implement KG Construction Helpers",
-  "description": "Implement source loading, candidate extraction, confidence assignment, triple cleaning, and CSV export helpers for source-constrained KG construction.",
+  "id": "build-streamlit-demo-v0",
+  "name": "build-streamlit-demo-v0",
+  "title": "Build Streamlit Demo V0",
+  "description": "Build a lightweight Streamlit demo over example evidence using KGTracePipeline outputs.",
   "status": "in_progress",
   "dev_type": null,
   "scope": null,

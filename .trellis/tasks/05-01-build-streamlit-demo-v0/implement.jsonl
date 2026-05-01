@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend/app checklist and KGTraceVis invariants for Streamlit demo."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "App must call reusable pipeline logic rather than duplicating analysis."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Demo should keep validation failures explicit and local."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Defines pytest, ruff, mypy, examples, and script quality gates."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Demo spans schema, pipeline outputs, app rendering, and future feedback flows."}
