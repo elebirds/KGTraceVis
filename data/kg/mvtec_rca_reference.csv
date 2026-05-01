@@ -1,0 +1,18 @@
+head,relation,tail,scenario,source,evidence,confidence,weight,review_status,feedback_count,accepted_count,rejected_count
+MetalNutObject,HAS_ANOMALY,ScratchDefect,mvtec,manual_curation,Metal nut scratch is selected as a development RCA case because linear surface marks are visually consistent with contact or handling damage,0.80,0.20,reviewed,0,0,0
+ScratchDefect,HAS_PLAUSIBLE_CAUSE,MechanicalContact,mvtec,manual_curation,Scratch is a linear surface defect consistent with contact damage,0.75,0.25,reviewed,0,0,0
+MechanicalContact,PART_OF,HandlingDamage,mvtec,manual_curation,Mechanical contact is grouped under handling-related damage,0.70,0.30,reviewed,0,0,0
+ScratchDefect,HAS_PLAUSIBLE_CAUSE,SurfaceWear,mvtec,manual_curation,Repeated surface abrasion can produce shallow scratch-like marks,0.62,0.38,reviewed,0,0,0
+ColorDefect,HAS_PLAUSIBLE_CAUSE,ContaminationCause,mvtec,manual_curation,Localized color change can indicate residue staining or foreign material on the surface,0.66,0.34,reviewed,0,0,0
+ColorDefect,HAS_PLAUSIBLE_CAUSE,MaterialDefect,mvtec,manual_curation,Color variation can also reflect material or coating inconsistency,0.58,0.42,auto,0,0,0
+CableObject,HAS_ANOMALY,CutDefect,mvtec,manual_curation,Cable cut defects are selected as development RCA cases for mechanical or assembly-related damage,0.78,0.22,reviewed,0,0,0
+CutDefect,HAS_PLAUSIBLE_CAUSE,MechanicalContact,mvtec,manual_curation,Cut-like cable damage is visually consistent with sharp contact or cutting damage,0.72,0.28,reviewed,0,0,0
+MissingWireDefect,HAS_PLAUSIBLE_CAUSE,MissingComponent,mvtec,manual_curation,Missing wire evidence maps to a missing component root-cause category,0.82,0.18,reviewed,0,0,0
+MissingWireDefect,HAS_PLAUSIBLE_CAUSE,AssemblyError,mvtec,manual_curation,Missing wire evidence can be explained by an assembly omission or placement error,0.72,0.28,reviewed,0,0,0
+BentWireDefect,HAS_PLAUSIBLE_CAUSE,AssemblyError,mvtec,manual_curation,Bent wire evidence can indicate assembly or routing error,0.70,0.30,reviewed,0,0,0
+BentWireDefect,HAS_PLAUSIBLE_CAUSE,ProcessMisalignment,mvtec,manual_curation,Bent wire evidence can also indicate fixture or positioning misalignment,0.61,0.39,auto,0,0,0
+CrackDefect,HAS_PLAUSIBLE_CAUSE,MaterialDefect,mvtec,manual_curation,Cracks can indicate brittle material or formation defects,0.72,0.28,reviewed,0,0,0
+CrackDefect,HAS_PLAUSIBLE_CAUSE,PackagingPressure,mvtec,manual_curation,Cracks can also be consistent with compression during packaging or transport,0.66,0.34,reviewed,0,0,0
+ContaminationDefect,HAS_PLAUSIBLE_CAUSE,ContaminationCause,mvtec,manual_curation,Visible contamination maps to a foreign material or residue source,0.84,0.16,reviewed,0,0,0
+SqueezeDefect,HAS_PLAUSIBLE_CAUSE,PackagingPressure,mvtec,manual_curation,Squeeze-like deformation is consistent with compression or packaging pressure,0.78,0.22,reviewed,0,0,0
+SqueezeDefect,HAS_PLAUSIBLE_CAUSE,HandlingDamage,mvtec,manual_curation,Squeeze-like deformation can also be caused by handling damage,0.63,0.37,reviewed,0,0,0

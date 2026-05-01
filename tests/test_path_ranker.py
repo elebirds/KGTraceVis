@@ -11,7 +11,7 @@ from kgtracevis.schema.validators import load_evidence_json
 def test_mvtec_example_returns_root_cause_path() -> None:
     """The MVTec example should return a plausible RCA path."""
     evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
-    graph = KnowledgeGraph.from_csv()
+    graph = KnowledgeGraph.from_default_paths()
     links = link_evidence_entities(evidence, graph)
 
     paths = rank_root_cause_paths(evidence, graph, links)

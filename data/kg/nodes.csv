@@ -1,10 +1,29 @@
 id,name,label,scenario,aliases,description
 BottleObject,Bottle,Object,mvtec,bottle,Example MVTec object
+MetalNutObject,Metal nut,Object,mvtec,metal_nut|metal nut,Recommended MVTec RCA object
+CableObject,Cable,Object,mvtec,cable,Recommended MVTec RCA object
+ScrewObject,Screw,Object,mvtec,screw,Recommended MVTec RCA object
+CapsuleObject,Capsule,Object,mvtec,capsule,Recommended MVTec RCA object
+PillObject,Pill,Object,mvtec,pill,Recommended MVTec RCA object
 ScratchDefect,Scratch defect,AnomalyType,mvtec,scratch|scratch defect,Linear surface defect used in the visual RCA example
+ColorDefect,Color defect,AnomalyType,mvtec,color|color defect,Color change visual defect
+CutDefect,Cut defect,AnomalyType,mvtec,cut|cut defect,Cut or severed visual defect
+MissingWireDefect,Missing wire defect,AnomalyType,mvtec,missing_wire|missing wire,Missing wire visual defect
+BentWireDefect,Bent wire defect,AnomalyType,mvtec,bent_wire|bent wire,Bent wire visual defect
+CrackDefect,Crack defect,AnomalyType,mvtec,crack|cracked,Crack visual defect
+ContaminationDefect,Contamination defect,AnomalyType,mvtec,contamination|contaminated|dirt,Contamination visual defect
+SqueezeDefect,Squeeze defect,AnomalyType,mvtec,squeeze|squeezed,Compression-like visual defect
 LinearMorphology,Linear morphology,Morphology,mvtec,linear|line-shaped|line,Elongated visual morphology
 SurfaceLocation,Surface location,Location,mvtec,surface|outer surface,Generic surface location
 MechanicalContact,Mechanical contact,RootCause,mvtec,contact damage|mechanical contact,Plausible contact-related root cause
 HandlingDamage,Handling damage,CauseCategory,mvtec,handling|handling damage,Plausible damage during handling or transport
+AssemblyError,Assembly error,RootCause,mvtec,assembly error|misassembly,Plausible assembly-related cause
+MaterialDefect,Material defect,RootCause,mvtec,material defect|material issue,Plausible material-quality cause
+ContaminationCause,Contamination cause,RootCause,mvtec,contamination source|foreign material,Plausible contamination-related cause
+MissingComponent,Missing component,RootCause,mvtec,missing component|missing part,Plausible missing component cause
+SurfaceWear,Surface wear,RootCause,mvtec,surface wear|wear,Plausible wear-related cause
+ProcessMisalignment,Process misalignment,RootCause,mvtec,misalignment|positioning issue,Plausible fixture or process alignment cause
+PackagingPressure,Packaging pressure,RootCause,mvtec,packaging pressure|compression pressure,Plausible pressure-related packaging cause
 ProcessObject,Process,Object,tep,process|tep,Tennessee Eastman process object
 ProcessFault,Process fault,AnomalyType,tep,process_fault|fault,Example TEP anomaly type
 XMEAS1,XMEAS 1,Variable,tep,XMEAS_1|xmeas1,Example measured process variable

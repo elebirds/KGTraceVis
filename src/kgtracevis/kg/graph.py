@@ -34,6 +34,11 @@ REQUIRED_EDGE_COLUMNS = {
     "accepted_count",
     "rejected_count",
 }
+DEFAULT_NODE_PATHS = (Path("data/kg/nodes.csv"),)
+DEFAULT_EDGE_PATHS = (
+    Path("data/kg/edges.csv"),
+    Path("data/kg/mvtec_rca_reference.csv"),
+)
 
 
 def normalize_text(value: str | None) -> str:
@@ -156,7 +161,33 @@ class KnowledgeGraph:
         edges_path: str | Path = "data/kg/edges.csv",
     ) -> KnowledgeGraph:
         """Load a knowledge graph from node and edge CSV files."""
-        return cls(_load_nodes(Path(nodes_path)), _load_edges(Path(edges_path)))
+        return cls.from_paths([nodes_path], [edges_path])
+
+    @classmethod
+    def from_default_paths(cls) -> KnowledgeGraph:
+        """Load the default development KG and reference layers."""
+        return cls.from_paths(DEFAULT_NODE_PATHS, DEFAULT_EDGE_PATHS, skip_missing=True)
+
+    @classmethod
+    def from_paths(
+        cls,
+        nodes_paths: Iterable[str | Path],
+        edges_paths: Iterable[str | Path],
+        *,
+        skip_missing: bool = False,
+        allow_reviewed_overwrite: bool = False,
+    ) -> KnowledgeGraph:
+        """Load and merge node and edge CSV files.
+
+        Later files may add new rows. Duplicate edge keys are deduplicated, but a
+        reviewed edge is not overwritten unless explicitly allowed.
+        """
+        nodes = _merge_nodes(_load_many_nodes(nodes_paths, skip_missing=skip_missing))
+        edges = _merge_edges(
+            _load_many_edges(edges_paths, skip_missing=skip_missing),
+            allow_reviewed_overwrite=allow_reviewed_overwrite,
+        )
+        return cls(nodes.values(), edges.values())
 
     def candidates(
         self,
@@ -261,6 +292,64 @@ def _load_edges(path: Path) -> list[KGEdge]:
             )
             for row in reader
         ]
+
+
+def _load_many_nodes(
+    paths: Iterable[str | Path],
+    *,
+    skip_missing: bool,
+) -> list[KGNode]:
+    nodes: list[KGNode] = []
+    for path_value in paths:
+        path = Path(path_value)
+        if skip_missing and not path.exists():
+            continue
+        nodes.extend(_load_nodes(path))
+    return nodes
+
+
+def _load_many_edges(
+    paths: Iterable[str | Path],
+    *,
+    skip_missing: bool,
+) -> list[KGEdge]:
+    edges: list[KGEdge] = []
+    for path_value in paths:
+        path = Path(path_value)
+        if skip_missing and not path.exists():
+            continue
+        edges.extend(_load_edges(path))
+    return edges
+
+
+def _merge_nodes(nodes: Iterable[KGNode]) -> dict[str, KGNode]:
+    merged: dict[str, KGNode] = {}
+    for node in nodes:
+        existing = merged.get(node.id)
+        if existing is not None and existing != node:
+            raise ValueError(f"conflicting node definition for {node.id}")
+        merged[node.id] = node
+    return merged
+
+
+def _merge_edges(
+    edges: Iterable[KGEdge],
+    *,
+    allow_reviewed_overwrite: bool,
+) -> dict[str, KGEdge]:
+    merged: dict[str, KGEdge] = {}
+    for edge in edges:
+        existing = merged.get(edge.edge_id)
+        if existing is None:
+            merged[edge.edge_id] = edge
+            continue
+        if existing == edge:
+            continue
+        if existing.review_status == "reviewed" and not allow_reviewed_overwrite:
+            raise ValueError(f"refusing to overwrite reviewed edge {edge.edge_id}")
+        if edge.review_status == "reviewed" or existing.review_status != "reviewed":
+            merged[edge.edge_id] = edge
+    return merged
 
 
 def _require_columns(path: Path, actual: list[str] | None, required: set[str]) -> None:

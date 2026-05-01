@@ -20,7 +20,7 @@ class KGTracePipeline:
 
     def __init__(self, graph: KnowledgeGraph | None = None) -> None:
         """Create a pipeline backed by an in-memory KG."""
-        self.graph = graph or KnowledgeGraph.from_csv()
+        self.graph = graph or KnowledgeGraph.from_default_paths()
 
     def analyze(self, evidence: Evidence) -> AnalysisResult:
         """Analyze one evidence object.
