@@ -23,7 +23,8 @@
     "05-01-implement-noise-and-metrics-v0",
     "05-01-implement-dataset-adapters-v0",
     "05-01-implement-kg-construction-helpers",
-    "05-01-build-streamlit-demo-v0"
+    "05-01-build-streamlit-demo-v0",
+    "05-01-implement-optional-neo4j-import-v0"
   ],
   "parent": null,
   "relatedFiles": [],

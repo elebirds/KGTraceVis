@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist and KGTraceVis invariants for optional Neo4j work."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Neo4j must remain optional and CSV/in-memory KG stays source of truth."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Import failures and missing config should be explicit and deterministic."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Defines pytest, ruff, mypy, and example-run quality gates."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Script should call reusable import helpers under src/kgtracevis."}
