@@ -1,11 +1,76 @@
-"""Import KG CSV files into Neo4j."""
+"""Import KG CSV files into optional Neo4j backend."""
 
 from __future__ import annotations
 
+import argparse
+import json
+from pathlib import Path
+
+from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
+from kgtracevis.kg.import_neo4j import (
+    Neo4jImportError,
+    dry_run_import,
+    import_knowledge_graph_with_config,
+    resolve_neo4j_config,
+)
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--nodes",
+        action="append",
+        dest="node_paths",
+        help="Node CSV path. Repeat to import multiple node layers.",
+    )
+    parser.add_argument(
+        "--edges",
+        action="append",
+        dest="edge_paths",
+        help="Edge CSV path. Repeat to import multiple edge layers.",
+    )
+    parser.add_argument("--config", default="configs/neo4j.example.yaml")
+    parser.add_argument("--uri")
+    parser.add_argument("--user")
+    parser.add_argument("--password")
+    parser.add_argument("--database")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Load and validate KG rows, then print counts without connecting to Neo4j.",
+    )
+    return parser.parse_args()
+
+
+def load_graph(node_paths: list[str] | None, edge_paths: list[str] | None) -> KnowledgeGraph:
+    """Load validated KG rows from requested paths or project defaults."""
+    nodes = [Path(path) for path in node_paths] if node_paths else list(DEFAULT_NODE_PATHS)
+    edges = [Path(path) for path in edge_paths] if edge_paths else list(DEFAULT_EDGE_PATHS)
+    return KnowledgeGraph.from_paths(nodes, edges, skip_missing=True)
+
 
 def main() -> None:
-    """Placeholder for Neo4j import."""
-    print("Neo4j import placeholder. Configure credentials via .env or configs/kg_config.yaml.")
+    """Import the configured KG into Neo4j, or perform a dry run."""
+    args = parse_args()
+    graph = load_graph(args.node_paths, args.edge_paths)
+
+    if args.dry_run:
+        summary = dry_run_import(graph)
+    else:
+        try:
+            config = resolve_neo4j_config(
+                uri=args.uri,
+                user=args.user,
+                password=args.password,
+                database=args.database,
+                config_path=args.config,
+            )
+            summary = import_knowledge_graph_with_config(graph, config)
+        except (Neo4jImportError, ValueError) as exc:
+            raise SystemExit(str(exc)) from exc
+
+    print(json.dumps(summary.__dict__, indent=2))
 
 
 if __name__ == "__main__":
