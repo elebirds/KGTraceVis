@@ -69,6 +69,13 @@ Current examples:
   proves otherwise.
 - Do not overwrite reviewed triples automatically.
 
+## Experiment Metric Scope
+
+Noise and metric scripts may use clean pipeline outputs as v0 references for
+reproducibility checks over checked-in examples. Do not describe these values as
+paper-grade ground truth or dataset-level accuracy until an external reference
+set is curated and documented.
+
 ## Lint Scope
 
 Ruff applies to KGTraceVis source, tests, scripts, and project config. Trellis
