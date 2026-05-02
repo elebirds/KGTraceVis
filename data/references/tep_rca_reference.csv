@@ -1,0 +1,3 @@
+reference_id,case_id,dataset,label_scope,target_type,target_id,path_node_sequence,annotation_type,source,evidence,confidence,review_status,evaluation_eligible,notes
+tep_ref_001,tep_0001,tep,root_cause_path,path,FeedFlowDisturbance,XMEAS1>ProcessFault>FeedFlowDisturbance,official_fault_type,example_seed,Example TEP evidence maps abnormal XMEAS_1 through a process fault to feed flow disturbance,0.68,auto,true,Demo-scale TEP reference; promote to reviewed/literature_supported before paper main table
+tep_ref_002,tep_0001,tep,entity_linking,node,ReactorUnit,XMEAS1>ReactorUnit,official_fault_type,example_seed,XMEAS_1 is used as a reactor-related example variable,0.70,auto,true,Entity/process-unit reference for demo linking

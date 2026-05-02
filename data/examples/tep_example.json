@@ -17,7 +17,64 @@
       "XMEAS_1": 0.42
     },
     "log_events": [],
-    "description": "Example TEP variable anomaly evidence."
+    "description": "观测到的 process anomaly evidence only：adapter/manual demo annotation 记录 anomaly_type、process location 和 observed variable signals；不包含 root-cause label。",
+    "extra": {
+      "demo_scope": "adapters/manual demo annotations provide observed anomaly evidence only；不提供 root-cause label",
+      "analysis_boundary": "KGTracePipeline computes linking/consistency/corrections/candidate RCA paths at runtime."
+    }
+  },
+  "observations": [
+    {
+      "obs_id": "obs_tep_0001_object_process",
+      "facet": "object",
+      "name": "process",
+      "confidence": 0.75,
+      "source_ref": "adapter:tep",
+      "raw_ref": "object"
+    },
+    {
+      "obs_id": "obs_tep_0001_anomaly_type_process_fault",
+      "facet": "anomaly_type",
+      "name": "process_fault",
+      "confidence": 0.75,
+      "source_ref": "adapter:tep",
+      "raw_ref": "anomaly_type"
+    },
+    {
+      "obs_id": "obs_tep_0001_location_reactor",
+      "facet": "location",
+      "name": "reactor",
+      "confidence": 0.75,
+      "source_ref": "adapter:tep",
+      "raw_ref": "location"
+    },
+    {
+      "obs_id": "obs_tep_0001_variable_xmeas_1",
+      "facet": "variable",
+      "name": "XMEAS_1",
+      "value": 0.42,
+      "value_type": "contribution",
+      "confidence": 0.75,
+      "source_ref": "adapter:tep",
+      "raw_ref": "raw_evidence.variables[0]",
+      "metadata": {
+        "rank": 1
+      }
+    },
+    {
+      "obs_id": "obs_tep_0001_severity_severity",
+      "facet": "severity",
+      "name": "severity",
+      "value": 0.6,
+      "value_type": "float",
+      "confidence": 0.75,
+      "source_ref": "adapter:tep",
+      "raw_ref": "severity"
+    }
+  ],
+  "adapter": {
+    "name": "tep",
+    "produces_root_cause": false
   },
   "normalized_evidence": {},
   "kg_analysis": {

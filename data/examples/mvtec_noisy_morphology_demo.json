@@ -1,11 +1,11 @@
 {
-  "case_id": "mvtec_0001",
+  "case_id": "mvtec_noisy_0001",
   "dataset": "mvtec",
   "source": "image",
   "object": "bottle",
   "anomaly_type": "scratch",
   "location": "surface",
-  "morphology": "linear",
+  "morphology": "surface",
   "severity": 0.4,
   "confidence": 0.8,
   "timestamp": null,
@@ -15,15 +15,23 @@
     "variables": [],
     "variable_contributions": {},
     "log_events": [],
-    "description": "观测到的 visual anomaly evidence only：manual demo annotation 记录 object、anomaly_type、location 和 morphology；不包含 root-cause label。",
+    "description": "观测到的 visual anomaly evidence only：morphology 为演示被 intentionally corrupted；不包含 root-cause label 或预计算 KG analysis。",
     "extra": {
+      "is_noisy": true,
+      "noise_level": 0.5,
+      "noise_type": "morphology_replacement",
+      "corrupted_fields": ["morphology"],
+      "clean_reference": {
+        "case_id": "mvtec_0001",
+        "morphology": "linear"
+      },
       "demo_scope": "adapters/manual demo annotations provide observed anomaly evidence only；不是 MVTec factory root-cause label",
       "analysis_boundary": "KGTracePipeline computes linking/consistency/corrections/candidate RCA paths at runtime."
     }
   },
   "observations": [
     {
-      "obs_id": "obs_mvtec_0001_object_bottle",
+      "obs_id": "obs_mvtec_noisy_0001_object_bottle",
       "facet": "object",
       "name": "bottle",
       "confidence": 0.8,
@@ -31,7 +39,7 @@
       "raw_ref": "object"
     },
     {
-      "obs_id": "obs_mvtec_0001_anomaly_type_scratch",
+      "obs_id": "obs_mvtec_noisy_0001_anomaly_type_scratch",
       "facet": "anomaly_type",
       "name": "scratch",
       "confidence": 0.8,
@@ -39,7 +47,7 @@
       "raw_ref": "anomaly_type"
     },
     {
-      "obs_id": "obs_mvtec_0001_location_surface",
+      "obs_id": "obs_mvtec_noisy_0001_location_surface",
       "facet": "location",
       "name": "surface",
       "confidence": 0.8,
@@ -47,15 +55,19 @@
       "raw_ref": "location"
     },
     {
-      "obs_id": "obs_mvtec_0001_morphology_linear",
+      "obs_id": "obs_mvtec_noisy_0001_morphology_surface",
       "facet": "morphology",
-      "name": "linear",
+      "name": "surface",
       "confidence": 0.8,
       "source_ref": "adapter:mvtec",
-      "raw_ref": "morphology"
+      "raw_ref": "morphology",
+      "metadata": {
+        "is_noisy": true,
+        "clean_reference": "linear"
+      }
     },
     {
-      "obs_id": "obs_mvtec_0001_severity_severity",
+      "obs_id": "obs_mvtec_noisy_0001_severity_severity",
       "facet": "severity",
       "name": "severity",
       "value": 0.4,

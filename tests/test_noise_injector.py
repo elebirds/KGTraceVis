@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from kgtracevis.noise.noise_injector import inject_noise
-from kgtracevis.schema.validators import load_evidence_json
+from kgtracevis.schema.evidence_schema import Evidence
+from kgtracevis.schema.validators import load_evidence_json, missing_canonical_observation_facets
 
 
 def test_visual_field_noise_is_deterministic_and_non_mutating() -> None:
@@ -21,6 +22,8 @@ def test_visual_field_noise_is_deterministic_and_non_mutating() -> None:
     assert first.raw_evidence.extra["noise_type"] == "morphology_replacement"
     assert first.raw_evidence.extra["corrupted_fields"] == ["morphology"]
     assert first.raw_evidence.extra["clean_reference"] == before
+    assert _observation_names(first, "morphology") == [first.morphology]
+    assert missing_canonical_observation_facets(first) == []
     assert evidence.model_dump(mode="json") == before
 
 
@@ -32,6 +35,7 @@ def test_list_field_noise_updates_variables_and_contributions() -> None:
 
     assert noisy.raw_evidence.variables == []
     assert noisy.raw_evidence.variable_contributions == {}
+    assert _observation_names(noisy, "variable") == []
     assert noisy.raw_evidence.extra["corrupted_fields"] == [
         "raw_evidence.variables",
         "raw_evidence.variable_contributions",
@@ -47,5 +51,10 @@ def test_log_event_deletion_records_metadata() -> None:
     noisy = inject_noise(evidence, "log_event_deletion", 0.3, seed=42)
 
     assert noisy.raw_evidence.log_events == []
+    assert _observation_names(noisy, "log_event") == []
     assert noisy.raw_evidence.extra["is_noisy"] is True
     assert noisy.raw_evidence.extra["corrupted_fields"] == ["raw_evidence.log_events"]
+
+
+def _observation_names(evidence: Evidence, facet: str) -> list[str]:
+    return [observation.name for observation in evidence.observations if observation.facet == facet]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+from collections import Counter
 from collections.abc import Callable
 from math import ceil
 
@@ -96,38 +97,44 @@ def inject_noise(
 
 
 def _replace_anomaly_type(evidence: Evidence, rng: random.Random, _: float) -> list[str]:
+    original = evidence.anomaly_type
     replacement = _replacement(
-        evidence.anomaly_type,
+        original,
         _ANOMALY_REPLACEMENTS.get(evidence.dataset, ()),
         rng,
     )
     if replacement is None:
         return []
     evidence.anomaly_type = replacement
+    _replace_observation_name(evidence, "anomaly_type", original, replacement)
     return ["anomaly_type"]
 
 
 def _replace_location(evidence: Evidence, rng: random.Random, _: float) -> list[str]:
+    original = evidence.location
     replacement = _replacement(
-        evidence.location,
+        original,
         _LOCATION_REPLACEMENTS.get(evidence.dataset, ()),
         rng,
     )
     if replacement is None:
         return []
     evidence.location = replacement
+    _replace_observation_name(evidence, "location", original, replacement)
     return ["location"]
 
 
 def _replace_morphology(evidence: Evidence, rng: random.Random, _: float) -> list[str]:
+    original = evidence.morphology
     replacement = _replacement(
-        evidence.morphology,
+        original,
         _MORPHOLOGY_REPLACEMENTS.get(evidence.dataset, ()),
         rng,
     )
     if replacement is None:
         return []
     evidence.morphology = replacement
+    _replace_observation_name(evidence, "morphology", original, replacement)
     return ["morphology"]
 
 
@@ -144,6 +151,7 @@ def _delete_variable(evidence: Evidence, rng: random.Random, noise_level: float)
         for variable, score in evidence.raw_evidence.variable_contributions.items()
         if variable in remaining
     }
+    _sync_list_observations(evidence, "variable", remaining)
     return ["raw_evidence.variables", "raw_evidence.variable_contributions"]
 
 
@@ -160,6 +168,7 @@ def _perturb_variable_name(evidence: Evidence, rng: random.Random, _: float) -> 
     if original in contributions:
         contributions[perturbed] = contributions.pop(original)
         evidence.raw_evidence.variable_contributions = contributions
+    _replace_observation_name(evidence, "variable", original, perturbed)
     return ["raw_evidence.variables", "raw_evidence.variable_contributions"]
 
 
@@ -172,6 +181,7 @@ def _delete_log_event(evidence: Evidence, rng: random.Random, noise_level: float
     evidence.raw_evidence.log_events = [
         value for index, value in enumerate(events) if index not in delete_indexes
     ]
+    _sync_list_observations(evidence, "log_event", evidence.raw_evidence.log_events)
     return ["raw_evidence.log_events"]
 
 
@@ -193,10 +203,13 @@ def _substitute_synonym(evidence: Evidence, rng: random.Random, _: float) -> lis
     field, original, replacement = rng.choice(candidates)
     if field == "anomaly_type":
         evidence.anomaly_type = replacement
+        _replace_observation_name(evidence, "anomaly_type", original, replacement)
     elif field == "location":
         evidence.location = replacement
+        _replace_observation_name(evidence, "location", original, replacement)
     elif field == "morphology":
         evidence.morphology = replacement
+        _replace_observation_name(evidence, "morphology", original, replacement)
     elif field == "raw_evidence.variables":
         evidence.raw_evidence.variables = [
             replacement if value == original else value for value in evidence.raw_evidence.variables
@@ -205,25 +218,62 @@ def _substitute_synonym(evidence: Evidence, rng: random.Random, _: float) -> lis
             contributions = dict(evidence.raw_evidence.variable_contributions)
             contributions[replacement] = contributions.pop(original)
             evidence.raw_evidence.variable_contributions = contributions
+        _replace_observation_name(evidence, "variable", original, replacement)
     elif field == "raw_evidence.log_events":
         evidence.raw_evidence.log_events = [
             replacement if value == original else value
             for value in evidence.raw_evidence.log_events
         ]
+        _replace_observation_name(evidence, "log_event", original, replacement)
     return [field]
 
 
 def _inject_contradiction(evidence: Evidence, rng: random.Random, _: float) -> list[str]:
     if evidence.dataset == "tep" and evidence.raw_evidence.variables:
+        original = evidence.location
         evidence.location = "feed disturbance"
+        _replace_observation_name(evidence, "location", original, evidence.location)
         return ["location"]
     if evidence.dataset == "wafer":
+        original = evidence.morphology
         evidence.morphology = "wafer_surface"
+        _replace_observation_name(evidence, "morphology", original, evidence.morphology)
         return ["morphology"]
     if evidence.morphology:
+        original = evidence.morphology
         evidence.morphology = "surface"
+        _replace_observation_name(evidence, "morphology", original, evidence.morphology)
         return ["morphology"]
     return _replace_location(evidence, rng, 1.0)
+
+
+def _replace_observation_name(
+    evidence: Evidence,
+    facet: str,
+    original: str | None,
+    replacement: str,
+) -> None:
+    if original is None:
+        return
+    for observation in evidence.observations:
+        if observation.facet == facet and observation.name == original:
+            observation.name = replacement
+            if observation.display_name == original:
+                observation.display_name = replacement
+            return
+
+
+def _sync_list_observations(evidence: Evidence, facet: str, remaining: list[str]) -> None:
+    remaining_counts = Counter(remaining)
+    synced = []
+    for observation in evidence.observations:
+        if observation.facet != facet:
+            synced.append(observation)
+            continue
+        if remaining_counts[observation.name] > 0:
+            remaining_counts[observation.name] -= 1
+            synced.append(observation)
+    evidence.observations = synced
 
 
 def _replacement(

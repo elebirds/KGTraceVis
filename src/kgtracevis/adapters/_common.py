@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from typing import Any, cast
 
-from kgtracevis.schema.evidence_schema import EvidenceSource
+from kgtracevis.schema.evidence_schema import AdapterMetadata, EvidenceObservation, EvidenceSource
 
 VALID_SOURCES = {"image", "time_series", "log", "multimodal", "unknown"}
 
@@ -100,3 +100,67 @@ def copied_extra(
             if value is not None:
                 extra[key] = deepcopy(value)
     return extra
+
+
+def adapter_metadata(name: str) -> AdapterMetadata:
+    """Return the standard adapter metadata for observed-evidence adapters."""
+    return AdapterMetadata(name=name, produces_root_cause=False)
+
+
+def make_observation(
+    case_id: str,
+    facet: str,
+    name: str,
+    *,
+    display_name: str | None = None,
+    value: Any | None = None,
+    value_type: str | None = None,
+    unit: str | None = None,
+    direction: str | None = None,
+    confidence: float | None = None,
+    source_ref: str | None = None,
+    raw_ref: str | None = None,
+    time_window: dict[str, Any] | None = None,
+    metadata: Mapping[str, Any] | None = None,
+    occurrence: int = 1,
+) -> EvidenceObservation:
+    """Build a stable observation item from adapter output."""
+    obs_id = _observation_id(case_id, facet, name, occurrence)
+    return EvidenceObservation(
+        obs_id=obs_id,
+        facet=facet,
+        name=name,
+        display_name=display_name,
+        value=deepcopy(value),
+        value_type=value_type,
+        unit=unit,
+        direction=direction,
+        confidence=confidence,
+        source_ref=source_ref,
+        raw_ref=raw_ref,
+        time_window=deepcopy(time_window),
+        metadata=deepcopy(dict(metadata or {})),
+    )
+
+
+def next_observation_occurrence(
+    occurrences: dict[tuple[str, str], int],
+    facet: str,
+    name: str,
+) -> int:
+    """Return the next stable occurrence number for an observation facet/name."""
+    key = (facet, name)
+    occurrences[key] = occurrences.get(key, 0) + 1
+    return occurrences[key]
+
+
+def _observation_id(case_id: str, facet: str, name: str, occurrence: int) -> str:
+    token = _stable_token(name) or "unknown"
+    base = f"obs_{_stable_token(case_id) or 'case'}_{_stable_token(facet) or 'facet'}_{token}"
+    if occurrence > 1:
+        return f"{base}_{occurrence:02d}"
+    return base
+
+
+def _stable_token(value: str) -> str:
+    return "_".join("".join(ch.lower() if ch.isalnum() else " " for ch in value).split())

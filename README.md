@@ -195,6 +195,15 @@ Start the Streamlit demo:
 uv run streamlit run src/kgtracevis/app/streamlit_app.py
 ```
 
+The checked-in examples include all three scenarios plus one explicitly noisy
+MVTec demo case that triggers correction candidates. The example JSON files are
+observed evidence inputs only: adapters or manual demo annotations provide
+object/anomaly/location/morphology/variable/log-event fields, while
+`KGTracePipeline` computes entity linking, consistency, correction candidates,
+and candidate/plausible RCA path ranking at runtime. MVTec demo RCA source
+edges are curated plausible references, and displayed paths are runtime
+candidates, not real factory RCA labels.
+
 Run tests and lint:
 
 ```bash

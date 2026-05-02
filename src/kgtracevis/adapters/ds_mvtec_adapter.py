@@ -6,15 +6,17 @@ from collections.abc import Mapping
 from typing import Any
 
 from kgtracevis.adapters._common import (
+    adapter_metadata,
     copied_extra,
     first_value,
     float_or_none,
+    make_observation,
     merged_record,
     optional_text,
     source_value,
     text_value,
 )
-from kgtracevis.schema.evidence_schema import Evidence, RawEvidence
+from kgtracevis.schema.evidence_schema import Evidence, EvidenceObservation, RawEvidence
 
 CASE_KEYS = ("case_id", "sample_id", "image_id", "record_id", "id")
 OBJECT_KEYS = ("object", "object_name", "category", "class_name", "product")
@@ -54,6 +56,13 @@ def evidence_from_mvtec_record(
 ) -> Evidence:
     """Create unified evidence from an MVTec or DS-MVTec-style record."""
     data = merged_record(record, overrides)
+    case_id = text_value(first_value(data, CASE_KEYS), "mvtec_unknown")
+    object_name = text_value(first_value(data, OBJECT_KEYS), "unknown")
+    anomaly_type = text_value(first_value(data, ANOMALY_KEYS), "unknown")
+    location = optional_text(first_value(data, LOCATION_KEYS))
+    morphology = optional_text(first_value(data, MORPHOLOGY_KEYS))
+    severity = float_or_none(first_value(data, SEVERITY_KEYS))
+    confidence = float_or_none(first_value(data, CONFIDENCE_KEYS))
     path_extra = {
         key: data[key]
         for key in (*PATH_KEYS, *GEOMETRY_KEYS)
@@ -64,15 +73,15 @@ def evidence_from_mvtec_record(
         path_extra["heatmap_path"] = heatmap_path
 
     return Evidence(
-        case_id=text_value(first_value(data, CASE_KEYS), "mvtec_unknown"),
+        case_id=case_id,
         dataset="mvtec",
         source=source_value(data.get("source"), "image"),
-        object=text_value(first_value(data, OBJECT_KEYS), "unknown"),
-        anomaly_type=text_value(first_value(data, ANOMALY_KEYS), "unknown"),
-        location=optional_text(first_value(data, LOCATION_KEYS)),
-        morphology=optional_text(first_value(data, MORPHOLOGY_KEYS)),
-        severity=float_or_none(first_value(data, SEVERITY_KEYS)),
-        confidence=float_or_none(first_value(data, CONFIDENCE_KEYS)),
+        object=object_name,
+        anomaly_type=anomaly_type,
+        location=location,
+        morphology=morphology,
+        severity=severity,
+        confidence=confidence,
         timestamp=optional_text(data.get("timestamp")),
         raw_evidence=RawEvidence(
             image_region=optional_text(first_value(data, IMAGE_REGION_KEYS)),
@@ -80,7 +89,95 @@ def evidence_from_mvtec_record(
             description=optional_text(first_value(data, DESCRIPTION_KEYS)),
             extra=copied_extra(data, known_keys=KNOWN_KEYS, required=path_extra),
         ),
+        observations=_mvtec_observations(
+            case_id,
+            object_name,
+            anomaly_type,
+            location,
+            morphology,
+            severity,
+            confidence,
+        ),
+        adapter=adapter_metadata("mvtec"),
     )
+
+
+def _mvtec_observations(
+    case_id: str,
+    object_name: str,
+    anomaly_type: str,
+    location: str | None,
+    morphology: str | None,
+    severity: float | None,
+    confidence: float | None,
+) -> list[EvidenceObservation]:
+    observations: list[EvidenceObservation] = [
+        make_observation(
+            case_id,
+            "object",
+            object_name,
+            confidence=confidence,
+            source_ref="adapter:mvtec",
+            raw_ref="object",
+        ),
+        make_observation(
+            case_id,
+            "anomaly_type",
+            anomaly_type,
+            confidence=confidence,
+            source_ref="adapter:mvtec",
+            raw_ref="anomaly_type",
+        ),
+    ]
+    if location:
+        observations.append(
+            make_observation(
+                case_id,
+                "location",
+                location,
+                confidence=confidence,
+                source_ref="adapter:mvtec",
+                raw_ref="location",
+            )
+        )
+    if morphology:
+        observations.append(
+            make_observation(
+                case_id,
+                "morphology",
+                morphology,
+                confidence=confidence,
+                source_ref="adapter:mvtec",
+                raw_ref="morphology",
+            )
+        )
+    if severity is not None:
+        observations.append(
+            make_observation(
+                case_id,
+                "severity",
+                "severity",
+                value=severity,
+                value_type="float",
+                confidence=confidence,
+                source_ref="adapter:mvtec",
+                raw_ref="severity",
+            )
+        )
+    if confidence is not None:
+        observations.append(
+            make_observation(
+                case_id,
+                "confidence",
+                "adapter_confidence",
+                value=confidence,
+                value_type="float",
+                confidence=confidence,
+                source_ref="adapter:mvtec",
+                raw_ref="confidence",
+            )
+        )
+    return observations
 
 
 def evidence_from_ds_mvtec_record(

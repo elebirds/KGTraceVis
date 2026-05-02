@@ -75,16 +75,14 @@ def test_pipeline_result_serializes_feedback_compatible_contract() -> None:
 
 def test_pipeline_correction_candidate_contract_for_known_inconsistency() -> None:
     """Correction candidates should expose stable IDs and supporting KG edges."""
-    evidence = load_evidence_json("data/examples/ds_mvtec_example.json").model_copy(
-        update={"morphology": "surface"}
-    )
+    evidence = load_evidence_json("data/examples/mvtec_noisy_morphology_demo.json")
 
     result = KGTracePipeline().analyze(evidence)
 
     assert result.inconsistent_fields == ["anomaly_type", "morphology"]
     assert result.correction_candidates
     candidate = result.correction_candidates[0]
-    assert candidate["candidate_id"] == "corr_mvtec_0001_morphology_linearmorphology"
+    assert candidate["candidate_id"] == "corr_mvtec_noisy_0001_morphology_linearmorphology"
     assert candidate["source_field"] == "anomaly_type"
     assert candidate["source_entity_id"] == "ScratchDefect"
     assert candidate["target_field"] == "morphology"

@@ -10,6 +10,7 @@ from kgtracevis.adapters import (
     evidence_from_wafer_record,
 )
 from kgtracevis.schema.evidence_schema import Evidence
+from kgtracevis.schema.validators import missing_canonical_observation_facets
 
 
 def test_mvtec_adapter_returns_valid_evidence_and_preserves_extra() -> None:
@@ -50,6 +51,11 @@ def test_mvtec_adapter_returns_valid_evidence_and_preserves_extra() -> None:
     assert evidence.raw_evidence.extra["heatmap_path"] == "heatmaps/bottle/001.npy"
     assert evidence.raw_evidence.extra["bbox"] == [10, 20, 30, 40]
     assert evidence.raw_evidence.extra["operator_note"] == {"shift": "A"}
+    assert evidence.adapter is not None
+    assert evidence.adapter.produces_root_cause is False
+    assert missing_canonical_observation_facets(evidence) == []
+    assert _observation(evidence, "anomaly_type").name == "scratch"
+    assert _observation(evidence, "morphology").obs_id == "obs_mvtec_case_1_morphology_linear"
     assert record == before
 
 
@@ -90,6 +96,14 @@ def test_tep_adapter_returns_valid_evidence_and_preserves_extra() -> None:
     assert evidence.raw_evidence.extra["window_start"] == 120
     assert evidence.raw_evidence.extra["window_end"] == 180
     assert evidence.raw_evidence.extra["source_file"] == "tep/run_007.csv"
+    variable_observation = _observation(evidence, "variable")
+    assert variable_observation.name == "XMEAS_1"
+    assert variable_observation.value == 0.42
+    assert variable_observation.value_type == "contribution"
+    assert variable_observation.time_window == {"window_start": 120, "window_end": 180}
+    assert evidence.adapter is not None
+    assert evidence.adapter.produces_root_cause is False
+    assert missing_canonical_observation_facets(evidence) == []
     assert record == before
 
 
@@ -130,6 +144,13 @@ def test_wafer_adapter_returns_valid_evidence_and_preserves_extra() -> None:
     assert evidence.raw_evidence.extra["log_path"] == "logs/W-42.jsonl"
     assert evidence.raw_evidence.extra["tool_id"] == "etch_01"
     assert evidence.raw_evidence.extra["process_metadata"] == {"step": "etch"}
+    log_observation = _observation(evidence, "log_event")
+    assert log_observation.name == "etch_alarm"
+    assert log_observation.metadata == {"rank": 1}
+    assert _observation(evidence, "morphology").name == "dense_particles"
+    assert evidence.adapter is not None
+    assert evidence.adapter.produces_root_cause is False
+    assert missing_canonical_observation_facets(evidence) == []
     assert record == before
 
 
@@ -143,3 +164,35 @@ def test_adapter_keyword_overrides_do_not_mutate_record() -> None:
     assert evidence.anomaly_type == "crack"
     assert evidence.confidence == 0.9
     assert record == before
+
+
+def test_adapter_observation_ids_remain_unique_for_repeated_values() -> None:
+    """Repeated observed variable/log values should still get stable unique IDs."""
+    tep = evidence_from_tep_record(
+        {"case_id": "dup_case", "variables": ["XMEAS_1", "XMEAS_1"]}
+    )
+    wafer = evidence_from_wafer_record(
+        {"case_id": "dup_case", "log_events": ["etch_alarm", "etch_alarm"]}
+    )
+
+    tep_variable_ids = [
+        observation.obs_id for observation in tep.observations if observation.facet == "variable"
+    ]
+    wafer_event_ids = [
+        observation.obs_id
+        for observation in wafer.observations
+        if observation.facet == "log_event"
+    ]
+
+    assert tep_variable_ids == [
+        "obs_dup_case_variable_xmeas_1",
+        "obs_dup_case_variable_xmeas_1_02",
+    ]
+    assert wafer_event_ids == [
+        "obs_dup_case_log_event_etch_alarm",
+        "obs_dup_case_log_event_etch_alarm_02",
+    ]
+
+
+def _observation(evidence: Evidence, facet: str):
+    return next(observation for observation in evidence.observations if observation.facet == facet)

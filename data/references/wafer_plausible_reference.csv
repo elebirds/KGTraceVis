@@ -1,0 +1,3 @@
+reference_id,case_id,dataset,label_scope,target_type,target_id,path_node_sequence,annotation_type,source,evidence,confidence,review_status,evaluation_eligible,notes
+wafer_ref_001,wafer_0001,wafer,plausible_explanation,path,GlueRemovalInsufficient,NearfullDefect>GlueRemovalInsufficient,literature_supported,wafer_thesis,Insufficient glue removal may cause nearfull-like dense contamination,0.78,reviewed,false,Case-study reference unless private reviewed wafer RCA labels are available
+wafer_ref_002,wafer_0001,wafer,consistency,edge,ExampleAlarm,NearfullDefect>ExampleAlarm,manual_plausible,example_seed,Example alarm is associated with the nearfull wafer case,0.60,auto,false,Demo multimodal consistency reference only

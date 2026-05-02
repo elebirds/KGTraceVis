@@ -15,7 +15,70 @@
     "variables": [],
     "variable_contributions": {},
     "log_events": ["example_alarm"],
-    "description": "Example wafer image-log evidence."
+    "description": "观测到的 wafer image-log anomaly evidence only：adapter/manual demo annotation 记录 image/log signals、location 和 morphology；不包含 root-cause label。",
+    "extra": {
+      "demo_scope": "adapters/manual demo annotations provide observed anomaly evidence only；不提供 root-cause label",
+      "analysis_boundary": "KGTracePipeline computes linking/consistency/corrections/candidate RCA paths at runtime."
+    }
+  },
+  "observations": [
+    {
+      "obs_id": "obs_wafer_0001_object_wafer",
+      "facet": "object",
+      "name": "wafer",
+      "confidence": 0.72,
+      "source_ref": "adapter:wafer",
+      "raw_ref": "object"
+    },
+    {
+      "obs_id": "obs_wafer_0001_anomaly_type_nearfull",
+      "facet": "anomaly_type",
+      "name": "nearfull",
+      "confidence": 0.72,
+      "source_ref": "adapter:wafer",
+      "raw_ref": "anomaly_type"
+    },
+    {
+      "obs_id": "obs_wafer_0001_location_wafer_surface",
+      "facet": "location",
+      "name": "wafer_surface",
+      "confidence": 0.72,
+      "source_ref": "adapter:wafer",
+      "raw_ref": "location"
+    },
+    {
+      "obs_id": "obs_wafer_0001_morphology_dense_particles",
+      "facet": "morphology",
+      "name": "dense_particles",
+      "confidence": 0.72,
+      "source_ref": "adapter:wafer",
+      "raw_ref": "morphology"
+    },
+    {
+      "obs_id": "obs_wafer_0001_log_event_example_alarm",
+      "facet": "log_event",
+      "name": "example_alarm",
+      "confidence": 0.72,
+      "source_ref": "adapter:wafer",
+      "raw_ref": "raw_evidence.log_events[0]",
+      "metadata": {
+        "rank": 1
+      }
+    },
+    {
+      "obs_id": "obs_wafer_0001_severity_severity",
+      "facet": "severity",
+      "name": "severity",
+      "value": 0.7,
+      "value_type": "float",
+      "confidence": 0.72,
+      "source_ref": "adapter:wafer",
+      "raw_ref": "severity"
+    }
+  ],
+  "adapter": {
+    "name": "wafer",
+    "produces_root_cause": false
   },
   "normalized_evidence": {},
   "kg_analysis": {

@@ -2,10 +2,30 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from kgtracevis.kg.graph import KnowledgeGraph
 from kgtracevis.schema.evidence_schema import Evidence
+
+LINKABLE_OBSERVATION_FACETS = {
+    "object",
+    "anomaly_type",
+    "location",
+    "morphology",
+    "variable",
+    "log_event",
+}
+
+
+@dataclass(frozen=True)
+class EvidenceMention:
+    """A text mention from a canonical observation or compatibility fallback."""
+
+    field: str
+    mention: str
+    obs_id: str | None = None
+    facet: str | None = None
 
 
 def link_evidence_entities(
@@ -22,43 +42,36 @@ def link_evidence_entities(
     """
     links: list[dict[str, Any]] = []
     occurrences: dict[tuple[str, str], int] = {}
-    for field, mention in _iter_mentions(evidence):
-        occurrence_key = (field, mention)
+    for mention_item in _iter_mentions(evidence):
+        occurrence_key = (mention_item.field, mention_item.mention)
         occurrences[occurrence_key] = occurrences.get(occurrence_key, 0) + 1
-        link_id = _link_id(evidence.case_id, field, mention, occurrences[occurrence_key])
+        link_id = _link_id(
+            evidence.case_id,
+            mention_item.field,
+            mention_item.mention,
+            occurrences[occurrence_key],
+        )
         candidates = graph.candidates(
-            mention,
+            mention_item.mention,
             scenario=evidence.dataset,
             top_k=top_k,
             min_score=min_score,
         )
         if not candidates:
-            links.append(
-                {
-                    "link_id": link_id,
-                    "field": field,
-                    "mention": mention,
-                    "selected_entity_id": None,
-                    "score": 0.0,
-                    "match_type": "unmatched",
-                    "ambiguous": False,
-                    "candidates": [],
-                }
-            )
+            links.append(_link_payload(mention_item, link_id, candidates=[]))
             continue
         selected = candidates[0]
         second_score = candidates[1].score if len(candidates) > 1 else 0.0
         links.append(
-            {
-                "link_id": link_id,
-                "field": field,
-                "mention": mention,
-                "selected_entity_id": selected.entity_id,
-                "score": round(selected.score, 4),
-                "match_type": selected.match_type,
-                "ambiguous": bool(second_score and selected.score - second_score < 0.08),
-                "candidates": [candidate.model_dump() for candidate in candidates],
-            }
+            _link_payload(
+                mention_item,
+                link_id,
+                selected_entity_id=selected.entity_id,
+                score=round(selected.score, 4),
+                match_type=selected.match_type,
+                ambiguous=bool(second_score and selected.score - second_score < 0.08),
+                candidates=[candidate.model_dump() for candidate in candidates],
+            )
         )
     return links
 
@@ -73,20 +86,71 @@ def selected_entities_by_field(linked_entities: list[dict[str, Any]]) -> dict[st
     return selected
 
 
-def _iter_mentions(evidence: Evidence) -> list[tuple[str, str]]:
-    mentions: list[tuple[str, str]] = [
+def _link_payload(
+    mention: EvidenceMention,
+    link_id: str,
+    *,
+    candidates: list[dict[str, Any]],
+    selected_entity_id: str | None = None,
+    score: float = 0.0,
+    match_type: str = "unmatched",
+    ambiguous: bool = False,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "link_id": link_id,
+        "field": mention.field,
+        "mention": mention.mention,
+        "selected_entity_id": selected_entity_id,
+        "score": score,
+        "match_type": match_type,
+        "ambiguous": ambiguous,
+        "candidates": candidates,
+    }
+    if mention.obs_id is not None:
+        payload["obs_id"] = mention.obs_id
+    if mention.facet is not None:
+        payload["facet"] = mention.facet
+    return payload
+
+
+def _iter_mentions(evidence: Evidence) -> list[EvidenceMention]:
+    mentions: list[EvidenceMention] = []
+    seen: set[tuple[str, str]] = set()
+    observation_facets: set[str] = set()
+    for observation in evidence.observations:
+        facet = observation.facet
+        mention = observation.name.strip()
+        if facet not in LINKABLE_OBSERVATION_FACETS or not mention:
+            continue
+        item = EvidenceMention(
+            field=facet,
+            mention=mention,
+            obs_id=observation.obs_id,
+            facet=facet,
+        )
+        mentions.append(item)
+        seen.add((item.field, item.mention))
+        observation_facets.add(item.field)
+
+    fallback_mentions: list[tuple[str, str]] = [
         ("object", evidence.object),
         ("anomaly_type", evidence.anomaly_type),
     ]
     if evidence.location:
-        mentions.append(("location", evidence.location))
+        fallback_mentions.append(("location", evidence.location))
     if evidence.morphology:
-        mentions.append(("morphology", evidence.morphology))
+        fallback_mentions.append(("morphology", evidence.morphology))
     for variable in evidence.raw_evidence.variables:
-        mentions.append(("variable", variable))
+        fallback_mentions.append(("variable", variable))
     for event in evidence.raw_evidence.log_events:
-        mentions.append(("log_event", event))
-    return [(field, mention) for field, mention in mentions if mention]
+        fallback_mentions.append(("log_event", event))
+
+    for field, mention in fallback_mentions:
+        if field in observation_facets:
+            continue
+        if mention and (field, mention) not in seen:
+            mentions.append(EvidenceMention(field=field, mention=mention))
+    return mentions
 
 
 def _link_id(case_id: str, field: str, mention: str, occurrence: int) -> str:
