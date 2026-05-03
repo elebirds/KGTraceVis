@@ -6,12 +6,13 @@ KGTraceVis ingestion uses two layers:
 model-dependent producer -> normalized record -> model-independent Evidence adapter
 ```
 
-Producer modules are optional and deferred for this milestone. They may run
-detectors or classifiers later, but they must emit normalized records rather
-than `Evidence`. Evidence adapters consume records, dataset labels, mask or
-wafer-map descriptors, and deterministic statistics. They only emit observed
-evidence. They must not emit root causes, ranked paths, or populate
-`kg_analysis`.
+Producer modules are optional and model-aware. They may run detectors or
+classifiers, but they must emit normalized records rather than `Evidence`.
+Evidence adapters consume records, dataset labels, mask or wafer-map
+descriptors, and deterministic statistics. They only emit observed evidence.
+They must not emit root causes, ranked paths, or populate `kg_analysis`. For
+local real-data producer commands, see
+[`docs/dataset_record_producers.md`](dataset_record_producers.md).
 
 ## MVTec / DS-MVTec Records
 
@@ -38,6 +39,11 @@ When explicit `location`, `morphology`, or `severity` are absent, the adapter ma
 derive them from deterministic mask geometry. Detector metadata is provenance
 for confidence and raw evidence only; it is not model execution inside the
 adapter.
+
+The local producer CLI can populate these fields from fake smoke predictors or
+from optional Anomalib exported inferencers selected with `anomalib-torch` or
+`anomalib-openvino`. The Anomalib dependency is runtime-only for those producer
+backends.
 
 ## WM811K Records
 
@@ -70,6 +76,10 @@ in `anomaly_type` so the current linker and path ranker can use it. A
 Public WM811K records support spatial-pattern evidence analysis, not verified
 process root-cause labels. Candidate root causes or plausible explanations are
 runtime `KGTracePipeline` outputs only.
+
+The local WM811K producer CLI can populate classifier outputs with
+`--model-backend sklearn`, loading trusted local joblib/pickle checkpoints and
+recording exposed model classes in classifier metadata.
 
 ## Checked-In Fixtures
 

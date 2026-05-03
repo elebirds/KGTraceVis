@@ -1,0 +1,36 @@
+# Example local producer-output record build configuration.
+#
+# Raw datasets, checkpoints, generated masks, and JSONL records should stay under
+# ignored paths such as data/external/, data/interim/, and data/processed/.
+# The current CLI uses direct flags; copy these values into
+# scripts/build_dataset_records.py commands.
+
+mvtec:
+  dataset: mvtec
+  input_root: data/external/mvtec
+  output_jsonl: data/processed/records/mvtec_subset.jsonl
+  # Use fake for smoke tests, anomalib-torch for exported torch checkpoints,
+  # or anomalib-openvino for exported OpenVINO models.
+  model_backend: anomalib-torch
+  checkpoint: data/external/checkpoints/mvtec_patchcore.pt
+  device: cpu
+  threshold: 0.5
+  max_cases: 100
+  max_per_label: 10
+  seed: 7
+  include_good: false
+  overwrite: false
+
+wm811k:
+  dataset: wm811k
+  input: data/external/wafer/LSWMD.pkl
+  output_jsonl: data/processed/records/wm811k_subset.jsonl
+  # sklearn checkpoints are trusted local joblib/pickle files. Do not load
+  # model files from untrusted sources.
+  model_backend: sklearn
+  checkpoint: data/external/checkpoints/wm811k_classifier.joblib
+  threshold: 0.5
+  max_cases: 250
+  max_per_label: 50
+  seed: 7
+  overwrite: false

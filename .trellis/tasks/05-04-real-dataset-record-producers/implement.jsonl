@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and quality gate for producer implementation."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Producer code must live under src/kgtracevis and raw/generated data must stay in ignored directories."}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "Producer-output records must preserve the two-layer adapter contract and claim boundaries."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Test, lint, type-check, and metric-scope expectations."}
+{"file": ".trellis/tasks/05-04-real-dataset-record-producers/prd.md", "reason": "Requirements for real-data subset record producers."}
+{"file": ".trellis/tasks/05-04-real-dataset-record-producers/implementation-plan.md", "reason": "Concrete implementation sequence for producer modules and CLI."}

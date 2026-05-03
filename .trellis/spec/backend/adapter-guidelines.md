@@ -225,6 +225,188 @@ def evidence_from_wm811k_record(record):
     )
 ```
 
+## Scenario: Model-Dependent Producer Records
+
+### 1. Scope / Trigger
+
+- Trigger: implementing or changing code that runs models over local dataset
+  samples and emits producer-output records.
+- Applies to `src/kgtracevis/producers/` and
+  `scripts/build_dataset_records.py`.
+- Reason: producers are allowed to be model-dependent, but their output still
+  must be observed evidence records consumed by Evidence adapters. They must not
+  become KG reasoning or RCA modules.
+
+### 2. Signatures
+
+Producer helper examples:
+
+```python
+def build_mvtec_records(
+    input_root: str | Path,
+    predictor: MVTecAnomalyPredictor,
+    *,
+    output_dir: str | Path | None = None,
+    model_backend: str = "local",
+    checkpoint: str | Path | None = None,
+    threshold: float = 0.5,
+    max_cases: int | None = None,
+    max_per_label: int | None = None,
+    seed: int | None = None,
+    include_good: bool = False,
+) -> list[dict[str, Any]]:
+    ...
+
+def build_wm811k_records(
+    input_path: str | Path,
+    classifier: WM811KClassifier,
+    *,
+    output_dir: str | Path | None = None,
+    model_backend: str = "local",
+    checkpoint: str | Path | None = None,
+    threshold: float | None = None,
+    max_cases: int | None = None,
+    max_per_label: int | None = None,
+    seed: int | None = None,
+    include_unlabeled: bool = False,
+) -> list[dict[str, Any]]:
+    ...
+```
+
+CLI shape:
+
+```bash
+uv run python scripts/build_dataset_records.py \
+  --dataset mvtec \
+  --input-root data/external/mvtec \
+  --output-jsonl data/processed/records/mvtec_subset.jsonl \
+  --model-backend anomalib-torch \
+  --checkpoint data/external/checkpoints/mvtec_patchcore.pt \
+  --overwrite
+```
+
+### 3. Contracts
+
+Producer layer:
+
+- Emits plain record dictionaries or JSONL, not `Evidence`.
+- Must not import or call `KGTracePipeline`.
+- Must recursively filter forbidden reasoning-output keys before writing JSONL.
+- May run local model inference, save heatmaps/masks/saliency maps under ignored
+  paths, and attach model/checkpoint metadata.
+- Must keep raw datasets, generated records, and checkpoints out of Git.
+
+MVTec producer records:
+
+- Use `dataset="mvtec"`.
+- Include image path, object/category, defect label when available, model
+  score/confidence, generated heatmap or mask path when available, mask stats,
+  and detector metadata.
+- Optional Anomalib backends are runtime-only imports; tests must not require
+  Anomalib or checkpoints.
+
+WM811K producer records:
+
+- Use `dataset="wafer"` and `adapter="wm811k"`.
+- Include predicted pattern, classification confidence, descriptor stats,
+  native label provenance when available, and classifier metadata.
+- Local sklearn/joblib checkpoints are trusted-local only; never load untrusted
+  pickle/joblib files.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+| --- | --- |
+| Producer output contains root-cause/path-ranking keys | Remove them recursively before JSONL write |
+| Real backend requires checkpoint but none is provided | Raise `ValueError` naming the missing checkpoint |
+| Optional Anomalib backend is selected but package is unavailable | Raise `ImportError` explaining to install Anomalib or use fake backend |
+| WM811K wafer map is not 2D | Raise `ValueError` |
+| Valid model score/confidence is `0.0` | Preserve `0.0`; do not treat as missing |
+| sklearn checkpoint load fails | Raise an error mentioning trusted-local joblib/pickle boundary |
+| Generated records are ready | Validate through existing `evidence_from_records` and adapter pipeline |
+
+### 5. Good/Base/Bad Cases
+
+Good:
+
+```bash
+uv run python scripts/build_dataset_records.py \
+  --dataset wm811k \
+  --input data/external/wafer/LSWMD.pkl \
+  --output-jsonl data/processed/records/wm811k_subset.jsonl \
+  --model-backend sklearn \
+  --checkpoint data/external/checkpoints/wm811k_classifier.joblib \
+  --overwrite
+```
+
+Base:
+
+```bash
+uv run python scripts/build_dataset_records.py \
+  --dataset mvtec \
+  --input-root tests/fixtures/mvtec_tiny \
+  --output-jsonl /tmp/mvtec_records.jsonl \
+  --model-backend fake \
+  --overwrite
+```
+
+Bad:
+
+```python
+records = KGTracePipeline().analyze(evidence)
+```
+
+Producer modules must not run KG reasoning. They stop at record generation.
+
+### 6. Tests Required
+
+Tests must assert:
+
+- fake predictors can exercise producer contracts without checkpoints,
+- generated MVTec and WM811K records validate through `evidence_from_records`,
+- forbidden reasoning-output keys are filtered recursively,
+- valid zero scores/confidences are preserved,
+- malformed wafer maps fail explicitly,
+- Anomalib wrapper can normalize injected fake inferencer outputs,
+- sklearn wrapper can load a tiny trusted local model and call `predict` /
+  `predict_proba`,
+- CLI backend selection works without real Anomalib installed.
+
+Run at minimum:
+
+```bash
+uv run --extra dev pytest tests/test_record_producers.py
+uv run --extra dev ruff check .
+uv run --extra dev mypy src tests scripts
+```
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+record = {
+    "case_id": case_id,
+    "root_cause": model.predict_root_cause(image),
+}
+```
+
+This mixes producer inference with RCA authority.
+
+#### Correct
+
+```python
+record = {
+    "case_id": case_id,
+    "dataset": "mvtec",
+    "confidence": prediction.score,
+    "heatmap_path": str(heatmap_path),
+    "detector": {"backend": "anomalib-torch", "checkpoint": str(checkpoint)},
+}
+```
+
+Runtime KG analysis happens later through the existing adapter pipeline.
+
 ## Scenario: Adapter-to-Pipeline Experiment Outputs
 
 ### 1. Scope / Trigger

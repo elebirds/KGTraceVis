@@ -33,6 +33,12 @@ producer-output records -> Evidence adapters -> Evidence JSON -> KGTracePipeline
 -> candidate/plausible explanation paths
 ```
 
+The optional real-data producer layer can now build normalized JSONL records
+from local MVTec-like image folders and WM811K tables before those records enter
+the adapter layer. See
+[`docs/dataset_record_producers.md`](docs/dataset_record_producers.md) for the
+record contract and local smoke commands.
+
 The project should not start with a large front-end system, user management, or
 complex online learning. Instead, scripts and future apps must share the same
 reusable core pipeline.
@@ -214,6 +220,29 @@ uv run python scripts/build_paper_tables.py --overwrite
 This writes ignored review artifacts under `artifacts/paper_tables_v0/` with
 dataset/noise/reference-scope grouping and command provenance. It does not copy
 anything into `paper/`.
+
+Build local producer-output records before adapter ingestion:
+
+```bash
+uv run python scripts/build_dataset_records.py --dataset mvtec \
+  --input-root data/external/mvtec \
+  --output-jsonl data/processed/records/mvtec_subset.jsonl \
+  --model-backend anomalib-torch \
+  --checkpoint data/external/checkpoints/mvtec_patchcore.pt \
+  --device cpu \
+  --overwrite
+
+uv run python scripts/build_dataset_records.py --dataset wm811k \
+  --input data/external/wafer/LSWMD.pkl \
+  --output-jsonl data/processed/records/wm811k_subset.jsonl \
+  --model-backend sklearn \
+  --checkpoint data/external/checkpoints/wm811k_classifier.joblib \
+  --overwrite
+```
+
+Use `--model-backend fake` for checkpoint-free smoke runs. Anomalib is imported
+only for `anomalib-torch` or `anomalib-openvino`; sklearn joblib/pickle
+checkpoints must be trusted local files.
 
 Start the Streamlit demo:
 
