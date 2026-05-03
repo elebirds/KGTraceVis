@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for any follow-up implementation."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Experiment artifacts and docs must follow project directory boundaries."}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "Evidence adapter and producer-layer contracts for implementation."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Follow-up scripts and tests should match project quality expectations."}
+{"file": ".trellis/tasks/05-03-paper-project-next-steps/research/next-step-assessment.md", "reason": "Research-backed prioritization for the next paper-project implementation task."}
+{"file": ".trellis/tasks/05-03-paper-project-next-steps/research/adapter-options.md", "reason": "Adapter implementation options and selected design constraints for MVTec/WM811K."}
+{"file": ".trellis/tasks/05-03-paper-project-next-steps/info.md", "reason": "Detailed adapter-first implementation route and PR slicing."}
+{"file": ".trellis/tasks/05-03-paper-project-next-steps/implementation-plan.md", "reason": "Concrete first-batch implementation plan and agent prompt."}

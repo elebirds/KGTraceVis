@@ -21,6 +21,7 @@ Before writing backend code:
 | Guide | Description | Status |
 |-------|-------------|--------|
 | [Directory Structure](./directory-structure.md) | Module organization and file layout | Active |
+| [Adapter Guidelines](./adapter-guidelines.md) | Producer/adaptor contracts and dataset evidence boundaries | Active |
 | [Database Guidelines](./database-guidelines.md) | KG CSV, in-memory graph, and Neo4j conventions | Active |
 | [Error Handling](./error-handling.md) | Validation and ambiguity handling | Active |
 | [Quality Guidelines](./quality-guidelines.md) | Test, lint, and traceability rules | Active |

@@ -9,6 +9,15 @@ from typing import Any, cast
 from kgtracevis.schema.evidence_schema import AdapterMetadata, EvidenceObservation, EvidenceSource
 
 VALID_SOURCES = {"image", "time_series", "log", "multimodal", "unknown"}
+REASONING_OUTPUT_KEYS = {
+    "root_cause",
+    "root_causes",
+    "candidate_root_cause",
+    "candidate_root_causes",
+    "ranked_causes",
+    "top_k_paths",
+    "kg_analysis",
+}
 
 
 def merged_record(record: Mapping[str, Any] | None, overrides: Mapping[str, Any]) -> dict[str, Any]:
@@ -86,25 +95,37 @@ def copied_extra(
     *,
     known_keys: set[str],
     required: Mapping[str, Any] | None = None,
+    forbidden_keys: set[str] | None = None,
 ) -> dict[str, Any]:
     """Copy unknown record fields plus selected known metadata into raw extra."""
+    blocked = REASONING_OUTPUT_KEYS if forbidden_keys is None else forbidden_keys
     extra: dict[str, Any] = {}
     raw_extra = data.get("extra")
     if isinstance(raw_extra, Mapping):
-        extra.update(deepcopy(dict(raw_extra)))
+        extra.update(_copy_without_forbidden(raw_extra, blocked))
     for key, value in data.items():
-        if key not in known_keys and key != "extra":
-            extra[key] = deepcopy(value)
+        if key not in known_keys and key != "extra" and key not in blocked:
+            extra[key] = _copy_without_forbidden(value, blocked)
     if required:
         for key, value in required.items():
-            if value is not None:
-                extra[key] = deepcopy(value)
+            if value is not None and key not in blocked:
+                extra[key] = _copy_without_forbidden(value, blocked)
     return extra
 
 
-def adapter_metadata(name: str) -> AdapterMetadata:
+def adapter_metadata(
+    name: str,
+    *,
+    version: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> AdapterMetadata:
     """Return the standard adapter metadata for observed-evidence adapters."""
-    return AdapterMetadata(name=name, produces_root_cause=False)
+    return AdapterMetadata(
+        name=name,
+        version=version,
+        produces_root_cause=False,
+        metadata=deepcopy(dict(metadata or {})),
+    )
 
 
 def make_observation(
@@ -164,3 +185,15 @@ def _observation_id(case_id: str, facet: str, name: str, occurrence: int) -> str
 
 def _stable_token(value: str) -> str:
     return "_".join("".join(ch.lower() if ch.isalnum() else " " for ch in value).split())
+
+
+def _copy_without_forbidden(value: Any, forbidden_keys: set[str]) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): _copy_without_forbidden(nested, forbidden_keys)
+            for key, nested in value.items()
+            if str(key) not in forbidden_keys
+        }
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return [_copy_without_forbidden(item, forbidden_keys) for item in value]
+    return deepcopy(value)

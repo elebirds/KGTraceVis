@@ -9,16 +9,28 @@ a source-constrained industrial knowledge graph to support entity linking,
 evidence consistency scoring, noisy evidence correction, relation-weighted
 root-cause path ranking, and visual analytics.
 
-For the current Chinese research design draft, see [`docs/paper_idea_cn.md`](docs/paper_idea_cn.md). This document is a living draft and may change as the project evolves.
+For the current Chinese research design draft, see
+[`docs/paper_idea_cn.md`](docs/paper_idea_cn.md). This document is a living
+draft and may change as the project evolves. For the current adapter-first
+paper experiment protocol and reference eligibility rules, see
+[`docs/paper_experiment_protocol.md`](docs/paper_experiment_protocol.md).
 
 ## Design Position
 
 KGTraceVis should stay small and reproducible in v0.
 
-The current target is:
+The stable v0 runtime path is:
 
 ```text
 example JSON -> KG link -> consistency score -> correction -> path ranking -> demo
+```
+
+The current paper-facing adapter milestone uses the same runtime pipeline but
+starts one step earlier:
+
+```text
+producer-output records -> Evidence adapters -> Evidence JSON -> KGTracePipeline
+-> candidate/plausible explanation paths
 ```
 
 The project should not start with a large front-end system, user management, or
@@ -189,6 +201,20 @@ uv run python scripts/run_kg_qa.py --output outputs/kg_qa_report.json
 uv run python scripts/run_experiment_suite.py
 ```
 
+The suite also runs the checked-in MVTec and WM811K adapter records through
+`KGTracePipeline`, writing per-dataset adapter summaries and CSV tables under
+`runs/v0_experiment_suite/adapter_pipeline_*`.
+
+Build grouped paper-facing manifests from current generated outputs:
+
+```bash
+uv run python scripts/build_paper_tables.py --overwrite
+```
+
+This writes ignored review artifacts under `artifacts/paper_tables_v0/` with
+dataset/noise/reference-scope grouping and command provenance. It does not copy
+anything into `paper/`.
+
 Start the Streamlit demo:
 
 ```bash
@@ -243,6 +269,48 @@ Required top-level fields:
 - `kg_analysis`
 
 The schema also reserves `human_feedback` for future review actions.
+
+### Adapter Record Fixtures
+
+Small model-output-style records are checked in under `data/examples/records/`.
+They exercise the model-independent Evidence adapter layer without training or
+downloading producers:
+
+```bash
+uv run python scripts/generate_evidence.py \
+  --input data/examples/records/mvtec_records.jsonl \
+  --output-jsonl outputs/mvtec_adapter_evidence.jsonl
+
+uv run python scripts/generate_evidence.py \
+  --input data/examples/records/wm811k_records.jsonl \
+  --output-jsonl outputs/wm811k_adapter_evidence.jsonl
+```
+
+To run the same records end to end through `KGTracePipeline` and write generated
+Evidence JSON, a provenance-rich summary, and a scoped CSV table:
+
+```bash
+uv run python scripts/run_adapter_pipeline.py \
+  --input data/examples/records/mvtec_records.jsonl \
+  --dataset mvtec \
+  --output-dir outputs/adapter_pipeline_v0/mvtec \
+  --overwrite
+
+uv run python scripts/run_adapter_pipeline.py \
+  --input data/examples/records/wm811k_records.jsonl \
+  --dataset wafer \
+  --output-dir outputs/adapter_pipeline_v0/wm811k \
+  --overwrite
+```
+
+WM811K records keep `dataset="wafer"` and identify the adapter with
+`adapter="wm811k"` or `source_dataset="wm811k"`. Adapters emit observed evidence
+only; `kg_analysis` and candidate/plausible explanation paths are populated
+later by `KGTracePipeline`. These path outputs are not verified process RCA
+claims. The table output is `adapter_pipeline_table.csv` in the selected output
+directory. The record contracts are documented in `docs/adapter_contracts.md`,
+and paper-use eligibility is documented in
+`docs/paper_experiment_protocol.md`.
 
 ## KG CSV Schema
 

@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 
 from kgtracevis.adapters import (
     evidence_from_mvtec_record,
     evidence_from_tep_record,
     evidence_from_wafer_record,
+    evidence_from_wm811k_record,
 )
+from kgtracevis.adapters.batch import evidence_from_records, load_records
+from kgtracevis.mask.mask_feature_extractor import summarize_mask_features
+from kgtracevis.mask.wafer_map_features import normalize_wafer_map_features
 from kgtracevis.schema.evidence_schema import Evidence
 from kgtracevis.schema.validators import missing_canonical_observation_facets
 
@@ -194,5 +199,183 @@ def test_adapter_observation_ids_remain_unique_for_repeated_values() -> None:
     ]
 
 
+def test_mask_feature_helpers_derive_stable_geometry_terms() -> None:
+    """Precomputed mask geometry should deterministically derive adapter evidence fields."""
+    features = summarize_mask_features(
+        {
+            "centroid": [0.5, 0.45],
+            "area_ratio": 0.16,
+            "eccentricity": 0.91,
+            "component_count": 1,
+        }
+    )
+
+    assert features["location"] == "surface"
+    assert features["morphology"] == "linear"
+    assert features["severity"] == 0.16
+    assert features["mask_stats"]["centroid_norm"] == (0.5, 0.45)
+
+
+def test_wafer_map_feature_helpers_support_precomputed_stats_and_tiny_arrays() -> None:
+    """Wafer descriptors should work without model downloads or heavy vision packages."""
+    precomputed = normalize_wafer_map_features(
+        {"defect_density": 0.72, "zone": "wafer_surface"},
+        pattern="Near-full",
+    )
+    from_array = normalize_wafer_map_features(
+        wafer_map=[[2, 2, 2], [2, 0, 2], [2, 2, 2]],
+        pattern="nearfull",
+    )
+
+    assert precomputed["derived_location"] == "wafer_surface"
+    assert precomputed["derived_morphology"] == "dense_particles"
+    assert precomputed["derived_severity"] == 0.72
+    assert from_array["failed_die_count"] == 8
+    assert from_array["die_count"] == 9
+    assert from_array["derived_location"] == "wafer_surface"
+    assert from_array["derived_morphology"] == "dense_particles"
+
+
+def test_mvtec_adapter_derives_fallback_fields_from_mask_stats() -> None:
+    """MVTec fallback should use mask geometry while keeping KG analysis empty."""
+    record = {
+        "case_id": "mvtec_mask_fallback",
+        "object": "bottle",
+        "defect_type": "scratch",
+        "mask_stats": {
+            "centroid": [0.48, 0.52],
+            "area_ratio": 0.16,
+            "eccentricity": 0.93,
+            "component_count": 1,
+        },
+        "detector": {"name": "fixture_detector", "pred_score": 0.81},
+        "root_cause": "should_not_be_copied",
+        "extra": {"root_cause": "nested_should_not_be_copied"},
+    }
+
+    evidence = evidence_from_mvtec_record(record)
+
+    assert evidence.location == "surface"
+    assert evidence.morphology == "linear"
+    assert evidence.severity == 0.16
+    assert evidence.confidence == 0.81
+    assert evidence.raw_evidence.extra["mask_stats"]["eccentricity"] == 0.93
+    assert evidence.raw_evidence.extra["detector"]["pred_score"] == 0.81
+    assert _observation(evidence, "location").source_ref == "mask_geometry"
+    assert _observation(evidence, "morphology").obs_id == (
+        "obs_mvtec_mask_fallback_morphology_linear"
+    )
+    assert missing_canonical_observation_facets(evidence) == []
+    assert evidence.kg_analysis.model_dump() == _empty_kg_analysis()
+    assert evidence.adapter is not None
+    assert evidence.adapter.produces_root_cause is False
+    assert "root_cause" not in evidence.raw_evidence.extra
+    assert _root_cause_keys(evidence) == []
+
+
+def test_wm811k_adapter_returns_schema_valid_wafer_evidence() -> None:
+    """WM811K records should remain dataset='wafer' and avoid root-cause outputs."""
+    record = {
+        "case_id": "wm811k_case_1",
+        "wafer_id": "W-811K-1",
+        "failure_pattern": "Near-full",
+        "classification_confidence": 0.88,
+        "defect_density": 0.72,
+        "zone": "wafer_surface",
+        "morphology": "dense_particles",
+        "wafer_map_path": "fixtures/wm811k/W-811K-1.npy",
+        "annotation_type": "native_ground_truth",
+        "root_cause": "should_not_be_copied",
+        "extra": {"candidate_root_cause": "nested_should_not_be_copied"},
+    }
+
+    evidence = evidence_from_wm811k_record(record)
+
+    assert isinstance(evidence, Evidence)
+    assert evidence.dataset == "wafer"
+    assert evidence.source == "image"
+    assert evidence.object == "wafer"
+    assert evidence.anomaly_type == "nearfull"
+    assert evidence.location == "wafer_surface"
+    assert evidence.morphology == "dense_particles"
+    assert evidence.severity == 0.72
+    assert evidence.confidence == 0.88
+    assert evidence.adapter is not None
+    assert evidence.adapter.name == "wm811k"
+    assert evidence.adapter.metadata["schema_dataset"] == "wafer"
+    assert evidence.adapter.produces_root_cause is False
+    assert evidence.raw_evidence.extra["wm811k"]["original_pattern"] == "Near-full"
+    assert evidence.raw_evidence.extra["descriptor_stats"]["derived_location"] == "wafer_surface"
+    assert _observation(evidence, "spatial_pattern").obs_id == (
+        "obs_wm811k_case_1_spatial_pattern_nearfull"
+    )
+    assert _observation(evidence, "anomaly_type").source_ref == "dataset_label"
+    assert missing_canonical_observation_facets(evidence) == []
+    assert evidence.kg_analysis.model_dump() == _empty_kg_analysis()
+    assert "root_cause" not in evidence.raw_evidence.extra
+    assert "candidate_root_cause" not in evidence.raw_evidence.extra
+    assert _root_cause_keys(evidence) == []
+
+
+def test_record_fixtures_convert_to_schema_valid_adapter_evidence() -> None:
+    """Checked-in tiny fixtures should exercise MVTec and WM811K adapter contracts."""
+    mvtec_records = load_records(Path("data/examples/records/mvtec_records.jsonl"))
+    wm811k_records = load_records(Path("data/examples/records/wm811k_records.jsonl"))
+
+    evidence_items = [
+        *evidence_from_records(mvtec_records),
+        *evidence_from_records(wm811k_records),
+    ]
+
+    assert [item.adapter.name if item.adapter else None for item in evidence_items] == [
+        "mvtec",
+        "mvtec",
+        "wm811k",
+        "wm811k",
+    ]
+    assert [item.dataset for item in evidence_items] == ["mvtec", "mvtec", "wafer", "wafer"]
+    for evidence in evidence_items:
+        assert isinstance(evidence, Evidence)
+        assert missing_canonical_observation_facets(evidence) == []
+        assert evidence.kg_analysis.model_dump() == _empty_kg_analysis()
+        assert evidence.adapter is not None
+        assert evidence.adapter.produces_root_cause is False
+        assert _root_cause_keys(evidence) == []
+
+
 def _observation(evidence: Evidence, facet: str):
     return next(observation for observation in evidence.observations if observation.facet == facet)
+
+
+def _empty_kg_analysis() -> dict[str, object]:
+    return {
+        "linked_entities": [],
+        "consistency_score": None,
+        "inconsistent_fields": [],
+        "correction_candidates": [],
+        "top_k_paths": [],
+    }
+
+
+def _root_cause_keys(evidence: Evidence) -> list[str]:
+    root_keys = {
+        "root_cause",
+        "root_causes",
+        "candidate_root_cause",
+        "candidate_root_causes",
+        "ranked_causes",
+    }
+    keys: list[str] = []
+
+    def collect(value: object) -> None:
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                if key in root_keys:
+                    keys.append(key)
+                collect(nested)
+        elif isinstance(value, list):
+            for item in value:
+                collect(item)
+
+    collect(evidence.model_dump(mode="json"))
+    return keys

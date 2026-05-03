@@ -30,11 +30,20 @@ def test_build_default_command_specs_include_v0_checks(tmp_path: Path) -> None:
         "neo4j_dry_run",
         "noise_experiment",
         "path_ranking",
+        "adapter_pipeline_mvtec",
+        "adapter_pipeline_wm811k",
     ]
-    path_command = specs[-1].command
+    path_command = specs[5].command
     assert "--top-k" in path_command
     assert path_command[path_command.index("--top-k") + 1] == "3"
     assert specs[2].expected_output == tmp_path / "kg_qa_report.json"
+    assert specs[6].expected_output == (
+        tmp_path / "adapter_pipeline_mvtec" / "adapter_pipeline_summary.json"
+    )
+    assert specs[6].expected_outputs == (
+        tmp_path / "adapter_pipeline_mvtec" / "adapter_pipeline_table.csv",
+    )
+    assert specs[7].command[specs[7].command.index("--dataset") + 1] == "wafer"
 
 
 def test_report_command_normalizes_local_python_path() -> None:
@@ -60,6 +69,7 @@ def test_write_suite_outputs_creates_json_and_table(tmp_path: Path) -> None:
                 stdout_tail="",
                 stderr_tail="",
                 summary={"validated": 3},
+                output_paths=["runs/example.json", "runs/example.csv"],
             )
         ],
         output_dir=tmp_path,
@@ -70,4 +80,6 @@ def test_write_suite_outputs_creates_json_and_table(tmp_path: Path) -> None:
     assert summary_path.exists()
     assert table_path.exists()
     assert "experiment_suite_v0" in summary_path.read_text(encoding="utf-8")
-    assert "examples_validation,passed,0" in table_path.read_text(encoding="utf-8")
+    table_text = table_path.read_text(encoding="utf-8")
+    assert "examples_validation,passed,0" in table_text
+    assert "runs/example.json;runs/example.csv" in table_text

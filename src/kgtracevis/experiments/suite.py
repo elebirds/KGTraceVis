@@ -14,6 +14,13 @@ from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
+from kgtracevis.experiments.adapter_pipeline import (
+    SUMMARY_FILENAME as ADAPTER_PIPELINE_SUMMARY_FILENAME,
+)
+from kgtracevis.experiments.adapter_pipeline import (
+    TABLE_FILENAME as ADAPTER_PIPELINE_TABLE_FILENAME,
+)
+
 METRIC_SCOPE_NOTE = (
     "V0 reproducibility outputs over checked-in examples and clean-run references; "
     "not paper-grade ground-truth claims."
@@ -27,6 +34,7 @@ class CommandSpec:
     name: str
     command: list[str]
     expected_output: Path | None = None
+    expected_outputs: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -173,6 +181,8 @@ def build_default_command_specs(
     top_k = int(experiment_config.get("top_k", 5))
     kg_qa_output = suite_output_dir / "kg_qa_report.json"
     path_ranking_output_dir = suite_output_dir / "path_ranking_v0"
+    mvtec_adapter_output_dir = suite_output_dir / "adapter_pipeline_mvtec"
+    wm811k_adapter_output_dir = suite_output_dir / "adapter_pipeline_wm811k"
 
     return [
         CommandSpec(
@@ -231,6 +241,46 @@ def build_default_command_specs(
             ],
             expected_output=path_ranking_output_dir / "path_ranking_summary.json",
         ),
+        CommandSpec(
+            name="adapter_pipeline_mvtec",
+            command=[
+                sys.executable,
+                "scripts/run_adapter_pipeline.py",
+                "--input",
+                "data/examples/records/mvtec_records.jsonl",
+                "--dataset",
+                "mvtec",
+                "--output-dir",
+                str(mvtec_adapter_output_dir),
+                "--top-k",
+                str(top_k),
+                "--overwrite",
+            ],
+            expected_output=mvtec_adapter_output_dir / ADAPTER_PIPELINE_SUMMARY_FILENAME,
+            expected_outputs=(
+                mvtec_adapter_output_dir / ADAPTER_PIPELINE_TABLE_FILENAME,
+            ),
+        ),
+        CommandSpec(
+            name="adapter_pipeline_wm811k",
+            command=[
+                sys.executable,
+                "scripts/run_adapter_pipeline.py",
+                "--input",
+                "data/examples/records/wm811k_records.jsonl",
+                "--dataset",
+                "wafer",
+                "--output-dir",
+                str(wm811k_adapter_output_dir),
+                "--top-k",
+                str(top_k),
+                "--overwrite",
+            ],
+            expected_output=wm811k_adapter_output_dir / ADAPTER_PIPELINE_SUMMARY_FILENAME,
+            expected_outputs=(
+                wm811k_adapter_output_dir / ADAPTER_PIPELINE_TABLE_FILENAME,
+            ),
+        ),
     ]
 
 
@@ -271,8 +321,11 @@ def _run_command(spec: CommandSpec) -> ExperimentCommandResult:
     duration = time.perf_counter() - started
     output_paths: list[str] = []
     summary = _extract_json_object(completed.stdout)
+    for output_path in _expected_output_paths(spec):
+        if output_path.exists():
+            output_paths.append(str(output_path))
+
     if spec.expected_output is not None and spec.expected_output.exists():
-        output_paths.append(str(spec.expected_output))
         file_summary = _read_json_file(spec.expected_output)
         if file_summary:
             summary = _compact_summary(file_summary)
@@ -287,6 +340,14 @@ def _run_command(spec: CommandSpec) -> ExperimentCommandResult:
         summary=_compact_summary(summary),
         output_paths=output_paths,
     )
+
+
+def _expected_output_paths(spec: CommandSpec) -> list[Path]:
+    paths: list[Path] = []
+    if spec.expected_output is not None:
+        paths.append(spec.expected_output)
+    paths.extend(spec.expected_outputs)
+    return paths
 
 
 def _compact_summary(summary: dict[str, Any]) -> dict[str, Any]:

@@ -14,6 +14,7 @@ from typing import Any, cast
 from kgtracevis.adapters.ds_mvtec_adapter import evidence_from_mvtec_record
 from kgtracevis.adapters.tep_adapter import evidence_from_tep_record
 from kgtracevis.adapters.wafer_adapter import evidence_from_wafer_record
+from kgtracevis.adapters.wm811k_adapter import evidence_from_wm811k_record, is_wm811k_record
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
 
 DatasetAdapter = Callable[[Mapping[str, Any]], Evidence]
@@ -64,7 +65,7 @@ def evidence_from_records(
     evidence_items: list[Evidence] = []
     for index, record in enumerate(records, start=1):
         record_dataset = dataset or _dataset_from_record(record, index=index)
-        adapter = DATASET_ADAPTERS[record_dataset]
+        adapter = _adapter_for_record(record_dataset, record)
         evidence_items.append(adapter(record))
     return evidence_items
 
@@ -172,6 +173,12 @@ def _dataset_from_record(record: Mapping[str, Any], *, index: int) -> DatasetNam
             f"record {index} has unsupported dataset {raw_dataset!r}; expected one of: {valid}"
         )
     return cast(DatasetName, dataset)
+
+
+def _adapter_for_record(dataset: DatasetName, record: Mapping[str, Any]) -> DatasetAdapter:
+    if dataset == "wafer" and is_wm811k_record(record):
+        return evidence_from_wm811k_record
+    return DATASET_ADAPTERS[dataset]
 
 
 def _ensure_can_write(path: Path, *, overwrite: bool) -> None:
