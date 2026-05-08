@@ -323,6 +323,9 @@ def test_cli_backend_selection_supports_real_backend_names(
     assert mvtec_predictor.kwargs["backend"] == ANOMALIB_OPENVINO_BACKEND
     assert mvtec_predictor.kwargs["device"] == "cpu"
 
+    with pytest.raises(ValueError, match="unsupported MVTec"):
+        build_script.build_mvtec_predictor(model_backend="fake")
+
     checkpoint = tmp_path / "wm811k_model.joblib"
     joblib.dump(TinySklearnWaferModel(), checkpoint)
     wm811k_classifier = build_script.build_wm811k_classifier(
@@ -330,6 +333,9 @@ def test_cli_backend_selection_supports_real_backend_names(
         checkpoint=checkpoint,
     )
     assert isinstance(wm811k_classifier, SklearnWM811KBackend)
+
+    with pytest.raises(ValueError, match="unsupported WM811K"):
+        build_script.build_wm811k_classifier(model_backend="fake")
 
     torch = pytest.importorskip("torch")
     torchvision = pytest.importorskip("torchvision")

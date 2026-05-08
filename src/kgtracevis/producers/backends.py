@@ -108,7 +108,7 @@ class AnomalibMVTecBackend:
         except ImportError as exc:
             raise ImportError(
                 "Anomalib is required for --model-backend "
-                f"{self.backend}; install it in the local runtime or use --model-backend fake"
+                f"{self.backend}; install it in the local runtime"
             ) from exc
 
         inferencer_cls = (

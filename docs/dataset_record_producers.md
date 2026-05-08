@@ -47,22 +47,23 @@ It calls a predictor once per selected image and emits records with
 confidence, generated heatmap or mask paths when arrays are produced, mask
 geometry stats, source path metadata, and model metadata.
 
-Smoke command:
+Real MVTec command:
 
 ```bash
 uv run python scripts/build_dataset_records.py \
   --dataset mvtec \
   --input-root data/external/mvtec \
   --output-jsonl data/processed/records/mvtec_subset.jsonl \
-  --model-backend fake \
+  --model-backend anomalib-openvino \
+  --checkpoint data/external/checkpoints/mvtec_openvino.xml \
   --max-per-label 10 \
   --overwrite
 ```
 
 Real exported Anomalib inference is selected with `--model-backend
 anomalib-torch` or `--model-backend anomalib-openvino`. The producer imports
-Anomalib only at runtime for those backend names, so the deterministic test suite
-does not require Anomalib or a checkpoint.
+Anomalib only at runtime for those backend names, so the deterministic test
+suite does not require Anomalib or a checkpoint.
 
 ```bash
 uv run python scripts/build_dataset_records.py \
@@ -87,14 +88,15 @@ pattern, classification confidence, descriptor stats, optional inline tiny wafer
 map or generated map path, native label provenance when present, and model
 metadata.
 
-Smoke command:
+Real WM811K command:
 
 ```bash
 uv run python scripts/build_dataset_records.py \
   --dataset wm811k \
   --input data/external/wafer/LSWMD.pkl \
   --output-jsonl data/processed/records/wm811k_subset.jsonl \
-  --model-backend fake \
+  --model-backend torch-resnet34 \
+  --checkpoint data/external/checkpoints/wm811k_resnet34.pt \
   --max-per-label 50 \
   --overwrite
 ```
@@ -119,13 +121,11 @@ uv run python scripts/build_dataset_records.py \
   --overwrite
 ```
 
-Follow-up adapter/pipeline command:
+End-to-end pipeline command:
 
 ```bash
-uv run python scripts/run_adapter_pipeline.py \
-  --input data/processed/records/wm811k_subset.jsonl \
-  --dataset wafer \
-  --output-dir outputs/adapter_pipeline_real_subset/wm811k \
+uv run python scripts/run_real_model_pipeline.py \
+  --output-root runs/real_model_pipeline \
   --overwrite
 ```
 
@@ -133,3 +133,6 @@ MVTec and WM811K public records contain observations, native labels, and model
 outputs only. Candidate root-cause paths are generated later by
 `KGTracePipeline` and remain plausible runtime explanations, not dataset-native
 verified causes.
+
+The user-facing commands use real inputs and real checkpoints. Deterministic
+fake predictors remain only in the test suite.

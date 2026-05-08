@@ -52,6 +52,8 @@ Producer layer:
 - Produces normalized record dictionaries.
 - Must not produce `Evidence` directly unless it calls the Evidence adapter.
 - Must not be required for the deterministic adapter test suite.
+- User-facing producer commands should use real backends and real input files;
+  deterministic fake predictors belong in tests and fixture helpers only.
 
 Evidence adapter layer:
 

@@ -40,10 +40,9 @@ derive them from deterministic mask geometry. Detector metadata is provenance
 for confidence and raw evidence only; it is not model execution inside the
 adapter.
 
-The local producer CLI can populate these fields from fake smoke predictors or
-from optional Anomalib exported inferencers selected with `anomalib-torch` or
-`anomalib-openvino`. The Anomalib dependency is runtime-only for those producer
-backends.
+The local producer CLI populates these fields from optional Anomalib exported
+inferencers selected with `anomalib-torch` or `anomalib-openvino`. The Anomalib
+dependency is runtime-only for those producer backends.
 
 ## WM811K Records
 
@@ -78,8 +77,8 @@ process root-cause labels. Candidate root causes or plausible explanations are
 runtime `KGTracePipeline` outputs only.
 
 The local WM811K producer CLI can populate classifier outputs with
-`--model-backend sklearn`, loading trusted local joblib/pickle checkpoints and
-recording exposed model classes in classifier metadata.
+`--model-backend sklearn` or `--model-backend torch-resnet34`, loading trusted
+local checkpoints and recording exposed model classes in classifier metadata.
 
 ## Checked-In Fixtures
 
