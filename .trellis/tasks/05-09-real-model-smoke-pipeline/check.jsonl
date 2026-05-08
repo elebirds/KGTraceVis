@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Quality check must verify backend rules and required command set."}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "Check adapter compatibility, schema boundaries, and forbidden RCA leakage."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Check code placement and dependency direction."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Run and review the required tests, lint, and type checks."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check failure modes for missing checkpoints, unsupported backends, and invalid inputs."}

@@ -46,6 +46,13 @@ paper = [
     "seaborn>=0.13",
     "tabulate>=0.9",
 ]
+ml = [
+    "anomalib>=2.4.1",
+    "huggingface-hub>=1.14.0",
+    "openvino>=2026.1.0",
+    "torch>=2.11.0",
+    "torchvision>=0.26.0",
+]
 
 [project.scripts]
 kgtrace-build-kg = "kgtracevis.cli:build_kg"

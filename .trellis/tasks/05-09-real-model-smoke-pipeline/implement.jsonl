@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend implementation rules for producer, adapter, and pipeline work."}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "Producer-output records must remain adapter-compatible and not leak RCA outputs."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Keep reusable logic under src/kgtracevis/ and CLI scripts thin."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Need robust handling for missing models, checkpoints, and ambiguous sample inputs."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Scripts should emit concise progress and artifact messages."}
