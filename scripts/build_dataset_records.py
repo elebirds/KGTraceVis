@@ -13,10 +13,12 @@ from kgtracevis.producers import (
     ANOMALIB_OPENVINO_BACKEND,
     ANOMALIB_TORCH_BACKEND,
     SKLEARN_BACKEND,
+    TORCH_RESNET_BACKEND,
     AnomalibMVTecBackend,
     MVTecAnomalyPredictor,
     MVTecPrediction,
     SklearnWM811KBackend,
+    TorchWM811KBackend,
     WM811KClassifier,
     WM811KPrediction,
     write_jsonl_records,
@@ -26,7 +28,7 @@ from kgtracevis.producers.wm811k_records import build_wm811k_records
 
 FAKE_BACKEND = "fake"
 MVTEC_BACKENDS = (FAKE_BACKEND, ANOMALIB_TORCH_BACKEND, ANOMALIB_OPENVINO_BACKEND)
-WM811K_BACKENDS = (FAKE_BACKEND, SKLEARN_BACKEND)
+WM811K_BACKENDS = (FAKE_BACKEND, SKLEARN_BACKEND, TORCH_RESNET_BACKEND)
 
 
 class FakeMVTecPredictor:
@@ -86,7 +88,7 @@ def parse_args() -> argparse.Namespace:
         default="fake",
         help=(
             "Inference backend. MVTec supports fake, anomalib-torch, and "
-            "anomalib-openvino. WM811K supports fake and sklearn."
+            "anomalib-openvino. WM811K supports fake, sklearn, and torch-resnet34."
         ),
     )
     parser.add_argument(
@@ -145,6 +147,7 @@ def main() -> None:
         classifier = build_wm811k_classifier(
             model_backend=args.model_backend,
             checkpoint=args.checkpoint,
+            device=args.device,
         )
         records = build_wm811k_records(
             args.input,
@@ -201,12 +204,15 @@ def build_wm811k_classifier(
     *,
     model_backend: str,
     checkpoint: Path | None = None,
+    device: str | None = None,
 ) -> WM811KClassifier:
     """Return the selected WM811K classifier backend."""
     if model_backend == FAKE_BACKEND:
         return FakeWM811KClassifier()
     if model_backend == SKLEARN_BACKEND:
         return SklearnWM811KBackend(checkpoint=checkpoint)
+    if model_backend == TORCH_RESNET_BACKEND:
+        return TorchWM811KBackend(checkpoint=checkpoint, device=device)
     raise ValueError(
         f"unsupported WM811K --model-backend {model_backend!r}; expected one of {WM811K_BACKENDS}"
     )

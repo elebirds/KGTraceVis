@@ -14,6 +14,17 @@ from kgtracevis.producers.common import MVTecPrediction, WM811KPrediction
 ANOMALIB_TORCH_BACKEND = "anomalib-torch"
 ANOMALIB_OPENVINO_BACKEND = "anomalib-openvino"
 SKLEARN_BACKEND = "sklearn"
+TORCH_RESNET_BACKEND = "torch-resnet34"
+WM811K_CLASSES = [
+    "Center",
+    "Donut",
+    "Edge-Loc",
+    "Edge-Ring",
+    "Loc",
+    "Random",
+    "Scratch",
+    "Near-full",
+]
 
 
 class AnomalibMVTecBackend:
@@ -37,13 +48,57 @@ class AnomalibMVTecBackend:
 
     def predict(self, image_path: Path) -> MVTecPrediction:
         """Run Anomalib inference for one image and normalize the prediction shape."""
-        raw_prediction = self.inferencer.predict(image_path)
+        try:
+            raw_prediction = self.inferencer.predict(image_path)
+        except TypeError as exc:
+            if self.backend != ANOMALIB_OPENVINO_BACKEND:
+                raise
+            raw_prediction = self._predict_openvino_compat(image_path, exc)
         return anomalib_prediction_to_mvtec_prediction(
             raw_prediction,
             backend=self.backend,
             checkpoint=self.checkpoint,
             device=self.device,
         )
+
+    def _predict_openvino_compat(
+        self,
+        image_path: Path,
+        original_error: Exception,
+    ) -> MVTecPrediction:
+        """Run OpenVINO inference while tolerating older Anomalib output schemas."""
+        del original_error
+        if not all(
+            hasattr(self.inferencer, attribute)
+            for attribute in ("pre_process", "post_process", "model", "input_blob")
+        ):
+            raise TypeError("OpenVINO inferencer does not expose the required compatibility hooks")
+        import cv2
+
+        image = cv2.imread(str(image_path))
+        if image is None:
+            raise ValueError(f"failed to read image for OpenVINO inference: {image_path}")
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = self.inferencer.pre_process(image)
+        predictions = self.inferencer.model({self.inferencer.input_blob.any_name: image})
+        pred_dict = dict(self.inferencer.post_process(predictions))
+        if "output" in pred_dict and "anomaly_map" not in pred_dict:
+            output = np.squeeze(np.asarray(pred_dict.pop("output")))
+            pred_dict["anomaly_map"] = output
+            if output.size:
+                score = float(np.max(output))
+                pred_dict.setdefault("score", score)
+                pred_dict.setdefault("confidence", score)
+        pred_dict.setdefault(
+            "metadata",
+            {
+                "source_backend": self.backend,
+                "checkpoint": str(self.checkpoint) if self.checkpoint is not None else None,
+                "device": self.device,
+                "fallback": "openvino_compat",
+            },
+        )
+        return pred_dict
 
     def _load_inferencer(self) -> Any:
         if self.checkpoint is None:
@@ -140,6 +195,58 @@ class SklearnWM811KBackend:
         return prediction
 
 
+class TorchWM811KBackend:
+    """Wrap a trusted local PyTorch classifier checkpoint as a WM811K predictor."""
+
+    def __init__(
+        self,
+        *,
+        checkpoint: str | Path | None = None,
+        model: Any | None = None,
+        device: str | None = None,
+    ) -> None:
+        """Create a classifier backend from an injected model or trusted checkpoint."""
+        if model is None and checkpoint is None:
+            raise ValueError("--checkpoint is required for --model-backend torch-resnet34")
+        self.checkpoint = Path(checkpoint) if checkpoint is not None else None
+        self.device = _resolve_torch_device(device)
+        self.model = model if model is not None else load_trusted_torch_model(self.checkpoint)
+        self.model.to(self.device)
+        self.model.eval()
+
+    def predict(
+        self,
+        wafer_map: Sequence[Sequence[Any]],
+        *,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> WM811KPrediction:
+        """Resize one wafer map, call torch predict, and normalize output."""
+        del metadata
+        features = _wafer_map_tensor(wafer_map, device=self.device)
+        import torch
+
+        with torch.inference_mode():
+            logits = self.model(features)
+            if logits.ndim != 2 or logits.shape[0] == 0 or logits.shape[1] == 0:
+                raise ValueError("WM811K torch classifier must return a [batch, classes] tensor")
+            probabilities = torch.softmax(logits, dim=1)
+            pred_idx = int(torch.argmax(logits, dim=1).item())
+            confidence = float(probabilities[0, pred_idx].item())
+
+        label = WM811K_CLASSES[pred_idx] if pred_idx < len(WM811K_CLASSES) else "unknown"
+        return {
+            "pattern": label,
+            "score": confidence,
+            "confidence": confidence,
+            "metadata": {
+                "source_backend": TORCH_RESNET_BACKEND,
+                "checkpoint": str(self.checkpoint) if self.checkpoint is not None else None,
+                "device": str(self.device),
+                "classes": WM811K_CLASSES,
+            },
+        }
+
+
 def load_trusted_sklearn_model(checkpoint: str | Path | None) -> Any:
     """Load a trusted local sklearn-compatible model from joblib or pickle."""
     if checkpoint is None:
@@ -167,12 +274,125 @@ def load_trusted_sklearn_model(checkpoint: str | Path | None) -> Any:
         ) from exc
 
 
+def load_trusted_torch_model(checkpoint: str | Path | None) -> Any:
+    """Load a trusted local PyTorch classifier checkpoint."""
+    if checkpoint is None:
+        raise ValueError("checkpoint path is required")
+    path = Path(checkpoint)
+    if not path.is_file():
+        raise FileNotFoundError(f"torch checkpoint does not exist: {path}")
+    try:
+        import torch
+        import torch.nn as nn
+        from torchvision import models
+    except ImportError as exc:  # pragma: no cover - depends on optional extra.
+        raise ImportError(
+            "PyTorch and torchvision are required for --model-backend torch-resnet34"
+        ) from exc
+
+    checkpoint_obj = torch.load(path, map_location="cpu")
+    state_dict = _extract_state_dict(checkpoint_obj)
+    model = _build_radai_resnet(models, nn)
+    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    if missing or unexpected:
+        raise ValueError(
+            "failed to load trusted local torch checkpoint "
+            f"{path}; missing={sorted(missing)}, unexpected={sorted(unexpected)}"
+        )
+    return model
+
+
 def flatten_wafer_map_features(wafer_map: Sequence[Sequence[Any]]) -> np.ndarray:
     """Flatten a 2D wafer map into one sklearn feature row."""
     array = np.asarray(wafer_map, dtype=float)
     if array.ndim != 2:
         raise ValueError("wafer map must be 2-dimensional for sklearn inference")
     return array.reshape(1, -1)
+
+
+def _build_radai_resnet(models: Any, nn: Any) -> Any:
+    """Return the WM811K classifier architecture used by the public checkpoint."""
+    base = models.resnet34(weights=None)
+    base.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    base.fc = nn.Sequential(
+        nn.Dropout(0.5),
+        nn.Linear(base.fc.in_features, len(WM811K_CLASSES)),
+    )
+    return _RadaiResNet(base)
+
+
+class _RadaiResNet:
+    """Lightweight wrapper around the checkpoint-compatible ResNet34 body."""
+
+    def __init__(self, base: Any) -> None:
+        self.base = base
+
+    def to(self, device: Any) -> _RadaiResNet:
+        self.base.to(device)
+        return self
+
+    def eval(self) -> _RadaiResNet:
+        self.base.eval()
+        return self
+
+    def load_state_dict(
+        self,
+        state_dict: Mapping[str, Any],
+        strict: bool = True,
+    ) -> tuple[list[str], list[str]]:
+        cleaned = _clean_state_dict(state_dict)
+        result = self.base.load_state_dict(cleaned, strict=strict)
+        return list(result.missing_keys), list(result.unexpected_keys)
+
+    def __call__(self, features: Any) -> Any:
+        return self.base(features)
+
+
+def _clean_state_dict(state_dict: Mapping[str, Any]) -> dict[str, Any]:
+    cleaned = dict(state_dict)
+    for prefix in ("module.", "model.", "base."):
+        if cleaned and all(isinstance(key, str) and key.startswith(prefix) for key in cleaned):
+            cleaned = {key[len(prefix) :]: value for key, value in cleaned.items()}
+    return cleaned
+
+
+def _extract_state_dict(checkpoint_obj: Any) -> Mapping[str, Any]:
+    if isinstance(checkpoint_obj, Mapping):
+        for key in ("model_state_dict", "state_dict", "model", "net"):
+            nested = checkpoint_obj.get(key)
+            if isinstance(nested, Mapping):
+                return nested
+        if all(isinstance(key, str) for key in checkpoint_obj):
+            return checkpoint_obj
+    raise ValueError("torch checkpoint must contain a state_dict or model_state_dict mapping")
+
+
+def _wafer_map_tensor(wafer_map: Sequence[Sequence[Any]], *, device: Any) -> Any:
+    import torch
+    import torch.nn.functional as F
+
+    array = np.asarray(wafer_map, dtype=np.float32)
+    if array.ndim != 2:
+        raise ValueError("wafer map must be 2-dimensional for torch inference")
+    if array.size == 0:
+        raise ValueError("wafer map must not be empty")
+    maximum = float(array.max()) if array.size else 0.0
+    if maximum > 0:
+        array = array / maximum
+    tensor = torch.from_numpy(array).unsqueeze(0).unsqueeze(0)
+    if tensor.shape[-2:] != (64, 64):
+        tensor = F.interpolate(tensor, size=(64, 64), mode="bilinear", align_corners=False)
+    return tensor.to(device)
+
+
+def _resolve_torch_device(device: str | None) -> Any:
+    import torch
+
+    if device is None or device == "auto":
+        if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    return torch.device(device)
 
 
 def _instantiate_anomalib_inferencer(

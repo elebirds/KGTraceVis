@@ -19,10 +19,13 @@ from kgtracevis.producers.backends import (
     ANOMALIB_OPENVINO_BACKEND,
     ANOMALIB_TORCH_BACKEND,
     SKLEARN_BACKEND,
+    TORCH_RESNET_BACKEND,
     AnomalibMVTecBackend,
     SklearnWM811KBackend,
+    TorchWM811KBackend,
     anomalib_prediction_to_mvtec_prediction,
     load_trusted_sklearn_model,
+    load_trusted_torch_model,
 )
 from kgtracevis.producers.common import (
     MVTecPrediction,
@@ -328,8 +331,39 @@ def test_cli_backend_selection_supports_real_backend_names(
     )
     assert isinstance(wm811k_classifier, SklearnWM811KBackend)
 
+    torch = pytest.importorskip("torch")
+    torchvision = pytest.importorskip("torchvision")
+    model = _build_torch_wm811k_model(torch, torchvision)
+    torch_checkpoint = tmp_path / "wm811k_model.pt"
+    torch.save({"model_state_dict": model.state_dict()}, torch_checkpoint)
+    loaded_model = load_trusted_torch_model(torch_checkpoint)
+    assert loaded_model is not None
+    torch_classifier = build_script.build_wm811k_classifier(
+        model_backend=TORCH_RESNET_BACKEND,
+        checkpoint=torch_checkpoint,
+        device="cpu",
+    )
+    assert isinstance(torch_classifier, TorchWM811KBackend)
+
     with pytest.raises(ValueError, match="unsupported WM811K"):
         build_script.build_wm811k_classifier(model_backend=ANOMALIB_TORCH_BACKEND)
+
+
+def test_torch_wm811k_backend_loads_trusted_checkpoint(tmp_path: Path) -> None:
+    """Torch WM811K backend should load a trusted ResNet checkpoint and predict."""
+    torch = pytest.importorskip("torch")
+    torchvision = pytest.importorskip("torchvision")
+    model = _build_torch_wm811k_model(torch, torchvision)
+    checkpoint = tmp_path / "wm811k_torch.pt"
+    torch.save({"model_state_dict": model.state_dict()}, checkpoint)
+
+    backend = TorchWM811KBackend(checkpoint=checkpoint, device="cpu")
+    prediction = backend.predict([[2, 2, 2], [2, 0, 2], [2, 2, 2]])
+
+    assert prediction["pattern"] == "Near-full"
+    assert prediction["confidence"] > 0.99
+    assert prediction["metadata"]["source_backend"] == TORCH_RESNET_BACKEND
+    assert prediction["metadata"]["device"] == "cpu"
 
 
 def test_producers_preserve_zero_numeric_model_outputs(tmp_path: Path) -> None:
@@ -472,6 +506,22 @@ def test_filter_forbidden_outputs_recurses_through_records() -> None:
 def _touch(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("fixture", encoding="utf-8")
+
+
+def _build_torch_wm811k_model(torch: Any, torchvision: Any) -> Any:
+    """Build a checkpoint-compatible WM811K ResNet with deterministic logits."""
+    nn = torch.nn
+
+    base = torchvision.models.resnet34(weights=None)
+    base.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    base.fc = nn.Sequential(
+        nn.Dropout(0.5),
+        nn.Linear(base.fc.in_features, 8),
+    )
+    for parameter in base.parameters():
+        parameter.data.zero_()
+    base.fc[1].bias.data[7] = 10.0
+    return base
 
 
 def _forbidden_keys(value: object) -> list[str]:

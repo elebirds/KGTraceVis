@@ -4,11 +4,14 @@ from kgtracevis.producers.backends import (
     ANOMALIB_OPENVINO_BACKEND,
     ANOMALIB_TORCH_BACKEND,
     SKLEARN_BACKEND,
+    TORCH_RESNET_BACKEND,
     AnomalibMVTecBackend,
     SklearnWM811KBackend,
+    TorchWM811KBackend,
     anomalib_prediction_to_mvtec_prediction,
     flatten_wafer_map_features,
     load_trusted_sklearn_model,
+    load_trusted_torch_model,
 )
 from kgtracevis.producers.common import (
     MVTecAnomalyPredictor,
@@ -28,8 +31,10 @@ __all__ = [
     "MVTecAnomalyPredictor",
     "MVTecPrediction",
     "SKLEARN_BACKEND",
+    "TORCH_RESNET_BACKEND",
     "AnomalibMVTecBackend",
     "SklearnWM811KBackend",
+    "TorchWM811KBackend",
     "WM811KClassifier",
     "WM811KPrediction",
     "anomalib_prediction_to_mvtec_prediction",
@@ -39,5 +44,6 @@ __all__ = [
     "filter_forbidden_outputs",
     "flatten_wafer_map_features",
     "load_trusted_sklearn_model",
+    "load_trusted_torch_model",
     "write_jsonl_records",
 ]
