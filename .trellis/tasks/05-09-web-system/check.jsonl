@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend checklist and quality gate for service/API implementation"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Ensures the implementation stays in the right repo layers"}
+{"file":".trellis/spec/backend/adapter-guidelines.md","reason":"Quality checks must confirm the web path preserves adapter boundaries"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Quality checks must verify explicit validation and ambiguity handling"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Defines test and lint commands the check pass must run against"}
+{"file":".trellis/spec/guides/index.md","reason":"Cross-package thinking guide index for reviewing layered work"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check that frontend, service, and analysis layers are cleanly separated"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Check that core pipeline logic is reused rather than copied into the web layers"}

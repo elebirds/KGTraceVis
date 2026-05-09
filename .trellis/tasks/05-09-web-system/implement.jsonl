@@ -1,0 +1,8 @@
+{"file":".trellis/spec/backend/index.md","reason":"Backend package overview and the required checklist for service/API work"}
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Confirms where FastAPI service and reusable logic should live"}
+{"file":".trellis/spec/backend/adapter-guidelines.md","reason":"Defines evidence adapter boundaries that the web service must preserve"}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Defines validation and ambiguity behavior for API boundaries"}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Defines lint, test, and traceability expectations for backend changes"}
+{"file":".trellis/spec/guides/index.md","reason":"Cross-package thinking guide index for layered backend/frontend work"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Helps map frontend to service to pipeline data flow"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Avoids duplicating pipeline logic in the service or UI layers"}
