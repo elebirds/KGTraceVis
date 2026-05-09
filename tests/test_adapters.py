@@ -273,6 +273,27 @@ def test_mvtec_adapter_derives_fallback_fields_from_mask_stats() -> None:
     assert _root_cause_keys(evidence) == []
 
 
+def test_mvtec_adapter_omits_spot_morphology_for_empty_mask_stats() -> None:
+    """Empty masks should not be promoted to a fake morphology label."""
+    record = {
+        "case_id": "mvtec_mask_empty",
+        "object": "capsule",
+        "defect_type": "unknown",
+        "mask_stats": {
+            "area_ratio": 0.0,
+            "component_count": 0,
+        },
+    }
+
+    evidence = evidence_from_mvtec_record(record)
+
+    assert evidence.morphology is None
+    assert evidence.severity == 0.0
+    assert missing_canonical_observation_facets(evidence) == []
+    assert _observation(evidence, "anomaly_type").name == "unknown"
+    assert _observation(evidence, "severity").value == 0.0
+
+
 def test_wm811k_adapter_returns_schema_valid_wafer_evidence() -> None:
     """WM811K records should remain dataset='wafer' and avoid root-cause outputs."""
     record = {

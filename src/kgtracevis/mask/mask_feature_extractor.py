@@ -93,7 +93,7 @@ def derive_mask_morphology(stats: Mapping[str, Any]) -> str | None:
         return "scattered"
     if area_ratio is not None and area_ratio >= 0.35:
         return "dense"
-    if area_ratio is not None or component_count is not None:
+    if area_ratio is not None and area_ratio > 0.0:
         return "spot"
     return None
 

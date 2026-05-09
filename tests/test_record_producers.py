@@ -16,6 +16,7 @@ import pytest
 
 import kgtracevis.producers.backends as producer_backends
 from kgtracevis.adapters.batch import evidence_from_records, load_records
+from kgtracevis.mask.mask_feature_extractor import summarize_mask_features
 from kgtracevis.producers.backends import (
     ANOMALIB_OPENVINO_BACKEND,
     ANOMALIB_TORCH_BACKEND,
@@ -550,6 +551,16 @@ def test_mask_stats_from_array_handles_component_geometry() -> None:
     assert stats["component_count"] == 2
     assert stats["image_shape"] == [3, 3]
     assert stats["bbox"] == [0, 0, 3, 3]
+
+
+def test_zero_area_mask_does_not_derive_spot_morphology() -> None:
+    """An empty mask should not be rewritten as a spot-like defect."""
+    stats = mask_stats_from_array([[0, 0], [0, 0]])
+
+    summary = summarize_mask_features(stats)
+
+    assert summary["mask_stats"]["area_ratio"] == 0.0
+    assert "morphology" not in summary
 
 
 def test_filter_forbidden_outputs_recurses_through_records() -> None:

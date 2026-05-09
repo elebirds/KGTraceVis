@@ -101,7 +101,7 @@ export default function App() {
   const [uploadMode, setUploadMode] = useState<UploadMode>("records");
   const [uploadDataset, setUploadDataset] = useState("");
   const [uploadObjectName, setUploadObjectName] = useState("capsule");
-  const [uploadDefectType, setUploadDefectType] = useState("crack");
+  const [uploadDefectType, setUploadDefectType] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadInputKey, setUploadInputKey] = useState(0);
   const [queueView, setQueueView] = useState<QueueView>("runs");
@@ -270,7 +270,7 @@ export default function App() {
         mode: uploadMode,
         dataset: uploadMode === "image" ? "mvtec" : uploadDataset || null,
         object_name: uploadMode === "image" ? uploadObjectName : null,
-        defect_type: uploadMode === "image" ? uploadDefectType : null,
+        defect_type: uploadMode === "image" ? uploadDefectType.trim() || null : null,
         top_k: uploadTopK,
       });
       setRuns((current) => [response.run, ...current.filter((item) => item.run_id !== response.run.run_id)]);
@@ -457,7 +457,7 @@ export default function App() {
                       />
                     </label>
                     <label className="block">
-                      <div className="field-label">缺陷类型</div>
+                      <div className="field-label">人工标签（可选）</div>
                       <input
                         className="input mt-1"
                         value={uploadDefectType}
@@ -512,7 +512,7 @@ export default function App() {
                     setUploadDataset("");
                     setUploadMode("records");
                     setUploadObjectName("capsule");
-                    setUploadDefectType("crack");
+                    setUploadDefectType("");
                     setUploadInputKey((current) => current + 1);
                   }}
                 >

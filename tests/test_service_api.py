@@ -93,6 +93,40 @@ def test_upload_run_route_persists_a_run_manifest(tmp_path: Path, monkeypatch) -
     assert run_detail.json()["run"]["run_id"] == run_id
 
 
+def test_image_upload_mode_defaults_to_unknown_label_when_unspecified(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Raw image uploads should not require an operator defect label."""
+    original = service_api.create_run_from_upload
+
+    def _patched_create_run_from_upload(*args, **kwargs):
+        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
+    client = TestClient(app)
+    with Path("runs/real_model_pipeline/assets/mvtec/input_root/capsule/test/crack/000.png").open(
+        "rb"
+    ) as handle:
+        response = client.post(
+            "/api/runs/upload",
+            files={"file": ("000.png", handle, "image/png")},
+            data={
+                "mode": "image",
+                "dataset": "mvtec",
+                "object_name": "capsule",
+                "top_k": "2",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run"]["mode"] == "image"
+    assert payload["evidence"]["anomaly_type"] == "unknown"
+    assert payload["evidence"]["morphology"] is None
+
+
 def test_image_upload_mode_runs_mvtec_producer_path(tmp_path: Path, monkeypatch) -> None:
     """Image uploads should run the real MVTec record path before KG analysis."""
 
