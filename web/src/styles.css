@@ -13,7 +13,7 @@ body {
 }
 
 .surface {
-  @apply overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/70 shadow-sm;
+  @apply min-w-0 overflow-hidden rounded-md border border-zinc-800 bg-zinc-900/70 shadow-sm;
 }
 
 .panel-title {
@@ -41,7 +41,8 @@ body {
 }
 
 .badge {
-  @apply inline-flex items-center rounded-full border border-zinc-700 px-2 py-0.5 text-[11px] font-medium text-zinc-300;
+  @apply inline-flex max-w-full items-center rounded-full border border-zinc-700 px-2 py-0.5 text-[11px] font-medium text-zinc-300;
+  overflow-wrap: anywhere;
 }
 
 .badge-accent {
@@ -80,6 +81,11 @@ body {
   @apply overflow-auto rounded-md border border-zinc-800 bg-zinc-950/40;
 }
 
+.table-shell table {
+  table-layout: fixed;
+  width: 100%;
+}
+
 .table-shell table thead tr {
   @apply bg-zinc-950/90 text-left text-xs uppercase tracking-wide text-zinc-500;
 }
@@ -87,6 +93,7 @@ body {
 .table-shell th,
 .table-shell td {
   @apply border-b border-zinc-800 px-3 py-2 align-top;
+  overflow-wrap: anywhere;
 }
 
 .table-shell tbody tr:hover {

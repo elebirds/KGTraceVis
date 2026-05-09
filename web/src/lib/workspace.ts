@@ -47,6 +47,113 @@ export function formatValue(value: unknown) {
   return String(value);
 }
 
+export function displayUploadMode(value: string) {
+  if (value === "records") {
+    return "记录包";
+  }
+  if (value === "evidence") {
+    return "Evidence JSON";
+  }
+  return value;
+}
+
+export function displayRunStatus(value: string) {
+  if (value === "completed") {
+    return "已完成";
+  }
+  if (value === "failed") {
+    return "失败";
+  }
+  return value;
+}
+
+export function displayDataset(value: string | null | undefined) {
+  if (!value || value === "auto") {
+    return "自动";
+  }
+  return value;
+}
+
+export function displaySourceKind(value: string) {
+  if (value === "real_model_pipeline") {
+    return "真实模型输出";
+  }
+  if (value === "checked_in_example") {
+    return "内置示例";
+  }
+  if (value === "external_evidence") {
+    return "外部 Evidence";
+  }
+  return value;
+}
+
+export function displayFeedbackTarget(value: string) {
+  if (value === "path") {
+    return "候选路径";
+  }
+  if (value === "case") {
+    return "样本";
+  }
+  if (value === "link") {
+    return "实体链接";
+  }
+  if (value === "correction") {
+    return "修正候选";
+  }
+  return value;
+}
+
+export function displayFeedbackDecision(value: string) {
+  if (value === "accept") {
+    return "接受";
+  }
+  if (value === "reject") {
+    return "拒绝";
+  }
+  if (value === "comment") {
+    return "备注";
+  }
+  return value;
+}
+
+export function displayWorkflowTitle(value: string) {
+  const titles: Record<string, string> = {
+    "Upload sample": "上传样本",
+    "Upload sample bundle": "上传样本包",
+    "Validate evidence": "校验 Evidence",
+    "Run pipeline": "运行 pipeline",
+    "Run KGTracePipeline": "运行 KGTracePipeline",
+    "Convert records to evidence": "记录转换为 Evidence",
+    "Load evidence case": "加载 Evidence 样本",
+  };
+  return titles[value] ?? value;
+}
+
+export function displayWorkflowSummary(value: string) {
+  return value
+    .replace(/^Received /, "已接收 ")
+    .replace(/^Validated /, "已校验 ")
+    .replace(/^Loaded (.+) from /, "已从路径加载 $1：")
+    .replace("Evidence schema and observed fields are ready for analysis", "Evidence schema 和观测字段已准备好分析")
+    .replace(/ evidence files written$/, " 个 Evidence 文件已写入")
+    .replace(/ linked entities, /, " 个实体链接，")
+    .replace(/ candidate explanation cases ready$/, " 个候选解释样本已就绪")
+    .replace(/ paths$/, " 条路径")
+    .replace(/ candidate paths$/, " 条候选路径");
+}
+
+export function displayArtifactKey(value: string) {
+  const labels: Record<string, string> = {
+    run_dir: "运行目录",
+    input_path: "输入路径",
+    output_dir: "输出目录",
+    summary_path: "摘要路径",
+    table_path: "表格路径",
+    claim_boundary: "结论边界",
+  };
+  return labels[value] ?? value;
+}
+
 export function messageOf(error: unknown) {
-  return error instanceof Error ? error.message : "Unexpected error";
+  return error instanceof Error ? error.message : "发生了未预期的错误";
 }

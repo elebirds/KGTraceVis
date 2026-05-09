@@ -31,6 +31,12 @@ import {
 } from "./lib/api";
 import {
   casePathCount,
+  displayFeedbackDecision,
+  displayFeedbackTarget,
+  displayDataset,
+  displayRunStatus,
+  displaySourceKind,
+  displayUploadMode,
   fieldsFromEvidence,
   formatValue,
   messageOf,
@@ -222,7 +228,7 @@ export default function App() {
       setTopK(desiredTopK);
       setLoadingState("ready");
       setError("");
-      setActionMessage(`Loaded ${caseId}`);
+      setActionMessage(`已加载样本 ${caseId}`);
       setFeedbackPathId("");
     } catch (error_) {
       setLoadingState("error");
@@ -237,7 +243,7 @@ export default function App() {
       setSelectedRun(response);
       setSelectedRunId(runId);
       setRunLoadingState("ready");
-      setRunMessage(`Loaded run ${runId}`);
+      setRunMessage(`已加载运行 ${runId}`);
       setRunError("");
     } catch (error_) {
       setRunLoadingState("error");
@@ -247,7 +253,7 @@ export default function App() {
 
   async function uploadSampleRun() {
     if (!uploadFile) {
-      setRunError("Choose a file first");
+      setRunError("请先选择文件");
       return;
     }
     try {
@@ -262,7 +268,7 @@ export default function App() {
       setSelectedRun(response);
       setSelectedRunId(response.run.run_id);
       setQueueView("runs");
-      setRunMessage(`Ran ${uploadFile.name} as ${uploadMode}`);
+      setRunMessage(`已按“${displayUploadMode(uploadMode)}”运行 ${uploadFile.name}`);
       setUploadFile(null);
       setUploadInputKey((current) => current + 1);
       setRunLoadingState("ready");
@@ -283,7 +289,7 @@ export default function App() {
       setSelectedCase(response);
       setDraftEvidence(response.evidence);
       setLoadingState("ready");
-      setActionMessage(`Analyzed ${draftEvidence.case_id}`);
+      setActionMessage(`已分析样本 ${draftEvidence.case_id}`);
       setError("");
     } catch (error_) {
       setLoadingState("error");
@@ -311,7 +317,7 @@ export default function App() {
       setSelectedCase(response);
       setDraftEvidence(response.evidence);
       setLoadingState("ready");
-      setActionMessage(`What-if analysis updated for ${draftEvidence.case_id}`);
+      setActionMessage(`已更新样本 ${draftEvidence.case_id} 的假设分析`);
       setError("");
     } catch (error_) {
       setLoadingState("error");
@@ -339,7 +345,7 @@ export default function App() {
           top_k: topK,
         },
       });
-      setActionMessage(`Feedback saved to ${response.feedback_path}`);
+      setActionMessage(`反馈已保存到 ${response.feedback_path}`);
       setFeedbackNote("");
       setError("");
     } catch (error_) {
@@ -354,36 +360,36 @@ export default function App() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
               <div className="text-lg font-semibold tracking-tight">KGTraceVis</div>
-              <span className="badge badge-accent">operations workspace</span>
-              <span className="badge">candidate RCA, not verified labels</span>
+              <span className="badge badge-accent">生产作业台</span>
+              <span className="badge">候选 RCA，非已验证标签</span>
             </div>
             <div className="mt-1 truncate text-sm text-zinc-400">
-              Upload samples, run the adapter/pipeline path, inspect each step, and record review feedback.
+              上传样本，运行适配器和 KGTracePipeline，逐步查看输出，并记录审核反馈。
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <MetricChip icon={Database} label="cases" value={String(cases.length)} />
-            <MetricChip icon={History} label="runs" value={String(runs.length)} />
-            <MetricChip icon={Activity} label="status" value={loadingState === "error" ? "attention" : "ready"} />
+            <MetricChip icon={Database} label="样本" value={String(cases.length)} />
+            <MetricChip icon={History} label="运行" value={String(runs.length)} />
+            <MetricChip icon={Activity} label="状态" value={loadingState === "error" ? "需处理" : "就绪"} />
             <button className="button" onClick={() => void refreshWorkspace()}>
               <RefreshCw className="h-4 w-4" />
-              Refresh
+              刷新
             </button>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1700px] gap-4 px-4 py-4 xl:grid-cols-[330px_minmax(0,1fr)_380px]">
-        <aside className="space-y-4">
+      <div className="mx-auto grid max-w-[1700px] gap-4 px-4 py-4 2xl:grid-cols-[330px_minmax(0,1fr)_380px]">
+        <aside className="min-w-0 space-y-4">
           <section className="surface">
             <SectionHeader
               icon={UploadCloud}
-              title="Ingest"
-              subtitle="Start from an evidence JSON or a raw record bundle."
+              title="数据接入"
+              subtitle="从 Evidence JSON 或原始记录包启动一次运行。"
             />
             <div className="space-y-3 p-4">
               <label className="block">
-                <div className="field-label">Sample file</div>
+                <div className="field-label">样本文件</div>
                 <input
                   key={uploadInputKey}
                   className="input mt-1"
@@ -392,33 +398,33 @@ export default function App() {
                 />
               </label>
               <div>
-                <div className="field-label">Input mode</div>
+                <div className="field-label">输入模式</div>
                 <div className="mt-1 grid grid-cols-2 gap-2">
                   <button
                     className={uploadMode === "records" ? "segmented-active" : "segmented"}
                     onClick={() => setUploadMode("records")}
                     type="button"
                   >
-                    Records
+                    记录包
                   </button>
                   <button
                     className={uploadMode === "evidence" ? "segmented-active" : "segmented"}
                     onClick={() => setUploadMode("evidence")}
                     type="button"
                   >
-                    Evidence
+                    Evidence JSON
                   </button>
                 </div>
               </div>
               <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-3">
                 <label className="block">
-                  <div className="field-label">Dataset override</div>
+                  <div className="field-label">数据集覆盖</div>
                   <select
                     className="input mt-1"
                     value={uploadDataset}
                     onChange={(event) => setUploadDataset(event.target.value)}
                   >
-                    <option value="">auto</option>
+                    <option value="">自动识别</option>
                     <option value="mvtec">mvtec</option>
                     <option value="tep">tep</option>
                     <option value="wafer">wafer</option>
@@ -438,13 +444,13 @@ export default function App() {
               </div>
               {uploadFile ? (
                 <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-300">
-                  Ready: <span className="text-zinc-100">{uploadFile.name}</span>
+                  已选择：<span className="text-zinc-100">{uploadFile.name}</span>
                 </div>
               ) : null}
               <div className="flex flex-wrap gap-2">
                 <button className="button-primary" onClick={() => void uploadSampleRun()}>
                   <Play className="h-4 w-4" />
-                  Upload and run
+                  上传并运行
                 </button>
                 <button
                   className="button"
@@ -456,7 +462,7 @@ export default function App() {
                   }}
                 >
                   <RotateCcw className="h-4 w-4" />
-                  Clear
+                  清空
                 </button>
               </div>
             </div>
@@ -465,8 +471,8 @@ export default function App() {
           <section className="surface">
             <SectionHeader
               icon={ListChecks}
-              title="Work queue"
-              subtitle="Pick a run session or inspect a reusable evidence case."
+              title="工作队列"
+              subtitle="选择一次运行会话，或查看可复用的 Evidence 样本。"
             />
             <div className="border-b border-zinc-800 p-3">
               <div className="grid grid-cols-2 gap-2">
@@ -475,21 +481,21 @@ export default function App() {
                   onClick={() => setQueueView("runs")}
                   type="button"
                 >
-                  Runs
+                  运行
                 </button>
                 <button
                   className={queueView === "cases" ? "segmented-active" : "segmented"}
                   onClick={() => setQueueView("cases")}
                   type="button"
                 >
-                  Cases
+                  样本
                 </button>
               </div>
               <div className="relative mt-3">
                 <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
                 <input
                   className="input pl-9"
-                  placeholder={queueView === "runs" ? "Filter run, file, dataset..." : "Filter case, dataset, source..."}
+                  placeholder={queueView === "runs" ? "筛选运行、文件、数据集..." : "筛选样本、数据集、来源..."}
                   value={queueView === "runs" ? runSearch : search}
                   onChange={(event) =>
                     queueView === "runs" ? setRunSearch(event.target.value) : setSearch(event.target.value)
@@ -521,18 +527,18 @@ export default function App() {
           </section>
         </aside>
 
-        <main className="space-y-4">
+        <main className="min-w-0 space-y-4">
           <section className="surface">
             <SectionHeader
               icon={GitBranch}
-              title="Run session"
-              subtitle={selectedRun ? selectedRun.run.label : "No run selected yet"}
+              title="运行会话"
+              subtitle={selectedRun ? selectedRun.run.label : "尚未选择运行"}
               actions={
                 selectedRun ? (
                   <div className="flex flex-wrap gap-2">
-                    <span className="badge">{selectedRun.run.mode}</span>
-                    <span className="badge">{selectedRun.run.status}</span>
-                    <span className="badge">{selectedRun.run.dataset ?? "auto"}</span>
+                    <span className="badge">{displayUploadMode(selectedRun.run.mode)}</span>
+                    <span className="badge">{displayRunStatus(selectedRun.run.status)}</span>
+                    <span className="badge">{displayDataset(selectedRun.run.dataset)}</span>
                   </div>
                 ) : null
               }
@@ -541,24 +547,24 @@ export default function App() {
               {selectedRun ? (
                 <div className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
-                    <InfoField label="source file" value={selectedRun.run.source_filename} />
-                    <InfoField label="created" value={selectedRun.run.created_at} />
-                    <InfoField label="cases" value={String(selectedRun.run.case_count)} />
-                    <InfoField label="evidence" value={String(selectedRun.run.evidence_count)} />
+                    <InfoField label="来源文件" value={selectedRun.run.source_filename} />
+                    <InfoField label="创建时间" value={selectedRun.run.created_at} />
+                    <InfoField label="样本数" value={String(selectedRun.run.case_count)} />
+                    <InfoField label="Evidence 数" value={String(selectedRun.run.evidence_count)} />
                   </div>
                   <WorkflowSteps steps={selectedRun.workflow_steps} />
                   {selectedRun.cases?.length ? (
                     <div>
-                      <div className="panel-title">Cases produced by this run</div>
+                      <div className="panel-title">本次运行产出的样本</div>
                       <div className="table-shell mt-3">
                         <table className="min-w-full text-sm">
                           <thead>
                             <tr>
-                              <th>Case</th>
-                              <th>Dataset</th>
-                              <th>Linked</th>
-                              <th>Consistency</th>
-                              <th>Paths</th>
+                              <th>样本</th>
+                              <th>数据集</th>
+                              <th>链接数</th>
+                              <th>一致性</th>
+                              <th>路径数</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -575,7 +581,7 @@ export default function App() {
                                       {caseId}
                                     </button>
                                   </td>
-                                  <td>{String(item.dataset ?? "unknown")}</td>
+                                  <td>{String(item.dataset ?? "未知")}</td>
                                   <td>{formatValue(item.linked_entity_count)}</td>
                                   <td>{formatValue(item.consistency_score)}</td>
                                   <td>{formatValue(casePathCount(item))}</td>
@@ -589,7 +595,7 @@ export default function App() {
                   ) : null}
                   <details className="rounded-md border border-zinc-800 bg-zinc-950/40">
                     <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-zinc-200">
-                      Artifacts and persisted paths
+                      产物和持久化路径
                     </summary>
                     <div className="border-t border-zinc-800 p-3">
                       <KeyValueList
@@ -604,8 +610,8 @@ export default function App() {
                 </div>
               ) : (
                 <EmptyState
-                  title="No run selected"
-                  body="Upload a file or choose a run from the queue to see the execution trace."
+                  title="尚未选择运行"
+                  body="上传文件或从队列中选择运行后，这里会展示执行轨迹。"
                 />
               )}
             </div>
@@ -614,8 +620,8 @@ export default function App() {
           <section className="surface">
             <SectionHeader
               icon={Layers3}
-              title="Case workbench"
-              subtitle={selectedCaseSummary?.label ?? selectedCaseId ?? "No case selected"}
+              title="样本工作台"
+              subtitle={selectedCaseSummary?.label ?? selectedCaseId ?? "尚未选择样本"}
               actions={
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm text-zinc-300">
@@ -631,55 +637,55 @@ export default function App() {
                   </label>
                   <button className="button-primary" onClick={() => void rerunAnalysis()}>
                     <Sparkles className="h-4 w-4" />
-                    Run analysis
+                    运行分析
                   </button>
                 </div>
               }
             />
             <div className="space-y-4 p-4">
               <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-5">
-                <MetricBlock label="linked entities" value={String(linkedCount)} />
-                <MetricBlock label="consistency" value={formatValue(analysis?.consistency_score)} />
-                <MetricBlock label="inconsistent fields" value={String(analysis?.inconsistent_fields.length ?? 0)} />
-                <MetricBlock label="corrections" value={String(correctionCount)} />
-                <MetricBlock label="paths" value={String(pathCount)} />
+                <MetricBlock label="实体链接" value={String(linkedCount)} />
+                <MetricBlock label="一致性" value={formatValue(analysis?.consistency_score)} />
+                <MetricBlock label="不一致字段" value={String(analysis?.inconsistent_fields.length ?? 0)} />
+                <MetricBlock label="修正候选" value={String(correctionCount)} />
+                <MetricBlock label="候选路径" value={String(pathCount)} />
               </div>
 
               <div className="flex flex-wrap gap-2 text-xs">
-                <span className="badge">{caseEvidence?.dataset ?? "-"}</span>
+                <span className="badge">{displayDataset(caseEvidence?.dataset)}</span>
                 <span className="badge">{caseEvidence?.source ?? "-"}</span>
                 {selectedCaseSummary?.source_kind ? (
-                  <span className="badge badge-accent">{selectedCaseSummary.source_kind}</span>
+                  <span className="badge badge-accent">{displaySourceKind(selectedCaseSummary.source_kind)}</span>
                 ) : null}
-                <span className="badge">{activeClaim}</span>
+                <span className="badge max-w-full whitespace-normal break-words">{activeClaim}</span>
               </div>
 
-              <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-                <div className="space-y-4">
-                  <Subsection title="Observed evidence">
+              <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+                <div className="min-w-0 space-y-4">
+                  <Subsection title="观测 Evidence">
                     {caseEvidence ? (
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        <InfoField label="object" value={caseEvidence.object} />
-                        <InfoField label="anomaly_type" value={caseEvidence.anomaly_type} />
-                        <InfoField label="location" value={caseEvidence.location ?? "-"} />
-                        <InfoField label="morphology" value={caseEvidence.morphology ?? "-"} />
-                        <InfoField label="severity" value={formatValue(caseEvidence.severity)} />
-                        <InfoField label="confidence" value={formatValue(caseEvidence.confidence)} />
+                        <InfoField label="对象" value={caseEvidence.object} />
+                        <InfoField label="异常类型" value={caseEvidence.anomaly_type} />
+                        <InfoField label="位置" value={caseEvidence.location ?? "-"} />
+                        <InfoField label="形态" value={caseEvidence.morphology ?? "-"} />
+                        <InfoField label="严重度" value={formatValue(caseEvidence.severity)} />
+                        <InfoField label="置信度" value={formatValue(caseEvidence.confidence)} />
                       </div>
                     ) : (
-                      <EmptyState title="No evidence loaded" body="Choose a case to inspect its normalized evidence." />
+                      <EmptyState title="尚未加载 Evidence" body="选择样本后可以查看归一化 Evidence。" />
                     )}
                   </Subsection>
 
-                  <Subsection title="Observation stream">
+                  <Subsection title="观测流">
                     <div className="table-shell max-h-80">
                       <table className="min-w-full text-sm">
                         <thead>
                           <tr>
-                            <th>Facet</th>
-                            <th>Name</th>
-                            <th>Confidence</th>
-                            <th>Source</th>
+                            <th>维度</th>
+                            <th>名称</th>
+                            <th>置信度</th>
+                            <th>来源</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -697,16 +703,16 @@ export default function App() {
                   </Subsection>
                 </div>
 
-                <div className="space-y-4">
-                  <Subsection title="Linked KG entities">
+                <div className="min-w-0 space-y-4">
+                  <Subsection title="KG 实体链接">
                     <LinkedEntitiesTable links={analysis?.linked_entities ?? []} />
                   </Subsection>
 
-                  <Subsection title="Correction candidates">
+                  <Subsection title="修正候选">
                     <CorrectionTable candidates={analysis?.correction_candidates ?? []} />
                   </Subsection>
 
-                  <Subsection title="Candidate explanation paths">
+                  <Subsection title="候选解释路径">
                     <div className="space-y-3">
                       {analysis?.top_k_paths.length ? (
                         analysis.top_k_paths.map((path) => (
@@ -724,7 +730,7 @@ export default function App() {
                           />
                         ))
                       ) : (
-                        <EmptyState title="No candidate paths" body="Run analysis to generate ranked candidate paths." />
+                        <EmptyState title="暂无候选路径" body="运行分析后会生成排序后的候选解释路径。" />
                       )}
                     </div>
                   </Subsection>
@@ -734,12 +740,12 @@ export default function App() {
           </section>
         </main>
 
-        <aside className="space-y-4">
-          <section className="surface sticky top-[5.25rem]">
+        <aside className="min-w-0 space-y-4">
+          <section className="surface 2xl:sticky 2xl:top-[5.25rem]">
             <SectionHeader
               icon={SlidersHorizontal}
-              title="Inspector"
-              subtitle="Edit, inspect payloads, and submit review decisions."
+              title="检查器"
+              subtitle="编辑字段、检查载荷，并提交人工审核意见。"
             />
             <div className="border-b border-zinc-800 p-3">
               <div className="grid grid-cols-3 gap-2">
@@ -748,21 +754,21 @@ export default function App() {
                   onClick={() => setInspectorView("what-if")}
                   type="button"
                 >
-                  Edit
+                  编辑
                 </button>
                 <button
                   className={inspectorView === "payload" ? "segmented-active" : "segmented"}
                   onClick={() => setInspectorView("payload")}
                   type="button"
                 >
-                  Payload
+                  载荷
                 </button>
                 <button
                   className={inspectorView === "feedback" ? "segmented-active" : "segmented"}
                   onClick={() => setInspectorView("feedback")}
                   type="button"
                 >
-                  Review
+                  审核
                 </button>
               </div>
             </div>
@@ -771,58 +777,58 @@ export default function App() {
               <div className="space-y-3 p-4">
                 <div className="flex items-center gap-2 text-sm text-zinc-300">
                   <SlidersHorizontal className="h-4 w-4 text-cyan-300" />
-                  What-if edits apply to the active case evidence.
+                  假设编辑会作用于当前样本 Evidence。
                 </div>
                 <LabeledInput
-                  label="Anomaly type"
+                  label="异常类型"
                   value={whatIf.anomaly_type}
                   onChange={(value) => setWhatIf((current) => ({ ...current, anomaly_type: value }))}
                 />
                 <div className="grid grid-cols-2 gap-3">
                   <LabeledInput
-                    label="Location"
+                    label="位置"
                     value={whatIf.location}
                     onChange={(value) => setWhatIf((current) => ({ ...current, location: value }))}
                   />
                   <LabeledInput
-                    label="Morphology"
+                    label="形态"
                     value={whatIf.morphology}
                     onChange={(value) => setWhatIf((current) => ({ ...current, morphology: value }))}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <LabeledInput
-                    label="Severity"
+                    label="严重度"
                     value={whatIf.severity}
                     onChange={(value) => setWhatIf((current) => ({ ...current, severity: value }))}
                   />
                   <LabeledInput
-                    label="Confidence"
+                    label="置信度"
                     value={whatIf.confidence}
                     onChange={(value) => setWhatIf((current) => ({ ...current, confidence: value }))}
                   />
                 </div>
                 <LabeledTextArea
-                  label="Variables"
+                  label="变量"
                   value={whatIf.variables}
                   onChange={(value) => setWhatIf((current) => ({ ...current, variables: value }))}
                 />
                 <LabeledTextArea
-                  label="Log events"
+                  label="日志事件"
                   value={whatIf.log_events}
                   onChange={(value) => setWhatIf((current) => ({ ...current, log_events: value }))}
                 />
                 <div className="flex flex-wrap gap-2">
                   <button className="button-primary" onClick={() => void rerunWhatIf()}>
                     <Send className="h-4 w-4" />
-                    Run what-if
+                    运行假设分析
                   </button>
                   <button
                     className="button"
                     onClick={() => draftEvidence && setWhatIf(fieldsFromEvidence(draftEvidence))}
                   >
                     <RotateCcw className="h-4 w-4" />
-                    Reset
+                    重置
                   </button>
                 </div>
               </div>
@@ -831,13 +837,13 @@ export default function App() {
             {inspectorView === "payload" ? (
               <div className="space-y-4 p-4">
                 <div>
-                  <div className="panel-title">Active payload</div>
+                  <div className="panel-title">当前载荷</div>
                   <pre className="scrollbar-thin mt-3 max-h-[32rem] overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-300">
                     {JSON.stringify(activePayload, null, 2)}
                   </pre>
                 </div>
                 <div>
-                  <div className="panel-title">Workflow steps</div>
+                  <div className="panel-title">执行步骤</div>
                   <WorkflowSteps steps={workflowSteps} compact />
                 </div>
               </div>
@@ -847,10 +853,10 @@ export default function App() {
               <div className="space-y-3 p-4">
                 <div className="flex items-center gap-2 text-sm text-zinc-300">
                   <MessageSquare className="h-4 w-4 text-amber-300" />
-                  Feedback is stored as a review record for later KG and path updates.
+                  反馈会作为审核记录保存，供后续更新 KG 和路径排序时使用。
                 </div>
                 <label className="block">
-                  <div className="field-label">Target type</div>
+                  <div className="field-label">目标类型</div>
                   <select
                     className="input mt-1"
                     value={feedbackTargetType}
@@ -860,14 +866,14 @@ export default function App() {
                       )
                     }
                   >
-                    <option value="path">path</option>
-                    <option value="case">case</option>
-                    <option value="link">link</option>
-                    <option value="correction">correction</option>
+                    <option value="path">{displayFeedbackTarget("path")}</option>
+                    <option value="case">{displayFeedbackTarget("case")}</option>
+                    <option value="link">{displayFeedbackTarget("link")}</option>
+                    <option value="correction">{displayFeedbackTarget("correction")}</option>
                   </select>
                 </label>
                 <label className="block">
-                  <div className="field-label">Decision</div>
+                  <div className="field-label">决定</div>
                   <select
                     className="input mt-1"
                     value={feedbackDecision}
@@ -875,27 +881,27 @@ export default function App() {
                       setFeedbackDecision(event.target.value as "accept" | "reject" | "comment")
                     }
                   >
-                    <option value="accept">accept</option>
-                    <option value="reject">reject</option>
-                    <option value="comment">comment</option>
+                    <option value="accept">{displayFeedbackDecision("accept")}</option>
+                    <option value="reject">{displayFeedbackDecision("reject")}</option>
+                    <option value="comment">{displayFeedbackDecision("comment")}</option>
                   </select>
                 </label>
                 <label className="block">
-                  <div className="field-label">Target id</div>
+                  <div className="field-label">目标 ID</div>
                   <input
                     className="input mt-1"
                     value={feedbackPathId}
                     onChange={(event) => setFeedbackPathId(event.target.value)}
-                    placeholder="case_id, path_id, link_id, ..."
+                    placeholder="case_id、path_id、link_id 等"
                   />
                 </label>
                 <label className="block">
-                  <div className="field-label">Comment</div>
+                  <div className="field-label">备注</div>
                   <textarea
                     className="input mt-1 min-h-28"
                     value={feedbackNote}
                     onChange={(event) => setFeedbackNote(event.target.value)}
-                    placeholder="Optional note"
+                    placeholder="可选备注"
                   />
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -904,7 +910,7 @@ export default function App() {
                     onClick={() => void submitFeedback(feedbackTargetType)}
                   >
                     <ThumbsUp className="h-4 w-4" />
-                    Save feedback
+                    保存反馈
                   </button>
                   <button
                     className="button"
@@ -915,7 +921,7 @@ export default function App() {
                     }}
                   >
                     <ThumbsDown className="h-4 w-4" />
-                    Case note
+                    样本备注
                   </button>
                 </div>
               </div>
@@ -923,14 +929,14 @@ export default function App() {
           </section>
 
           <section className="surface">
-            <SectionHeader icon={Activity} title="Event log" subtitle="Recent UI and API state." />
+            <SectionHeader icon={Activity} title="事件日志" subtitle="最近的界面和 API 状态。" />
             <div className="space-y-2 p-4 text-sm">
               {runMessage ? <LogLine tone="good" text={runMessage} /> : null}
               {actionMessage ? <LogLine tone="good" text={actionMessage} /> : null}
               {runError ? <LogLine tone="bad" text={runError} /> : null}
               {error ? <LogLine tone="bad" text={error} /> : null}
               {!runMessage && !actionMessage && !runError && !error ? (
-                <div className="text-zinc-500">No recent events.</div>
+                <div className="text-zinc-500">暂无近期事件。</div>
               ) : null}
             </div>
           </section>
@@ -955,7 +961,7 @@ export default function App() {
           score: path.score,
         },
       });
-      setActionMessage(`Feedback saved to ${response.feedback_path}`);
+      setActionMessage(`反馈已保存到 ${response.feedback_path}`);
       setError("");
     } catch (error_) {
       setError(messageOf(error_));

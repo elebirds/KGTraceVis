@@ -10,7 +10,16 @@ import {
 import type { ReactNode } from "react";
 
 import type { AnalysisResponse, CaseSummary, PathResult, RunStep, RunSummary } from "../types";
-import { formatValue } from "../lib/workspace";
+import {
+  displayArtifactKey,
+  displayDataset,
+  displayRunStatus,
+  displaySourceKind,
+  displayUploadMode,
+  displayWorkflowSummary,
+  displayWorkflowTitle,
+  formatValue,
+} from "../lib/workspace";
 
 export function SectionHeader({
   icon: Icon,
@@ -74,7 +83,7 @@ export function CaseQueue({
   onSelect: (caseId: string) => void;
 }) {
   if (!items.length) {
-    return <EmptyState title="No cases" body="No evidence cases match the current filter." />;
+    return <EmptyState title="没有样本" body="当前筛选条件下没有可用 Evidence 样本。" />;
   }
   return (
     <div>
@@ -91,7 +100,9 @@ export function CaseQueue({
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
             <span className="badge">{item.dataset}</span>
-            <span className={item.is_real_output ? "badge badge-accent" : "badge"}>{item.source_kind}</span>
+            <span className={item.is_real_output ? "badge badge-accent" : "badge"}>
+              {displaySourceKind(item.source_kind)}
+            </span>
           </div>
         </button>
       ))}
@@ -109,7 +120,7 @@ export function RunQueue({
   onSelect: (runId: string) => void;
 }) {
   if (!items.length) {
-    return <EmptyState title="No runs" body="Upload a file to create the first run session." />;
+    return <EmptyState title="没有运行记录" body="上传文件后会生成第一条运行会话。" />;
   }
   return (
     <div>
@@ -124,13 +135,13 @@ export function RunQueue({
             <div className="truncate text-sm font-medium text-zinc-100">{item.label}</div>
             <div className="mt-1 truncate text-xs text-zinc-500">{item.source_filename}</div>
             <div className="mt-2 flex flex-wrap gap-1">
-              <span className="badge">{item.case_count} cases</span>
-              <span className="badge">{item.evidence_count} evidence</span>
+              <span className="badge">{item.case_count} 个样本</span>
+              <span className="badge">{item.evidence_count} 个 Evidence</span>
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
-            <span className="badge">{item.mode}</span>
-            <span className="badge">{item.dataset ?? "auto"}</span>
+            <span className="badge">{displayUploadMode(item.mode)}</span>
+            <span className="badge">{displayDataset(item.dataset)}</span>
           </div>
         </button>
       ))}
@@ -155,17 +166,17 @@ export function LinkedEntitiesTable({
   links: AnalysisResponse["analysis"]["linked_entities"];
 }) {
   if (!links.length) {
-    return <EmptyState title="No links" body="Entity links appear after pipeline analysis." />;
+    return <EmptyState title="暂无实体链接" body="运行 pipeline 后会在这里显示链接到 KG 的实体。" />;
   }
   return (
     <div className="table-shell max-h-72">
       <table className="min-w-full text-sm">
         <thead>
           <tr>
-            <th>Field</th>
-            <th>Mention</th>
-            <th>Entity</th>
-            <th>Score</th>
+            <th>字段</th>
+            <th>提及</th>
+            <th>实体</th>
+            <th>分数</th>
           </tr>
         </thead>
         <tbody>
@@ -175,8 +186,8 @@ export function LinkedEntitiesTable({
               <td>{link.mention}</td>
               <td>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span>{link.selected_entity_id ?? "none"}</span>
-                  {link.ambiguous ? <span className="badge badge-warn">ambiguous</span> : null}
+                  <span>{link.selected_entity_id ?? "无"}</span>
+                  {link.ambiguous ? <span className="badge badge-warn">有歧义</span> : null}
                 </div>
               </td>
               <td>{formatValue(link.score)}</td>
@@ -194,17 +205,17 @@ export function CorrectionTable({
   candidates: AnalysisResponse["analysis"]["correction_candidates"];
 }) {
   if (!candidates.length) {
-    return <EmptyState title="No corrections" body="The checker did not propose corrections for this case." />;
+    return <EmptyState title="暂无修正候选" body="一致性检查器没有为当前样本提出修正项。" />;
   }
   return (
     <div className="table-shell max-h-72">
       <table className="min-w-full text-sm">
         <thead>
           <tr>
-            <th>Field</th>
-            <th>Suggestion</th>
-            <th>Score</th>
-            <th>Reason</th>
+            <th>字段</th>
+            <th>建议</th>
+            <th>分数</th>
+            <th>原因</th>
           </tr>
         </thead>
         <tbody>
@@ -252,21 +263,21 @@ export function PathRow({
         <div className="flex shrink-0 items-center gap-2">
           <span className="badge badge-accent">{formatValue(path.score)}</span>
           <button className="button-ghost" onClick={onSelect} type="button">
-            Select
+            选中
           </button>
         </div>
       </div>
       <div className="mt-2 text-sm text-zinc-400">
-        {path.supporting_evidence?.join("; ") || "No supporting evidence text"}
+        {path.supporting_evidence?.join("; ") || "暂无支撑证据文本"}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <button className="button" onClick={onAccept} type="button">
           <ThumbsUp className="h-4 w-4" />
-          Accept
+          接受
         </button>
         <button className="button" onClick={onReject} type="button">
           <ThumbsDown className="h-4 w-4" />
-          Reject
+          拒绝
         </button>
       </div>
     </div>
@@ -322,11 +333,11 @@ export function InfoField({ label, value }: { label: string; value: string }) {
 
 export function WorkflowSteps({ steps, compact = false }: { steps: RunStep[]; compact?: boolean }) {
   if (!steps.length) {
-    return <EmptyState title="No workflow steps" body="No step trace is available for this item." />;
+    return <EmptyState title="暂无步骤记录" body="当前对象没有可展示的执行步骤。" />;
   }
   return (
     <div className="space-y-2">
-      {!compact ? <div className="panel-title">Workflow steps</div> : null}
+      {!compact ? <div className="panel-title">执行步骤</div> : null}
       <div className="overflow-hidden rounded-md border border-zinc-800">
         {steps.map((step, index) => (
           <details key={step.step_id} className="group border-b border-zinc-800 last:border-b-0">
@@ -336,12 +347,14 @@ export function WorkflowSteps({ steps, compact = false }: { steps: RunStep[]; co
                   <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-cyan-800 bg-cyan-950 text-[11px] text-cyan-200">
                     {index + 1}
                   </span>
-                  <span className="truncate">{step.title}</span>
+                  <span className="truncate">{displayWorkflowTitle(step.title)}</span>
                 </div>
-                <div className="mt-1 text-xs text-zinc-500">{step.summary}</div>
+                <div className="mt-1 break-words text-xs text-zinc-500">
+                  {displayWorkflowSummary(step.summary)}
+                </div>
               </div>
               <span className={step.status === "completed" ? "badge badge-good" : "badge badge-bad"}>
-                {step.status}
+                {displayRunStatus(step.status)}
               </span>
             </summary>
             <pre className="scrollbar-thin max-h-72 overflow-auto border-t border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-300">
@@ -359,7 +372,7 @@ export function KeyValueList({ items }: { items: Record<string, unknown> }) {
     <div className="space-y-2 text-sm">
       {Object.entries(items).map(([key, value]) => (
         <div key={key} className="grid grid-cols-[120px_minmax(0,1fr)] gap-3">
-          <div className="text-xs uppercase tracking-wide text-zinc-500">{key}</div>
+          <div className="text-xs uppercase tracking-wide text-zinc-500">{displayArtifactKey(key)}</div>
           <div className="break-words text-zinc-300">{formatValue(value)}</div>
         </div>
       ))}

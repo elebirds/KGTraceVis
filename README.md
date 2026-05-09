@@ -268,32 +268,46 @@ uv run --extra dev pytest
 uv run --extra dev ruff check .
 ```
 
-Equivalent Makefile shortcuts:
+Common Makefile shortcuts:
 
 ```bash
-make install
+make setup
+make setup-ml
+make setup-cuda
 make test
-make lint
 make examples
-make app
+make check-web
+make dev
+make real-pipeline
 ```
 
-Start the web API:
+Start the web API directly:
 
 ```bash
-uv run python scripts/run_web_api.py
+make api
 ```
 
-Start the React frontend from the `web/` directory:
+Start the React frontend directly:
 
 ```bash
-cd web
-npm install
-npm run dev
+make web
 ```
 
 The frontend proxies `/api` requests to `http://127.0.0.1:8000`, so keep the
 API process running while using the browser UI.
+
+On a Windows CUDA workstation, install `uv`, Node.js, and GNU Make, then run:
+
+```powershell
+make setup-cuda
+make dev
+```
+
+If Make is not available, use the PowerShell helper instead:
+
+```powershell
+.\scripts\dev_cuda_windows.ps1
+```
 
 The upload workflow currently accepts evidence JSON or producer-record
 bundles (`.json`, `.jsonl`, or `.csv`) and writes run artifacts under
