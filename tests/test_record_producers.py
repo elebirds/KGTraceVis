@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import kgtracevis.producers.backends as producer_backends
 from kgtracevis.adapters.batch import evidence_from_records, load_records
 from kgtracevis.producers.backends import (
     ANOMALIB_OPENVINO_BACKEND,
@@ -135,6 +136,36 @@ class InjectedAnomalibInferencer:
         )
 
 
+class ShapeSensitiveOpenVINOInferencer:
+    """OpenVINO-like inferencer whose default predict path does not resize images."""
+
+    input_blob = SimpleNamespace(any_name="input", shape=(1, 3, 2, 2))
+
+    def __init__(self) -> None:
+        self.last_input_shape: tuple[int, ...] | None = None
+
+    def predict(self, _image_path: Path) -> SimpleNamespace:
+        """Simulate Anomalib failing before our compatibility resize path."""
+        raise RuntimeError("model input shape=[1,3,2,2] and tensor shape=(1.3.4.4) incompatible")
+
+    def pre_process(self, image: np.ndarray) -> np.ndarray:
+        """Mirror Anomalib's normalize and HWC-to-NCHW preprocessing."""
+        image = image.astype(np.float32) / 255.0
+        return np.expand_dims(image, axis=0).transpose(0, 3, 1, 2)
+
+    def model(self, inputs: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+        """Return a fake OpenVINO prediction only when the input has been resized."""
+        image = inputs["input"]
+        self.last_input_shape = tuple(image.shape)
+        if image.shape != (1, 3, 2, 2):
+            raise RuntimeError(f"unexpected input shape: {image.shape}")
+        return {"output": np.asarray([[0.1, 0.8], [0.2, 0.3]], dtype=np.float32)}
+
+    def post_process(self, predictions: Mapping[str, np.ndarray]) -> Mapping[str, np.ndarray]:
+        """Return the prediction mapping as OpenVINO post-process output."""
+        return predictions
+
+
 def test_mvtec_producer_emits_adapter_compatible_model_records(tmp_path: Path) -> None:
     """MVTec producer should scan folders, call the predictor, and emit records."""
     root = tmp_path / "mvtec"
@@ -190,6 +221,36 @@ def test_anomalib_backend_normalizes_injected_inferencer_prediction(tmp_path: Pa
     assert prediction["anomaly_map"] == [[0.1, 0.7], [0.2, 0.3]]
     assert prediction["metadata"]["source_backend"] == ANOMALIB_TORCH_BACKEND
     assert prediction["metadata"]["device"] == "cpu"
+
+
+def test_openvino_backend_resizes_static_input_after_shape_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenVINO fallback should resize uploaded images to the exported model shape."""
+    inferencer = ShapeSensitiveOpenVINOInferencer()
+    monkeypatch.setattr(
+        producer_backends,
+        "_read_rgb_image",
+        lambda _image_path: np.full((4, 4, 3), 255, dtype=np.uint8),
+    )
+    backend = AnomalibMVTecBackend(
+        backend=ANOMALIB_OPENVINO_BACKEND,
+        checkpoint=tmp_path / "exported.xml",
+        device="CPU",
+        inferencer=inferencer,
+    )
+
+    prediction = backend.predict(tmp_path / "image.png")
+
+    assert inferencer.last_input_shape == (1, 3, 2, 2)
+    assert prediction["score"] == pytest.approx(0.8)
+    assert prediction["confidence"] == pytest.approx(0.8)
+    np.testing.assert_allclose(
+        np.asarray(prediction["anomaly_map"], dtype=float),
+        np.asarray([[0.1, 0.8], [0.2, 0.3]], dtype=float),
+    )
+    assert prediction["metadata"]["source_backend"] == ANOMALIB_OPENVINO_BACKEND
 
 
 def test_anomalib_prediction_conversion_preserves_zero_scores() -> None:

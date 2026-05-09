@@ -54,6 +54,16 @@ class AnomalibMVTecBackend:
             if self.backend != ANOMALIB_OPENVINO_BACKEND:
                 raise
             raw_prediction = self._predict_openvino_compat(image_path, exc)
+        except RuntimeError as exc:
+            if self.backend != ANOMALIB_OPENVINO_BACKEND:
+                raise
+            try:
+                raw_prediction = self._predict_openvino_compat(image_path, exc)
+            except Exception as fallback_exc:
+                raise ValueError(
+                    "OpenVINO MVTec inference failed. The uploaded image may be "
+                    "incompatible with the exported model input shape."
+                ) from fallback_exc
         return anomalib_prediction_to_mvtec_prediction(
             raw_prediction,
             backend=self.backend,
@@ -73,12 +83,8 @@ class AnomalibMVTecBackend:
             for attribute in ("pre_process", "post_process", "model", "input_blob")
         ):
             raise TypeError("OpenVINO inferencer does not expose the required compatibility hooks")
-        import cv2
-
-        image = cv2.imread(str(image_path))
-        if image is None:
-            raise ValueError(f"failed to read image for OpenVINO inference: {image_path}")
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = _read_rgb_image(image_path)
+        image = _resize_to_openvino_input(image, self.inferencer.input_blob)
         image = self.inferencer.pre_process(image)
         predictions = self.inferencer.model({self.inferencer.input_blob.any_name: image})
         pred_dict = dict(self.inferencer.post_process(predictions))
@@ -412,7 +418,78 @@ def _instantiate_anomalib_inferencer(
                 return inferencer_cls(checkpoint, device=device)
             except TypeError:
                 pass
-        return inferencer_cls(checkpoint)
+    return inferencer_cls(checkpoint)
+
+
+def _read_rgb_image(image_path: Path) -> np.ndarray:
+    """Read an image path into an RGB numpy array for OpenVINO compatibility inference."""
+    try:
+        from PIL import Image
+    except ImportError:
+        Image = None
+    if Image is not None:
+        with Image.open(image_path) as image:
+            return np.asarray(image.convert("RGB"))
+
+    try:
+        import cv2
+    except ImportError as exc:
+        raise ImportError("Pillow or OpenCV is required to read uploaded images") from exc
+    image = cv2.imread(str(image_path))
+    if image is None:
+        raise ValueError(f"failed to read image for OpenVINO inference: {image_path}")
+    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+
+def _resize_to_openvino_input(image: np.ndarray, input_blob: Any) -> np.ndarray:
+    """Resize an RGB image to a static OpenVINO NCHW/NHWC input shape when available."""
+    target = _openvino_input_hw(input_blob)
+    if target is None:
+        return image
+    height, width = target
+    if image.shape[:2] == (height, width):
+        return image
+    return _resize_image_array(image, height=height, width=width)
+
+
+def _openvino_input_hw(input_blob: Any) -> tuple[int, int] | None:
+    shape = getattr(input_blob, "shape", None)
+    if shape is None and hasattr(input_blob, "get_shape"):
+        shape = input_blob.get_shape()
+    if shape is None:
+        return None
+    dims = [_static_dimension(dim) for dim in shape]
+    if len(dims) != 4 or any(dim is None for dim in dims):
+        return None
+    batch, channels_first, height_first, width_first = dims
+    del batch
+    if channels_first in {1, 3} and height_first and width_first:
+        return height_first, width_first
+    height_last, width_last, channels_last = dims[1], dims[2], dims[3]
+    if channels_last in {1, 3} and height_last and width_last:
+        return height_last, width_last
+    return None
+
+
+def _static_dimension(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _resize_image_array(image: np.ndarray, *, height: int, width: int) -> np.ndarray:
+    try:
+        from PIL import Image
+
+        resampling = getattr(Image, "Resampling", Image).BILINEAR
+        resized = Image.fromarray(image).resize((width, height), resample=resampling)
+        return np.asarray(resized)
+    except ImportError:
+        y_idx = np.linspace(0, image.shape[0] - 1, height).round().astype(int)
+        x_idx = np.linspace(0, image.shape[1] - 1, width).round().astype(int)
+        return image[y_idx][:, x_idx]
 
 
 def _sklearn_prediction_confidence(model: Any, features: np.ndarray, label: str) -> float | None:
