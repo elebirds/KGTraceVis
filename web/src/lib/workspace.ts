@@ -140,6 +140,7 @@ export function displayWorkflowSummary(value: string) {
     .replace(/^Received /, "已接收 ")
     .replace(/^Validated /, "已校验 ")
     .replace(/^Loaded (.+) from /, "已从路径加载 $1：")
+    .replace(/^Generated anomaly prediction and geometry outputs via (.+)$/, "已通过 $1 生成异常预测和几何特征输出")
     .replace(/^Generated anomaly prediction and geometry outputs$/, "已生成异常预测和几何特征输出")
     .replace(/^Converted the image sample into unified evidence JSON$/, "已将图片样本转换为统一 Evidence JSON")
     .replace("Evidence schema and observed fields are ready for analysis", "Evidence schema 和观测字段已准备好分析")
@@ -157,6 +158,9 @@ export function displayArtifactKey(value: string) {
     output_dir: "输出目录",
     summary_path: "摘要路径",
     table_path: "表格路径",
+    checkpoint_path: "模型 checkpoint",
+    model_preset: "模型 preset",
+    model_backend: "模型后端",
     claim_boundary: "结论边界",
   };
   return labels[value] ?? value;

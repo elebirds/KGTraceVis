@@ -17,11 +17,12 @@ from kgtracevis.core import KGTracePipeline
 from kgtracevis.core.result import AnalysisResult
 from kgtracevis.experiments.adapter_pipeline import run_adapter_pipeline
 from kgtracevis.producers import (
-    ANOMALIB_OPENVINO_BACKEND,
     AnomalibMVTecBackend,
     build_mvtec_records,
+    list_mvtec_model_presets,
     write_jsonl_records,
 )
+from kgtracevis.producers.mvtec_models import resolve_mvtec_model_selection
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
 from kgtracevis.schema.validators import load_evidence_json
 
@@ -61,6 +62,8 @@ class RunSummary(BaseModel):
     case_count: int = 0
     evidence_count: int = 0
     label: str
+    model_preset: str | None = None
+    model_backend: str | None = None
 
 
 class RunDetail(BaseModel):
@@ -118,6 +121,7 @@ def create_run_from_upload(
     dataset: DatasetName | None = None,
     object_name: str | None = None,
     defect_type: str | None = None,
+    model_preset: str | None = None,
     runs_dir: str | Path = DEFAULT_RUNS_DIR,
     pipeline: KGTracePipeline | None = None,
 ) -> RunDetail:
@@ -158,6 +162,7 @@ def create_run_from_upload(
             source_filename=source_name,
             object_name=_required_text(object_name, default="capsule"),
             defect_type=_optional_text(defect_type),
+            model_preset=model_preset,
             top_k=top_k,
             pipeline=active_pipeline,
             output_dir=output_dir / "mvtec_image_pipeline",
@@ -264,6 +269,8 @@ def workflow_steps_for_image_case(
     image_path: str,
     object_name: str,
     defect_type: str | None,
+    model_preset: str,
+    model_backend: str,
     checkpoint: str,
     evidence: Evidence,
     analysis: AnalysisResult,
@@ -281,14 +288,17 @@ def workflow_steps_for_image_case(
                 "image_path": image_path,
                 "object_name": object_name,
                 "defect_type": defect_type,
+                "model_preset": model_preset,
             },
         ),
         WorkflowStep(
             step_id="predict",
             title="Run MVTec predictor",
             status="completed",
-            summary="Generated anomaly prediction and geometry outputs",
+            summary=f"Generated anomaly prediction and geometry outputs via {model_preset}",
             details={
+                "model_preset": model_preset,
+                "model_backend": model_backend,
                 "checkpoint": checkpoint,
                 "confidence": evidence.confidence,
                 "anomaly_type": evidence.anomaly_type,
@@ -506,6 +516,7 @@ def _run_mvtec_image_upload(
     source_filename: str,
     object_name: str,
     defect_type: str | None,
+    model_preset: str | None,
     top_k: int,
     pipeline: KGTracePipeline,
     output_dir: Path,
@@ -519,9 +530,13 @@ def _run_mvtec_image_upload(
     case_image.parent.mkdir(parents=True, exist_ok=True)
     case_image.write_bytes(input_path.read_bytes())
 
-    checkpoint_path = _resolve_mvtec_checkpoint(checkpoint)
+    selection = resolve_mvtec_model_selection(model_preset)
+    if checkpoint is not None:
+        checkpoint_path = _resolve_mvtec_checkpoint(checkpoint, model_preset=selection.preset)
+    else:
+        checkpoint_path = selection.checkpoint_path
     active_predictor = predictor or AnomalibMVTecBackend(
-        backend=ANOMALIB_OPENVINO_BACKEND,
+        backend=selection.backend,
         checkpoint=checkpoint_path,
         device=_resolve_mvtec_device(),
     )
@@ -530,7 +545,7 @@ def _run_mvtec_image_upload(
         image_root,
         active_predictor,
         output_dir=output_dir / "generated_records",
-        model_backend=ANOMALIB_OPENVINO_BACKEND,
+        model_backend=selection.backend,
         checkpoint=checkpoint_path,
         threshold=0.5,
         max_cases=1,
@@ -566,6 +581,8 @@ def _run_mvtec_image_upload(
         case_count=int(summary.get("case_count", 1)),
         evidence_count=len(adapter_output.evidence_paths),
         label=f"{object_folder} · {defect_folder} · {source_filename}",
+        model_preset=selection.preset,
+        model_backend=selection.backend,
     )
     detail = RunDetail(
         run=run,
@@ -574,6 +591,8 @@ def _run_mvtec_image_upload(
             image_path=str(case_image),
             object_name=object_folder,
             defect_type=_optional_text(defect_type),
+            model_preset=selection.preset,
+            model_backend=selection.backend,
             checkpoint=str(checkpoint_path),
             evidence=evidence,
             analysis=analysis,
@@ -595,9 +614,16 @@ def _run_mvtec_image_upload(
             "summary_path": str(adapter_output.summary_path),
             "table_path": str(adapter_output.table_path),
             "checkpoint_path": str(checkpoint_path),
+            "model_preset": selection.preset,
+            "model_backend": selection.backend,
         },
     )
     return detail
+
+
+def mvtec_model_presets() -> list[dict[str, Any]]:
+    """Return the selectable MVTec model presets for the web UI."""
+    return list_mvtec_model_presets()
 
 
 def _evidence_with_analysis(evidence: Evidence, analysis: AnalysisResult) -> dict[str, Any]:
@@ -622,23 +648,45 @@ def _safe_filename(value: str) -> str:
     return token or "upload"
 
 
-def _resolve_mvtec_checkpoint(checkpoint: str | Path | None = None) -> Path:
+def _resolve_mvtec_checkpoint(
+    checkpoint: str | Path | None = None,
+    *,
+    model_preset: str | None = None,
+) -> Path:
+    if checkpoint is not None:
+        candidate = Path(checkpoint)
+    else:
+        candidate = _default_checkpoint_for_preset(model_preset)
     candidate = Path(
-        os.environ.get("KGTRACEVIS_MVTEC_CHECKPOINT")
-        or checkpoint
-        or DEFAULT_MVTEC_WEB_CHECKPOINT
+        os.environ.get(_checkpoint_env_for_preset(model_preset))
+        or candidate
     )
     if candidate.is_file():
         return candidate
     raise FileNotFoundError(
-        f"MVTec checkpoint not found: {candidate}. Set KGTRACEVIS_MVTEC_CHECKPOINT "
-        "or place the checked-in OpenVINO checkpoint under "
-        "runs/real_model_pipeline/assets/mvtec/checkpoints/openvino_model/."
+        f"MVTec checkpoint not found: {candidate}. Set {_checkpoint_env_for_preset(model_preset)} "
+        "or place a trusted local checkpoint at the configured default path."
     )
 
 
 def _resolve_mvtec_device() -> str:
     return os.environ.get("KGTRACEVIS_MVTEC_DEVICE", "CPU")
+
+
+def _default_checkpoint_for_preset(model_preset: str | None) -> Path:
+    if model_preset == "efficientad":
+        return Path("data/external/checkpoints/mvtec_efficientad.pt")
+    if model_preset == "patchcore":
+        return Path("data/external/checkpoints/mvtec_patchcore.pt")
+    return DEFAULT_MVTEC_WEB_CHECKPOINT
+
+
+def _checkpoint_env_for_preset(model_preset: str | None) -> str:
+    if model_preset == "efficientad":
+        return "KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT"
+    if model_preset == "patchcore":
+        return "KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT"
+    return "KGTRACEVIS_MVTEC_STFPM_CHECKPOINT"
 
 
 def _required_text(value: str | None, *, default: str) -> str:

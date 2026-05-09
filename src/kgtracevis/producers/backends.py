@@ -426,19 +426,19 @@ def _read_rgb_image(image_path: Path) -> np.ndarray:
     try:
         from PIL import Image
     except ImportError:
-        Image = None
-    if Image is not None:
-        with Image.open(image_path) as image:
-            return np.asarray(image.convert("RGB"))
+        pass
+    else:
+        with Image.open(image_path) as pil_image:
+            return np.asarray(pil_image.convert("RGB"))
 
     try:
         import cv2
     except ImportError as exc:
         raise ImportError("Pillow or OpenCV is required to read uploaded images") from exc
-    image = cv2.imread(str(image_path))
-    if image is None:
+    bgr_image = cv2.imread(str(image_path))
+    if bgr_image is None:
         raise ValueError(f"failed to read image for OpenVINO inference: {image_path}")
-    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    return cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
 
 
 def _resize_to_openvino_input(image: np.ndarray, input_blob: Any) -> np.ndarray:

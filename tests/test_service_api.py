@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 from fastapi.testclient import TestClient
 
+from kgtracevis.producers.backends import ANOMALIB_TORCH_BACKEND
 from kgtracevis.service import api as service_api
 from kgtracevis.service import runs as service_runs
 from kgtracevis.service.api import app
@@ -127,6 +128,60 @@ def test_image_upload_mode_defaults_to_unknown_label_when_unspecified(
     assert payload["evidence"]["morphology"] is None
 
 
+def test_mvtec_model_preset_route_reports_available_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """The web API should expose selectable MVTec model presets for image uploads."""
+    checkpoint = tmp_path / "efficientad.pt"
+    checkpoint.write_bytes(b"trusted local checkpoint placeholder")
+    monkeypatch.setenv("KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT", str(checkpoint))
+
+    client = TestClient(app)
+    response = client.get("/api/runs/mvtec-model-presets")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["default_preset"] == "auto"
+    presets = {item["preset"]: item for item in payload["presets"]}
+    assert presets["auto"]["resolved_preset"] == "efficientad"
+    assert presets["efficientad"]["available"] is True
+
+
+def test_image_upload_missing_requested_model_preset_returns_400(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Selecting an unavailable preset should fail before fake evidence is produced."""
+    original = service_api.create_run_from_upload
+
+    def _patched_create_run_from_upload(*args, **kwargs):
+        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
+    monkeypatch.setenv(
+        "KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT",
+        str(tmp_path / "missing_efficientad.pt"),
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/runs/upload",
+        files={"file": ("010.png", b"not-read", "image/png")},
+        data={
+            "mode": "image",
+            "dataset": "mvtec",
+            "object_name": "capsule",
+            "model_preset": "efficientad",
+            "top_k": "2",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "efficientad" in response.json()["detail"]
+
+
 def test_image_upload_mode_runs_mvtec_producer_path(tmp_path: Path, monkeypatch) -> None:
     """Image uploads should run the real MVTec record path before KG analysis."""
 
@@ -141,14 +196,10 @@ def test_image_upload_mode_runs_mvtec_producer_path(tmp_path: Path, monkeypatch)
                 "mask": np.array([[0, 1], [0, 1]], dtype=bool),
             }
 
-    checkpoint = tmp_path / "stfpm_capsule.xml"
+    checkpoint = tmp_path / "patchcore.pt"
     checkpoint.write_text("<xml />", encoding="utf-8")
+    monkeypatch.setenv("KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT", str(checkpoint))
     monkeypatch.setattr(service_runs, "AnomalibMVTecBackend", FakeMVTecBackend)
-    monkeypatch.setattr(
-        service_runs,
-        "_resolve_mvtec_checkpoint",
-        lambda _checkpoint=None: checkpoint,
-    )
 
     detail = service_runs.create_run_from_upload(
         "010.png",
@@ -157,6 +208,7 @@ def test_image_upload_mode_runs_mvtec_producer_path(tmp_path: Path, monkeypatch)
         dataset="mvtec",
         object_name="capsule",
         defect_type="crack",
+        model_preset="patchcore",
         top_k=2,
         runs_dir=tmp_path / "web_sessions",
     )
@@ -168,8 +220,11 @@ def test_image_upload_mode_runs_mvtec_producer_path(tmp_path: Path, monkeypatch)
     assert detail.evidence["dataset"] == "mvtec"
     assert detail.evidence["object"] == "capsule"
     assert detail.evidence["anomaly_type"] == "crack"
+    assert detail.run.model_preset == "patchcore"
+    assert detail.run.model_backend == ANOMALIB_TORCH_BACKEND
     assert detail.analysis is not None
     assert detail.artifacts["records_path"].endswith("mvtec_image_records.jsonl")
+    assert detail.artifacts["model_preset"] == "patchcore"
 
 
 def test_what_if_request_clears_stale_observations_and_runs_analysis() -> None:

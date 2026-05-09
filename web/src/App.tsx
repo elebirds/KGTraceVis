@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   analyzeEvidence,
   listCases,
+  listMvtecModelPresets,
   listRuns,
   loadCase,
   loadRun,
@@ -65,6 +66,7 @@ import type {
   AnalysisResponse,
   CaseSummary,
   Evidence,
+  MvtecModelPreset,
   PathResult,
   RunDetail,
   RunSummary,
@@ -76,6 +78,14 @@ type InspectorView = "what-if" | "payload" | "feedback";
 type UploadMode = "evidence" | "records" | "image";
 
 const DEFAULT_TOP_K = 3;
+const FALLBACK_MVTEC_MODEL_PRESETS: MvtecModelPreset[] = [
+  {
+    preset: "auto",
+    label: "自动",
+    description: "优先 EfficientAD，其次 PatchCore，再其次 STFPM。",
+    available: true,
+  },
+];
 
 const EMPTY_WHAT_IF = {
   anomaly_type: "",
@@ -102,6 +112,8 @@ export default function App() {
   const [uploadDataset, setUploadDataset] = useState("");
   const [uploadObjectName, setUploadObjectName] = useState("capsule");
   const [uploadDefectType, setUploadDefectType] = useState("");
+  const [uploadModelPreset, setUploadModelPreset] = useState("auto");
+  const [mvtecModelPresets, setMvtecModelPresets] = useState<MvtecModelPreset[]>([]);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadInputKey, setUploadInputKey] = useState(0);
   const [queueView, setQueueView] = useState<QueueView>("runs");
@@ -126,6 +138,7 @@ export default function App() {
   useEffect(() => {
     void loadCaseList();
     void loadRunList();
+    void loadModelPresets();
   }, []);
 
   useEffect(() => {
@@ -188,6 +201,10 @@ export default function App() {
   const correctionCount = analysis?.correction_candidates.length ?? 0;
   const pathCount = analysis?.top_k_paths.length ?? 0;
   const activeClaim = selectedCase?.claim_boundary ?? selectedRun?.claim_boundary ?? "-";
+  const modelPresetOptions = mvtecModelPresets.length
+    ? mvtecModelPresets
+    : FALLBACK_MVTEC_MODEL_PRESETS;
+  const selectedModelPreset = modelPresetOptions.find((item) => item.preset === uploadModelPreset);
 
   async function refreshWorkspace() {
     await Promise.all([loadCaseList(), loadRunList()]);
@@ -218,6 +235,16 @@ export default function App() {
       }
     } catch (error_) {
       setRunLoadingState("error");
+      setRunError(messageOf(error_));
+    }
+  }
+
+  async function loadModelPresets() {
+    try {
+      const response = await listMvtecModelPresets();
+      setMvtecModelPresets(response.presets);
+      setUploadModelPreset(response.default_preset || "auto");
+    } catch (error_) {
       setRunError(messageOf(error_));
     }
   }
@@ -271,6 +298,7 @@ export default function App() {
         dataset: uploadMode === "image" ? "mvtec" : uploadDataset || null,
         object_name: uploadMode === "image" ? uploadObjectName : null,
         defect_type: uploadMode === "image" ? uploadDefectType.trim() || null : null,
+        model_preset: uploadMode === "image" ? uploadModelPreset : null,
         top_k: uploadTopK,
       });
       setRuns((current) => [response.run, ...current.filter((item) => item.run_id !== response.run.run_id)]);
@@ -443,9 +471,44 @@ export default function App() {
               {uploadMode === "image" ? (
                 <div className="rounded-md border border-cyan-800/70 bg-cyan-950/30 p-3">
                   <div className="mb-3 text-xs leading-5 text-cyan-100">
-                    图片模式会调用 MVTec producer 和当前 OpenVINO checkpoint，再进入 KGTracePipeline。
-                    对象类别应与模型 checkpoint 匹配；当前内置 checkpoint 是 capsule。
+                    图片模式会调用所选 MVTec 异常检测/定位模型，再进入 Evidence adapter 和
+                    KGTracePipeline。缺陷类型不是这些模型直接分类出来的；人工标签只作为可选先验。
                   </div>
+                  <label className="mb-3 block">
+                    <div className="field-label">MVTec 模型</div>
+                    <select
+                      className="input mt-1"
+                      value={uploadModelPreset}
+                      onChange={(event) => setUploadModelPreset(event.target.value)}
+                    >
+                      {modelPresetOptions.map((option) => (
+                        <option
+                          key={option.preset}
+                          value={option.preset}
+                          disabled={!option.available && option.preset !== "auto"}
+                        >
+                          {option.label}
+                          {option.resolved_label ? ` -> ${option.resolved_label}` : ""}
+                          {!option.available ? "（未配置）" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedModelPreset ? (
+                    <div className="mb-3 rounded-md border border-cyan-900/80 bg-zinc-950/50 px-3 py-2 text-xs leading-5 text-zinc-300">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={selectedModelPreset.available ? "badge badge-good" : "badge badge-warn"}>
+                          {selectedModelPreset.available ? "可用" : "未配置"}
+                        </span>
+                        <span>{selectedModelPreset.description}</span>
+                      </div>
+                      {selectedModelPreset.checkpoint_hint && !selectedModelPreset.available ? (
+                        <div className="mt-1 text-zinc-500">
+                          预期 checkpoint：{selectedModelPreset.checkpoint_hint}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block">
                       <div className="field-label">对象类别</div>
@@ -457,12 +520,12 @@ export default function App() {
                       />
                     </label>
                     <label className="block">
-                      <div className="field-label">人工标签（可选）</div>
+                      <div className="field-label">人工缺陷先验（可选）</div>
                       <input
                         className="input mt-1"
                         value={uploadDefectType}
                         onChange={(event) => setUploadDefectType(event.target.value)}
-                        placeholder="crack / good / unknown"
+                        placeholder="留空则为 unknown"
                       />
                     </label>
                   </div>
@@ -513,6 +576,7 @@ export default function App() {
                     setUploadMode("records");
                     setUploadObjectName("capsule");
                     setUploadDefectType("");
+                    setUploadModelPreset("auto");
                     setUploadInputKey((current) => current + 1);
                   }}
                 >

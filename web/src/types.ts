@@ -124,6 +124,8 @@ export type RunSummary = {
   case_count: number;
   evidence_count: number;
   label: string;
+  model_preset?: string | null;
+  model_backend?: string | null;
 };
 
 export type RunStep = {
@@ -144,4 +146,22 @@ export type RunDetail = {
   summary?: Record<string, unknown> | null;
   cases?: Array<Record<string, unknown>>;
   artifacts: Record<string, string>;
+};
+
+export type MvtecModelPreset = {
+  preset: string;
+  label: string;
+  description: string;
+  available: boolean;
+  recommended?: boolean;
+  backend?: string | null;
+  checkpoint_path?: string | null;
+  checkpoint_hint?: string | null;
+  resolved_preset?: string | null;
+  resolved_label?: string | null;
+};
+
+export type MvtecModelPresetResponse = {
+  default_preset: string;
+  presets: MvtecModelPreset[];
 };

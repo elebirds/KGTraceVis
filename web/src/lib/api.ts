@@ -2,6 +2,7 @@ import type {
   AnalysisResponse,
   CaseSummary,
   Evidence,
+  MvtecModelPresetResponse,
   RunDetail,
   RunSummary,
 } from "../types";
@@ -41,6 +42,10 @@ export function listCases(): Promise<CaseSummary[]> {
 
 export function listRuns(): Promise<RunSummary[]> {
   return requestJson<RunSummary[]>("/api/runs");
+}
+
+export function listMvtecModelPresets(): Promise<MvtecModelPresetResponse> {
+  return requestJson<MvtecModelPresetResponse>("/api/runs/mvtec-model-presets");
 }
 
 export function loadCase(caseId: string): Promise<AnalysisResponse> {
@@ -98,6 +103,7 @@ export function uploadRun(request: {
   dataset?: string | null;
   object_name?: string | null;
   defect_type?: string | null;
+  model_preset?: string | null;
   top_k: number;
 }): Promise<RunDetail> {
   const form = new FormData();
@@ -112,6 +118,9 @@ export function uploadRun(request: {
   }
   if (request.defect_type) {
     form.append("defect_type", request.defect_type);
+  }
+  if (request.model_preset) {
+    form.append("model_preset", request.model_preset);
   }
   return requestJson<RunDetail>("/api/runs/upload", {
     method: "POST",

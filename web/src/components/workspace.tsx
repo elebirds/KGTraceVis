@@ -142,6 +142,7 @@ export function RunQueue({
           <div className="flex shrink-0 flex-col items-end gap-1">
             <span className="badge">{displayUploadMode(item.mode)}</span>
             <span className="badge">{displayDataset(item.dataset)}</span>
+            {item.model_preset ? <span className="badge">{item.model_preset}</span> : null}
           </div>
         </button>
       ))}

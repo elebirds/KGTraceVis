@@ -309,9 +309,14 @@ If Make is not available, use the PowerShell helper instead:
 .\scripts\dev_cuda_windows.ps1
 ```
 
-The upload workflow currently accepts evidence JSON or producer-record
-bundles (`.json`, `.jsonl`, or `.csv`) and writes run artifacts under
-`runs/web_sessions/`.
+The upload workflow currently accepts evidence JSON, producer-record bundles
+(`.json`, `.jsonl`, or `.csv`), or a raw MVTec-style image, and writes run
+artifacts under `runs/web_sessions/`. Image mode uses a selectable MVTec
+anomaly-detection/localization preset. `auto` prefers EfficientAD, then
+PatchCore, then the checked-in STFPM OpenVINO checkpoint. Configure replacement
+weights with `KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT` or
+`KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT`. The optional defect field in the UI is
+a human prior, not a model-inferred semantic defect class.
 
 ## Unified Evidence Schema
 

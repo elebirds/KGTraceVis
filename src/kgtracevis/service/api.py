@@ -21,6 +21,7 @@ from kgtracevis.service.runs import (
     create_run_from_upload,
     get_run_detail,
     list_runs,
+    mvtec_model_presets,
     parse_dataset_override,
     parse_upload_mode,
 )
@@ -65,6 +66,13 @@ def create_app() -> FastAPI:
     def runs() -> list[dict[str, object]]:
         return [run.model_dump(mode="json") for run in list_runs()]
 
+    @app.get("/api/runs/mvtec-model-presets")
+    def mvtec_presets() -> dict[str, object]:
+        return {
+            "default_preset": "auto",
+            "presets": mvtec_model_presets(),
+        }
+
     @app.get("/api/runs/{run_id}")
     def run_detail(run_id: str) -> dict[str, object]:
         try:
@@ -79,6 +87,7 @@ def create_app() -> FastAPI:
         dataset: Annotated[str | None, Form()] = None,
         object_name: Annotated[str | None, Form()] = None,
         defect_type: Annotated[str | None, Form()] = None,
+        model_preset: Annotated[str | None, Form()] = None,
         top_k: Annotated[int, Form()] = 5,
     ) -> dict[str, object]:
         try:
@@ -92,6 +101,7 @@ def create_app() -> FastAPI:
                 dataset=dataset_override,
                 object_name=object_name,
                 defect_type=defect_type,
+                model_preset=model_preset,
                 top_k=top_k,
             ).model_dump(mode="json")
         except (FileNotFoundError, ValueError) as exc:
