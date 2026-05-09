@@ -77,6 +77,8 @@ def create_app() -> FastAPI:
         file: Annotated[UploadFile, File()],
         mode: Annotated[str, Form()] = "records",
         dataset: Annotated[str | None, Form()] = None,
+        object_name: Annotated[str | None, Form()] = None,
+        defect_type: Annotated[str | None, Form()] = None,
         top_k: Annotated[int, Form()] = 5,
     ) -> dict[str, object]:
         try:
@@ -88,9 +90,11 @@ def create_app() -> FastAPI:
                 content,
                 mode=upload_mode,
                 dataset=dataset_override,
+                object_name=object_name,
+                defect_type=defect_type,
                 top_k=top_k,
             ).model_dump(mode="json")
-        except ValueError as exc:
+        except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/analyze")

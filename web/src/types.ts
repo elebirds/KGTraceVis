@@ -115,7 +115,7 @@ export type AnalysisResponse = {
 export type RunSummary = {
   run_id: string;
   created_at: string;
-  mode: "evidence" | "records";
+  mode: "evidence" | "records" | "image";
   source_filename: string;
   top_k: number;
   run_dir: string;

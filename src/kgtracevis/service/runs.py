@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from datetime import datetime, timezone
@@ -11,14 +12,24 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from kgtracevis.adapters import evidence_from_mvtec_record
 from kgtracevis.core import KGTracePipeline
 from kgtracevis.core.result import AnalysisResult
 from kgtracevis.experiments.adapter_pipeline import run_adapter_pipeline
+from kgtracevis.producers import (
+    ANOMALIB_OPENVINO_BACKEND,
+    AnomalibMVTecBackend,
+    build_mvtec_records,
+    write_jsonl_records,
+)
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
 from kgtracevis.schema.validators import load_evidence_json
 
 DEFAULT_RUNS_DIR = Path("runs/web_sessions")
-UploadMode = Literal["evidence", "records"]
+DEFAULT_MVTEC_WEB_CHECKPOINT = Path(
+    "runs/real_model_pipeline/assets/mvtec/checkpoints/openvino_model/stfpm_capsule.xml"
+)
+UploadMode = Literal["evidence", "records", "image"]
 RunStatus = Literal["completed", "failed"]
 
 
@@ -105,6 +116,8 @@ def create_run_from_upload(
     mode: UploadMode,
     top_k: int,
     dataset: DatasetName | None = None,
+    object_name: str | None = None,
+    defect_type: str | None = None,
     runs_dir: str | Path = DEFAULT_RUNS_DIR,
     pipeline: KGTracePipeline | None = None,
 ) -> RunDetail:
@@ -135,6 +148,20 @@ def create_run_from_upload(
             top_k=top_k,
             pipeline=active_pipeline,
         )
+    elif mode == "image":
+        if dataset is not None and dataset != "mvtec":
+            raise ValueError("image upload mode only supports mvtec")
+        detail = _run_mvtec_image_upload(
+            run_id=run_id,
+            created_at=created_at,
+            input_path=input_path,
+            source_filename=source_name,
+            object_name=_required_text(object_name, default="capsule"),
+            defect_type=_optional_text(defect_type),
+            top_k=top_k,
+            pipeline=active_pipeline,
+            output_dir=output_dir / "mvtec_image_pipeline",
+        )
     elif mode == "records":
         detail = _run_records_upload(
             run_id=run_id,
@@ -147,7 +174,7 @@ def create_run_from_upload(
             output_dir=output_dir / "adapter_pipeline",
         )
     else:
-        raise ValueError("upload mode must be evidence or records")
+        raise ValueError("upload mode must be evidence, records, or image")
 
     manifest_path = run_dir / "manifest.json"
     manifest_path.write_text(json.dumps(detail.model_dump(mode="json"), indent=2), encoding="utf-8")
@@ -157,9 +184,11 @@ def create_run_from_upload(
 def parse_upload_mode(value: str) -> UploadMode:
     """Normalize a string form value into a supported upload mode."""
     normalized = value.strip().lower()
-    if normalized in {"evidence", "record", "records"}:
+    if normalized in {"evidence", "record", "records", "image", "img"}:
+        if normalized in {"image", "img"}:
+            return "image"
         return "records" if normalized in {"record", "records"} else "evidence"
-    raise ValueError("upload mode must be evidence or records")
+    raise ValueError("upload mode must be evidence, records, or image")
 
 
 def parse_dataset_override(value: str | None) -> DatasetName | None:
@@ -207,6 +236,74 @@ def workflow_steps_for_case(
                 "location": evidence.location,
                 "morphology": evidence.morphology,
                 "confidence": evidence.confidence,
+                "top_k": top_k,
+            },
+        ),
+        WorkflowStep(
+            step_id="pipeline_analysis",
+            title="Run KGTracePipeline",
+            status="completed",
+            summary=(
+                f"{len(analysis.linked_entities)} linked entities, "
+                f"{len(analysis.top_k_paths)} candidate paths"
+            ),
+            details={
+                "linked_entities": analysis.linked_entities,
+                "consistency_score": analysis.consistency_score,
+                "inconsistent_fields": analysis.inconsistent_fields,
+                "correction_candidates": analysis.correction_candidates,
+                "top_k_paths": analysis.top_k_paths,
+            },
+        ),
+    ]
+
+
+def workflow_steps_for_image_case(
+    *,
+    source_filename: str,
+    image_path: str,
+    object_name: str,
+    defect_type: str,
+    checkpoint: str,
+    evidence: Evidence,
+    analysis: AnalysisResult,
+    top_k: int,
+) -> list[WorkflowStep]:
+    """Build visible step cards for a single uploaded image run."""
+    return [
+        WorkflowStep(
+            step_id="upload",
+            title="Upload image",
+            status="completed",
+            summary=f"Received {source_filename}",
+            details={
+                "filename": source_filename,
+                "image_path": image_path,
+                "object_name": object_name,
+                "defect_type": defect_type,
+            },
+        ),
+        WorkflowStep(
+            step_id="predict",
+            title="Run MVTec predictor",
+            status="completed",
+            summary="Generated anomaly prediction and geometry outputs",
+            details={
+                "checkpoint": checkpoint,
+                "confidence": evidence.confidence,
+                "anomaly_type": evidence.anomaly_type,
+                "object": evidence.object,
+            },
+        ),
+        WorkflowStep(
+            step_id="adapter",
+            title="Build evidence",
+            status="completed",
+            summary="Converted the image sample into unified evidence JSON",
+            details={
+                "case_id": evidence.case_id,
+                "dataset": evidence.dataset,
+                "observation_count": len(evidence.observations),
                 "top_k": top_k,
             },
         ),
@@ -401,6 +498,108 @@ def _run_records_upload(
     return detail
 
 
+def _run_mvtec_image_upload(
+    *,
+    run_id: str,
+    created_at: str,
+    input_path: Path,
+    source_filename: str,
+    object_name: str,
+    defect_type: str | None,
+    top_k: int,
+    pipeline: KGTracePipeline,
+    output_dir: Path,
+    predictor: AnomalibMVTecBackend | None = None,
+    checkpoint: str | Path | None = None,
+) -> RunDetail:
+    image_root = input_path.parent / "mvtec_image_root"
+    object_folder = _safe_filename(object_name)
+    defect_folder = _safe_filename(defect_type or "unknown")
+    case_image = image_root / object_folder / "test" / defect_folder / source_filename
+    case_image.parent.mkdir(parents=True, exist_ok=True)
+    case_image.write_bytes(input_path.read_bytes())
+
+    checkpoint_path = _resolve_mvtec_checkpoint(checkpoint)
+    active_predictor = predictor or AnomalibMVTecBackend(
+        backend=ANOMALIB_OPENVINO_BACKEND,
+        checkpoint=checkpoint_path,
+        device=_resolve_mvtec_device(),
+    )
+
+    generated_records = build_mvtec_records(
+        image_root,
+        active_predictor,
+        output_dir=output_dir / "generated_records",
+        model_backend=ANOMALIB_OPENVINO_BACKEND,
+        checkpoint=checkpoint_path,
+        threshold=0.5,
+        max_cases=1,
+        include_good=True,
+    )
+    if not generated_records:
+        raise ValueError("no MVTec evidence records were produced from the uploaded image")
+    records_path = write_jsonl_records(
+        generated_records,
+        output_dir / "mvtec_image_records.jsonl",
+        overwrite=True,
+    )
+    adapter_output = run_adapter_pipeline(
+        records_path,
+        output_dir / "adapter_pipeline",
+        dataset="mvtec",
+        top_k=top_k,
+        overwrite=True,
+        pipeline=pipeline,
+    )
+
+    evidence = evidence_from_mvtec_record(generated_records[0])
+    analysis = pipeline.analyze(evidence, top_k=top_k)
+    summary = adapter_output.summary
+    run = RunSummary(
+        run_id=run_id,
+        created_at=created_at,
+        mode="image",
+        source_filename=source_filename,
+        top_k=top_k,
+        run_dir=str(input_path.parent.parent),
+        dataset="mvtec",
+        case_count=int(summary.get("case_count", 1)),
+        evidence_count=len(adapter_output.evidence_paths),
+        label=f"{object_folder} · {defect_folder} · {source_filename}",
+    )
+    detail = RunDetail(
+        run=run,
+        workflow_steps=workflow_steps_for_image_case(
+            source_filename=source_filename,
+            image_path=str(case_image),
+            object_name=object_folder,
+            defect_type=defect_folder,
+            checkpoint=str(checkpoint_path),
+            evidence=evidence,
+            analysis=analysis,
+            top_k=top_k,
+        ),
+        claim_boundary=str(summary.get("note") or (
+            "candidate/plausible explanation only; not a verified root-cause label"
+        )),
+        evidence=evidence.model_dump(mode="json"),
+        evidence_with_analysis=_evidence_with_analysis(evidence, analysis),
+        analysis=analysis.model_dump(mode="json"),
+        summary=summary,
+        cases=list(summary.get("cases", [])) if isinstance(summary.get("cases"), list) else [],
+        artifacts={
+            "input_path": str(input_path),
+            "mvtec_image_root": str(image_root),
+            "records_path": str(records_path),
+            "output_dir": str(output_dir),
+            "summary_path": str(adapter_output.summary_path),
+            "table_path": str(adapter_output.table_path),
+            "checkpoint_path": str(checkpoint_path),
+        },
+    )
+    return detail
+
+
 def _evidence_with_analysis(evidence: Evidence, analysis: AnalysisResult) -> dict[str, Any]:
     payload = evidence.model_dump(mode="json")
     payload["kg_analysis"] = {
@@ -421,3 +620,34 @@ def _build_run_id(filename: str) -> str:
 def _safe_filename(value: str) -> str:
     token = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._")
     return token or "upload"
+
+
+def _resolve_mvtec_checkpoint(checkpoint: str | Path | None = None) -> Path:
+    candidate = Path(
+        os.environ.get("KGTRACEVIS_MVTEC_CHECKPOINT")
+        or checkpoint
+        or DEFAULT_MVTEC_WEB_CHECKPOINT
+    )
+    if candidate.is_file():
+        return candidate
+    raise FileNotFoundError(
+        f"MVTec checkpoint not found: {candidate}. Set KGTRACEVIS_MVTEC_CHECKPOINT "
+        "or place the checked-in OpenVINO checkpoint under "
+        "runs/real_model_pipeline/assets/mvtec/checkpoints/openvino_model/."
+    )
+
+
+def _resolve_mvtec_device() -> str:
+    return os.environ.get("KGTRACEVIS_MVTEC_DEVICE", "CPU")
+
+
+def _required_text(value: str | None, *, default: str) -> str:
+    text = _optional_text(value)
+    return text or default
+
+
+def _optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    return text or None

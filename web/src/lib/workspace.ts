@@ -54,6 +54,9 @@ export function displayUploadMode(value: string) {
   if (value === "evidence") {
     return "Evidence JSON";
   }
+  if (value === "image") {
+    return "图片模式";
+  }
   return value;
 }
 
@@ -125,6 +128,9 @@ export function displayWorkflowTitle(value: string) {
     "Run KGTracePipeline": "运行 KGTracePipeline",
     "Convert records to evidence": "记录转换为 Evidence",
     "Load evidence case": "加载 Evidence 样本",
+    "Upload image": "上传图片",
+    "Run MVTec predictor": "运行 MVTec 模型",
+    "Build evidence": "构建 Evidence",
   };
   return titles[value] ?? value;
 }
@@ -134,6 +140,8 @@ export function displayWorkflowSummary(value: string) {
     .replace(/^Received /, "已接收 ")
     .replace(/^Validated /, "已校验 ")
     .replace(/^Loaded (.+) from /, "已从路径加载 $1：")
+    .replace(/^Generated anomaly prediction and geometry outputs$/, "已生成异常预测和几何特征输出")
+    .replace(/^Converted the image sample into unified evidence JSON$/, "已将图片样本转换为统一 Evidence JSON")
     .replace("Evidence schema and observed fields are ready for analysis", "Evidence schema 和观测字段已准备好分析")
     .replace(/ evidence files written$/, " 个 Evidence 文件已写入")
     .replace(/ linked entities, /, " 个实体链接，")

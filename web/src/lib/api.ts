@@ -20,7 +20,16 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(detail || `Request failed with status ${response.status}`);
+    let message = detail;
+    try {
+      const parsed = JSON.parse(detail) as { detail?: unknown };
+      if (typeof parsed.detail === "string") {
+        message = parsed.detail;
+      }
+    } catch {
+      message = detail;
+    }
+    throw new Error(message || `Request failed with status ${response.status}`);
   }
 
   return (await response.json()) as T;
@@ -85,8 +94,10 @@ export function sendFeedback(request: {
 
 export function uploadRun(request: {
   file: File;
-  mode: "evidence" | "records";
+  mode: "evidence" | "records" | "image";
   dataset?: string | null;
+  object_name?: string | null;
+  defect_type?: string | null;
   top_k: number;
 }): Promise<RunDetail> {
   const form = new FormData();
@@ -95,6 +106,12 @@ export function uploadRun(request: {
   form.append("top_k", String(request.top_k));
   if (request.dataset) {
     form.append("dataset", request.dataset);
+  }
+  if (request.object_name) {
+    form.append("object_name", request.object_name);
+  }
+  if (request.defect_type) {
+    form.append("defect_type", request.defect_type);
   }
   return requestJson<RunDetail>("/api/runs/upload", {
     method: "POST",

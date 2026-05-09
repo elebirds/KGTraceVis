@@ -73,6 +73,7 @@ import type {
 type LoadingState = "idle" | "loading" | "ready" | "error";
 type QueueView = "cases" | "runs";
 type InspectorView = "what-if" | "payload" | "feedback";
+type UploadMode = "evidence" | "records" | "image";
 
 const DEFAULT_TOP_K = 3;
 
@@ -97,8 +98,10 @@ export default function App() {
   const [topK, setTopK] = useState<number>(DEFAULT_TOP_K);
   const [uploadTopK, setUploadTopK] = useState<number>(DEFAULT_TOP_K);
   const [whatIf, setWhatIf] = useState(EMPTY_WHAT_IF);
-  const [uploadMode, setUploadMode] = useState<"evidence" | "records">("records");
+  const [uploadMode, setUploadMode] = useState<UploadMode>("records");
   const [uploadDataset, setUploadDataset] = useState("");
+  const [uploadObjectName, setUploadObjectName] = useState("capsule");
+  const [uploadDefectType, setUploadDefectType] = useState("crack");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadInputKey, setUploadInputKey] = useState(0);
   const [queueView, setQueueView] = useState<QueueView>("runs");
@@ -256,12 +259,18 @@ export default function App() {
       setRunError("请先选择文件");
       return;
     }
+    if (uploadMode === "image" && !uploadObjectName.trim()) {
+      setRunError("图片模式需要填写 MVTec 对象类别");
+      return;
+    }
     try {
       setRunLoadingState("loading");
       const response = await uploadRun({
         file: uploadFile,
         mode: uploadMode,
-        dataset: uploadDataset || null,
+        dataset: uploadMode === "image" ? "mvtec" : uploadDataset || null,
+        object_name: uploadMode === "image" ? uploadObjectName : null,
+        defect_type: uploadMode === "image" ? uploadDefectType : null,
         top_k: uploadTopK,
       });
       setRuns((current) => [response.run, ...current.filter((item) => item.run_id !== response.run.run_id)]);
@@ -394,12 +403,27 @@ export default function App() {
                   key={uploadInputKey}
                   className="input mt-1"
                   type="file"
+                  accept={
+                    uploadMode === "image"
+                      ? ".png,.jpg,.jpeg,.bmp,.tif,.tiff,image/*"
+                      : ".json,.jsonl,.csv,application/json,text/csv"
+                  }
                   onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
                 />
               </label>
               <div>
                 <div className="field-label">输入模式</div>
-                <div className="mt-1 grid grid-cols-2 gap-2">
+                <div className="mt-1 grid grid-cols-3 gap-2">
+                  <button
+                    className={uploadMode === "image" ? "segmented-active" : "segmented"}
+                    onClick={() => {
+                      setUploadMode("image");
+                      setUploadDataset("mvtec");
+                    }}
+                    type="button"
+                  >
+                    图片模式
+                  </button>
                   <button
                     className={uploadMode === "records" ? "segmented-active" : "segmented"}
                     onClick={() => setUploadMode("records")}
@@ -416,12 +440,41 @@ export default function App() {
                   </button>
                 </div>
               </div>
+              {uploadMode === "image" ? (
+                <div className="rounded-md border border-cyan-800/70 bg-cyan-950/30 p-3">
+                  <div className="mb-3 text-xs leading-5 text-cyan-100">
+                    图片模式会调用 MVTec producer 和当前 OpenVINO checkpoint，再进入 KGTracePipeline。
+                    对象类别应与模型 checkpoint 匹配；当前内置 checkpoint 是 capsule。
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block">
+                      <div className="field-label">对象类别</div>
+                      <input
+                        className="input mt-1"
+                        value={uploadObjectName}
+                        onChange={(event) => setUploadObjectName(event.target.value)}
+                        placeholder="capsule"
+                      />
+                    </label>
+                    <label className="block">
+                      <div className="field-label">缺陷类型</div>
+                      <input
+                        className="input mt-1"
+                        value={uploadDefectType}
+                        onChange={(event) => setUploadDefectType(event.target.value)}
+                        placeholder="crack / good / unknown"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
               <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-3">
                 <label className="block">
                   <div className="field-label">数据集覆盖</div>
                   <select
                     className="input mt-1"
                     value={uploadDataset}
+                    disabled={uploadMode === "image"}
                     onChange={(event) => setUploadDataset(event.target.value)}
                   >
                     <option value="">自动识别</option>
@@ -458,6 +511,8 @@ export default function App() {
                     setUploadFile(null);
                     setUploadDataset("");
                     setUploadMode("records");
+                    setUploadObjectName("capsule");
+                    setUploadDefectType("crack");
                     setUploadInputKey((current) => current + 1);
                   }}
                 >

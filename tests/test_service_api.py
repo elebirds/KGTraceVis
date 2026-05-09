@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 from fastapi.testclient import TestClient
 
 from kgtracevis.service import api as service_api
+from kgtracevis.service import runs as service_runs
 from kgtracevis.service.api import app
 from kgtracevis.service.handlers import (
     FeedbackRequest,
@@ -89,6 +91,51 @@ def test_upload_run_route_persists_a_run_manifest(tmp_path: Path, monkeypatch) -
     assert any(item["run_id"] == run_id for item in runs.json())
     assert run_detail.status_code == 200
     assert run_detail.json()["run"]["run_id"] == run_id
+
+
+def test_image_upload_mode_runs_mvtec_producer_path(tmp_path: Path, monkeypatch) -> None:
+    """Image uploads should run the real MVTec record path before KG analysis."""
+
+    class FakeMVTecBackend:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def predict(self, _image_path: Path) -> dict[str, object]:
+            return {
+                "score": 0.93,
+                "confidence": 0.93,
+                "mask": np.array([[0, 1], [0, 1]], dtype=bool),
+            }
+
+    checkpoint = tmp_path / "stfpm_capsule.xml"
+    checkpoint.write_text("<xml />", encoding="utf-8")
+    monkeypatch.setattr(service_runs, "AnomalibMVTecBackend", FakeMVTecBackend)
+    monkeypatch.setattr(
+        service_runs,
+        "_resolve_mvtec_checkpoint",
+        lambda _checkpoint=None: checkpoint,
+    )
+
+    detail = service_runs.create_run_from_upload(
+        "010.png",
+        b"not-read-by-fake-predictor",
+        mode="image",
+        dataset="mvtec",
+        object_name="capsule",
+        defect_type="crack",
+        top_k=2,
+        runs_dir=tmp_path / "web_sessions",
+    )
+
+    assert detail.run.mode == "image"
+    assert detail.run.dataset == "mvtec"
+    assert detail.run.case_count == 1
+    assert detail.evidence is not None
+    assert detail.evidence["dataset"] == "mvtec"
+    assert detail.evidence["object"] == "capsule"
+    assert detail.evidence["anomaly_type"] == "crack"
+    assert detail.analysis is not None
+    assert detail.artifacts["records_path"].endswith("mvtec_image_records.jsonl")
 
 
 def test_what_if_request_clears_stale_observations_and_runs_analysis() -> None:
