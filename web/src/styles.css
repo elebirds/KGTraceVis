@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-950 text-slate-100 antialiased;
+}
+
+.panel {
+  @apply rounded-md border border-slate-800 bg-slate-900/80 shadow-soft;
+}
+
+.panel-title {
+  @apply text-xs font-semibold uppercase tracking-wide text-slate-400;
+}
+
+.field-label {
+  @apply text-xs font-medium uppercase tracking-wide text-slate-400;
+}
+
+.input {
+  @apply w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-teal-500 focus:ring-1 focus:ring-teal-500;
+}
+
+.button {
+  @apply inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-slate-500 hover:bg-slate-800;
+}
+
+.button-primary {
+  @apply inline-flex items-center gap-2 rounded-md bg-teal-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-teal-500;
+}
+
+.button-ghost {
+  @apply inline-flex items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full border border-slate-700 px-2 py-0.5 text-[11px] font-medium text-slate-300;
+}
+
+.badge-accent {
+  @apply border-teal-700 bg-teal-500/10 text-teal-300;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}

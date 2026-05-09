@@ -57,11 +57,13 @@ KGTraceVis supports two usage modes:
    KG construction, evidence validation, noise experiments, path ranking, and
    metric evaluation.
 2. Interactive visual analytics mode:
-   evidence inspection, correction review, path comparison, and human feedback.
+   evidence inspection, correction review, path comparison, and human feedback
+   in the FastAPI + React web system. The web UI also supports uploading
+   producer-record bundles or evidence JSON to run the pipeline and inspect
+   step-by-step outputs.
 
-The interactive mode is intentionally lightweight at first. Streamlit is the v1
-demo target; FastAPI or a custom front end can be added later without rewriting
-the core logic.
+The web system is now the primary interactive shell. Streamlit remains
+available as a lightweight legacy demo for quick inspection.
 
 ## Repository Layout
 
@@ -276,6 +278,27 @@ make examples
 make app
 ```
 
+Start the web API:
+
+```bash
+uv run python scripts/run_web_api.py
+```
+
+Start the React frontend from the `web/` directory:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+The frontend proxies `/api` requests to `http://127.0.0.1:8000`, so keep the
+API process running while using the browser UI.
+
+The upload workflow currently accepts evidence JSON or producer-record
+bundles (`.json`, `.jsonl`, or `.csv`) and writes run artifacts under
+`runs/web_sessions/`.
+
 ## Unified Evidence Schema
 
 Every dataset adapter must output the shared evidence schema. Dataset-specific
@@ -385,7 +408,7 @@ Recommended v0 order:
 10. path ranker
 11. noise injector
 12. metrics
-13. Streamlit demo
+13. Web system / legacy Streamlit demo
 14. dataset adapters
 15. experiments
 
