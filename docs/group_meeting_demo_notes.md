@@ -2,7 +2,7 @@
 
 这是一个基于手工整理 example evidence 和仓库内 CSV KG 的 v0 现场 demo。它的目标是展示 pipeline 的完整性，而不是提供 paper-grade 的数据集覆盖，也不是给出经过验证的工业 root-cause labels。
 
-系统边界需要在演示时说清楚：adapters/manual demo annotations provide observed anomaly evidence only，例如 object、anomaly_type、location、morphology、variables、log_events。当前 canonical input 是 `observations`；top-level `anomaly_type` / `location` / `morphology` 和 `raw_evidence.variables` / `raw_evidence.log_events` 只保留为 legacy compatibility，方便旧 payload 继续跑 demo。example JSON 里的 `kg_analysis` 为空，root cause 也不是输入字段。`KGTracePipeline` computes linking/consistency/corrections/candidate RCA paths at runtime。
+系统边界需要在演示时说清楚：adapters/manual demo annotations provide observed anomaly evidence only。当前唯一 canonical observed-evidence contract 是 `observations`；top-level 字段只描述 evidence envelope 和展示元数据，`raw_evidence` 只保存源数据、模型输出和 provenance。example JSON 里的 `kg_analysis` 为空，root cause 也不是输入字段。`KGTracePipeline` computes linking/consistency/corrections/candidate RCA paths at runtime。
 
 ## Streamlit 演示流程
 
@@ -48,7 +48,7 @@ uv run python scripts/run_experiment_suite.py
 adapter 输出的 evidence JSON。演示时可以强调：
 
 - `data/examples/*.json` 是输入 evidence，`kg_analysis` 初始为空。
-- `observations` 是 KG reasoning 的 canonical observed-evidence contract；legacy top-level fields 只作为兼容旧 JSON 的 fallback。
+- `observations` 是 KG reasoning 的唯一 canonical observed-evidence contract；top-level fields 和 `raw_evidence` 不参与 KG entity linking 合同。
 - `data/kg/*.csv` 是运行时 KG reasoning 使用的知识边。
 - `data/references/*.csv` 是评估或演示边界材料，用来说明哪些 path/correction
   可以被视为 reference，但不是 adapter 偷塞进去的答案。

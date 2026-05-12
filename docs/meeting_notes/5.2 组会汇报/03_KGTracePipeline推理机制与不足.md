@@ -12,7 +12,7 @@ Evidence JSON
 
 实际步骤如下：
 
-1. `link_evidence_entities`：从 observations 和 legacy fields 中抽取 mentions，并链接到 KG 节点。
+1. `link_evidence_entities`：从 observations 中抽取 mentions，并链接到 KG 节点。
 2. `check_consistency`：根据预定义字段关系检查 evidence 内部是否符合 KG 约束。
 3. `generate_correction_candidates`：对未通过的字段关系，从 KG 邻域生成修正候选。
 4. `rank_root_cause_paths`：从 linked anomaly/variable/log_event 节点出发，枚举到 root-cause/fault 类节点的路径并打分。
@@ -33,11 +33,10 @@ human_feedback
 
 ## Entity linking 机制
 
-当前 linker 主要是 deterministic matching baseline（确定性匹配基线）。它从以下字段收集 mentions：
+当前 linker 主要是 deterministic matching baseline（确定性匹配基线）。设计口径上，它从 `observations` 收集 mentions：
 
 - observations 中 facet 属于 object、anomaly_type、location、morphology、variable、log_event 的条目。
-- 如果某类 observation 不存在，则 fallback 到 top-level `object`、`anomaly_type`、`location`、`morphology`。
-- 再 fallback 到 `raw_evidence.variables` 和 `raw_evidence.log_events`。
+- top-level fields 和 `raw_evidence` 只承担 envelope、展示和 provenance 职责，不参与 KG entity linking 合同。
 
 候选由 `KnowledgeGraph.candidates(...)` 返回，当前逻辑保留 top-k candidates、score、match_type、ambiguous 标记和 stable link_id。它会记录低置信或相近候选的 ambiguity，而不是悄悄强选。
 

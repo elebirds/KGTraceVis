@@ -27,16 +27,24 @@ Optional feedback-compatible field:
 
 - `human_feedback`
 
-`observations` is the canonical list of stable evidence items for KG reasoning.
-New dataset adapters and checked-in examples must populate observations for
-observed reasoning facets such as `object`, `anomaly_type`, `location`,
-`morphology`, `variable`, and `log_event`.
+`observations` is the only canonical list of stable observed evidence items for
+KG reasoning. New dataset adapters and checked-in examples must populate
+observations for observed reasoning facets such as `object`, `anomaly_type`,
+`location`, `morphology`, `variable`, and `log_event`.
 
-The legacy top-level fields and `raw_evidence.variables` / `raw_evidence.log_events`
-remain runtime-compatible for demo safety and older payloads, but they are
-compatibility-only. When an observation and a legacy field disagree, linkers and
-downstream KG reasoning should use the observation. Strict validation is
-available through `load_evidence_json(..., require_canonical_observations=True)`.
+Top-level fields describe the evidence envelope and display metadata; they are
+not the KG reasoning contract. `raw_evidence` stores source-specific provenance
+and raw model or dataset details. Strict validation is available through
+`load_evidence_json(..., require_canonical_observations=True)`.
+
+For MVTec-style image uploads, `anomaly_type` must distinguish model output from
+semantic prior. Anomalib-style detectors provide anomaly score, heatmap, mask,
+and geometry; they do not by themselves infer defect names such as `crack` or
+`scratch`. If no reviewed native/operator label is available, set the
+observation name to `unknown` or `visual_anomaly` and carry detector outputs in
+`raw_evidence.extra` plus geometry observations. If a human or dataset folder
+provides a defect name, record its source as native label or human prior
+provenance instead of treating it as detector output.
 
 Each observation item must include:
 

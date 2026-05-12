@@ -70,16 +70,26 @@ WM811K contract:
 - Use `Evidence.dataset == "wafer"`.
 - Identify the specific adapter with `adapter.name == "wm811k"` and metadata
   such as `source_dataset="wm811k"` and `schema_dataset="wafer"`.
-- Put the canonical wafer pattern in `Evidence.anomaly_type` so existing
-  entity-linking and path-ranking source fields work.
-- Optional `spatial_pattern` observations are allowed for UI/metrics, but must
-  not be the only linkable representation.
+- Emit the canonical wafer pattern as an `observations` item with a stable ID,
+  facet, source reference, and raw reference.
+- Optional `spatial_pattern` observations are allowed for UI/metrics, but KG
+  reasoning facets must also be represented in `observations`.
 
 MVTec contract:
 
 - Use `Evidence.dataset == "mvtec"` and `source == "image"`.
-- Convert object/category, defect/anomaly type, mask geometry, detector scores,
-  captions, and heatmap/mask paths into observed evidence.
+- Convert object/category, detector scores, heatmap/mask paths, mask geometry,
+  and reviewed or source-attached semantic labels into observed evidence.
+- Treat Anomalib/PatchCore/STFPM-style MVTec backends as anomaly
+  detectors/localizers. They provide score, normal-vs-anomalous label when
+  available, anomaly map, mask, and geometry; they do not inherently infer
+  semantic defect classes such as `crack` or `scratch`.
+- Treat MVTec folder labels, DS-MVTec captions, web-upload `defect_type`, or
+  operator-supplied labels as native/source labels or human priors with explicit
+  provenance. Do not present them as model-inferred defect types.
+- For raw image uploads without a reviewed defect label, emit
+  `anomaly_type="unknown"` or `anomaly_type="visual_anomaly"` and let KG
+  reasoning use object, location, morphology, severity, and detector outputs.
 - MVTec root-cause paths are curated plausible references unless separately
   reviewed; the adapter never emits them.
 
@@ -102,8 +112,8 @@ kg_analysis
 | Record contains root-cause keys at top level | Adapter filters them out |
 | Record contains root-cause keys nested under `extra` | Adapter recursively filters them out |
 | WM811K record has `dataset="wafer"` and `adapter="wm811k"` | Batch dispatcher uses WM811K adapter |
-| WM811K record omits explicit location/morphology but has descriptors | Adapter derives deterministic fallback fields |
-| MVTec record omits explicit location/morphology but has `mask_stats` | Adapter derives deterministic fallback fields |
+| WM811K record omits explicit location/morphology but has descriptors | Adapter derives deterministic observation items |
+| MVTec record omits explicit location/morphology but has `mask_stats` | Adapter derives deterministic observation items |
 | Producer/checkpoint/model dependency is unavailable | Evidence adapter tests still run |
 | Adapter would need verified RCA to fill a field | Leave it out; KGTracePipeline computes candidate paths later |
 
@@ -160,7 +170,7 @@ Adapter tests must assert:
 - observations have stable IDs and source/raw provenance,
 - root-cause/path-ranking keys are removed recursively,
 - WM811K remains `dataset="wafer"` while identifying `adapter.name="wm811k"`,
-- deterministic fallback fields are produced from mask or wafer-map descriptors,
+- deterministic observation items are produced from mask or wafer-map descriptors,
 - batch dispatch routes explicit WM811K wafer records to the WM811K adapter.
 
 Run at minimum:
@@ -301,9 +311,12 @@ Producer layer:
 MVTec producer records:
 
 - Use `dataset="mvtec"`.
-- Include image path, object/category, defect label when available, model
-  score/confidence, generated heatmap or mask path when available, mask stats,
-  and detector metadata.
+- Include image path, object/category, model score/confidence, generated heatmap
+  or mask path when available, mask stats, detector metadata, and native/source
+  defect label only when that label is actually available.
+- Do not require a semantic `defect_type` for raw image inference. A future
+  defect classifier or VLM candidate producer must be modeled as a separate
+  semantic producer with confidence and reviewable provenance.
 - Optional Anomalib backends are runtime-only imports; tests must not require
   Anomalib or checkpoints.
 

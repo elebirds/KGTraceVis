@@ -68,16 +68,15 @@ kg_analysis
 
 字段边界：
 
-- `observations`：KG reasoning 的 canonical observed-evidence contract。adapter/manual annotation 应为 object、anomaly_type、location、morphology、variable、log_event 等可推理 facet 生成稳定 observation item。
+- `observations`：KG reasoning 的唯一 canonical observed-evidence contract。adapter/manual annotation 应为 object、anomaly_type、location、morphology、variable、log_event 等可推理 facet 生成稳定 observation item。
 - `raw_evidence`：保存 dataset-specific 内容，例如 image region、mask/heatmap path、variables、variable_contributions、log_events、caption、source row、extra metadata。
 - `normalized_evidence`：保存 pipeline 运行后的规范化字段或 what-if 后的候选规范化结果；初始可以为空。
 - `kg_analysis`：由 `KGTracePipeline` 运行时填充；adapter/manual annotation 不应预置 top-k paths 或 root cause answer。
 - `human_feedback`：可选；记录 correction、path、entity linking、KG edge 的审阅结果。
 
-兼容边界：顶层 `object` / `anomaly_type` / `location` / `morphology` 以及
-`raw_evidence.variables` / `raw_evidence.log_events` 暂时保留，用于旧 payload
-和现场 demo 安全 fallback；新 adapter、example 和评估输入应以 `observations`
-为准。当 observation 与 legacy field 冲突时，KG linking 应优先使用 observation。
+边界：顶层字段只描述 evidence envelope 和展示元数据，不作为 KG reasoning 输入合同。
+`raw_evidence` 只保存源数据、模型输出和 provenance。新
+adapter、example 和评估输入必须以 `observations` 为准。
 
 建议补充的 evidence metadata：
 

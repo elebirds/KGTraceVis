@@ -23,11 +23,12 @@ Required or strongly recommended fields:
 
 - `case_id`
 - `object` or `category`
-- `defect_type`, `anomaly_type`, or `label`
 - `confidence`, `score`, `pred_score`, or `detector_score`
 
 Optional deterministic evidence fields:
 
+- `defect_type`, `anomaly_type`, or `label` when it is a native dataset label,
+  reviewed operator label, or separately produced semantic candidate
 - `location`, `morphology`, `severity`
 - `mask_stats` or `geometry`
 - `bbox`, `centroid`, `area`, `area_ratio`, `eccentricity`, `component_count`
@@ -43,6 +44,21 @@ adapter.
 The local producer CLI populates these fields from optional Anomalib exported
 inferencers selected with `anomalib-torch` or `anomalib-openvino`. The Anomalib
 dependency is runtime-only for those producer backends.
+
+Anomalib MVTec backends are used as anomaly detectors/localizers. They are
+expected to provide score/confidence, normal-vs-anomalous label when available,
+anomaly maps, masks, and mask-derived geometry. They are not expected to infer
+semantic defect classes such as `crack` or `scratch`. If a MVTec directory or
+web upload supplies a `defect_type`, treat it as native label or human prior
+provenance. For raw image uploads without such a reviewed label, use
+`anomaly_type="unknown"` or `anomaly_type="visual_anomaly"` and let downstream
+KG reasoning rely on object, location, morphology, severity, and detector
+provenance.
+
+If a future component predicts semantic defect type, model it as a separate
+classifier or weak semantic candidate producer. Its output should include
+candidate labels, confidence, source metadata, and review status; it must not be
+mixed into the anomaly detector output without provenance.
 
 ## WM811K Records
 

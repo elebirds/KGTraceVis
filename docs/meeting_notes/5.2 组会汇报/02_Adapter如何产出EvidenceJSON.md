@@ -27,7 +27,7 @@ kg_analysis.top_k_paths
 
 ## 统一输出合同
 
-每个 adapter 输出一个统一 Evidence JSON。当前建议以 `observations` 作为 canonical observed-evidence contract（规范观测证据合同），同时保留 legacy top-level fields 供旧 payload 和 demo fallback 使用。
+每个 adapter 输出一个统一 Evidence JSON。`observations` 是唯一 canonical observed-evidence contract（规范观测证据合同）。top-level fields 只描述 evidence envelope 和展示元数据，`raw_evidence` 只保存源数据、模型输出和 provenance。
 
 每个 observation 尽量包含：
 

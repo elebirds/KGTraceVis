@@ -43,9 +43,25 @@ data/external/mvtec/
 ```
 
 It calls a predictor once per selected image and emits records with
-`dataset="mvtec"`, object/category, native defect label, detector score,
-confidence, generated heatmap or mask paths when arrays are produced, mask
-geometry stats, source path metadata, and model metadata.
+`dataset="mvtec"`, object/category, detector score, confidence, generated
+heatmap or mask paths when arrays are produced, mask geometry stats, source path
+metadata, and model metadata. If the source tree has a native defect folder such
+as `crack` or `scratch`, that value is recorded as source label provenance, not
+as a model-inferred defect class.
+
+MVTec/Anomalib producer scope is anomaly detection and localization:
+
+- anomaly score or confidence,
+- normal/anomalous prediction label when the backend provides it,
+- anomaly heatmap and predicted mask,
+- deterministic geometry derived from the mask.
+
+It does not directly solve semantic defect-type classification. For user uploads
+or flat image inputs without a reviewed native label, records should use an
+unknown or generic visual anomaly type and preserve any operator-supplied label
+as optional human prior metadata. A later defect-type classifier may be added as
+a separate producer that emits reviewable semantic candidates, but it should not
+be conflated with the anomaly detector.
 
 Real MVTec command:
 
