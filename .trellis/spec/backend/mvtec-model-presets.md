@@ -67,6 +67,47 @@ GET /api/runs/mvtec-model-presets
   `model_backend`, and `checkpoint_path`.
 - `defect_type` remains optional human/source prior. Do not present it as a
   model-inferred semantic defect class.
+- Official Amazon PatchCore on macOS may require the runtime environment
+  `KMP_DUPLICATE_LIB_OK=TRUE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+  VECLIB_MAXIMUM_THREADS=1` when FAISS and PyTorch share OpenMP runtimes.
+- Official Amazon PatchCore `score` is an unbounded distance-like value. Keep it
+  as raw `score`, clamp producer `confidence` to `[0, 1]`, and do not interpret
+  a fixed `threshold=0.5` mask as reliable localization without calibration.
+
+### Official Amazon PatchCore Smoke Baseline
+
+The local DS-MVTec bottle smoke with official
+`IM320_WR50_L2-3_P001_D1024-1024_PS-3_AN-1/models/mvtec_bottle` artifacts and
+pretrained WR50 verified engineering stability, not paper-grade detection
+quality:
+
+```text
+source: /Users/hhm/Downloads/Defect_Spectrum/DS-MVTec/bottle/image
+run: runs/amazon_patchcore_stability_real_wr50_all_bottle
+attempted: 83
+producer_ok: 83
+producer_failed: 0
+adapter_ok: true
+adapter_case_count: 83
+mean_elapsed_per_image: ~0.276s on local CPU with OpenMP threads pinned to 1
+score_range: 1.87 - 10.60
+good_score_mean: 2.30
+broken_small_score_mean: 7.72
+broken_large_score_mean: 7.90
+contamination_score_mean: 6.39
+mask_area_ratio_range: 0.943 - 0.982
+```
+
+Interpretation:
+
+- The backend, producer record writer, Evidence adapter, and KGTracePipeline are
+  stable for this object-level smoke.
+- Scores separate `good` from most defect samples well enough for anomaly
+  intensity evidence.
+- The generated masks cover most of the image for both `good` and defect
+  samples under the current fixed threshold, so mask-derived
+  location/morphology should be treated as low-trust until anomaly-map
+  normalization or threshold calibration is added.
 
 ### 4. Validation & Error Matrix
 
