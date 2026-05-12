@@ -53,9 +53,9 @@ GET /api/runs/mvtec-model-presets
 - `stfpm` resolves from `KGTRACEVIS_MVTEC_STFPM_CHECKPOINT` or the checked-in
   OpenVINO checkpoint path.
 - `patchcore` resolves from `KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT` or
-  `data/external/checkpoints/mvtec_patchcore.pt`.
+  `runs/real_model_pipeline/assets/mvtec/checkpoints/mvtec_patchcore.ckpt`.
 - `efficientad` resolves from `KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT` or
-  `data/external/checkpoints/mvtec_efficientad.pt`.
+  `runs/real_model_pipeline/assets/mvtec/checkpoints/mvtec_efficientad.pt`.
 - `.xml` checkpoints use `anomalib-openvino`; `.pt`, `.pth`, and `.ckpt`
   checkpoints use `anomalib-torch`.
 - Image upload run summaries and artifacts must record `model_preset`,
@@ -128,4 +128,195 @@ predictor = AnomalibMVTecBackend(
     backend=selection.backend,
     checkpoint=selection.checkpoint_path,
 )
+```
+
+## Scenario: DS-MVTec Target-Domain PatchCore Runs
+
+### 1. Scope / Trigger
+
+- Trigger: adding or changing scripts/helpers that fit PatchCore on a local
+  DS-MVTec object and feed the resulting anomaly evidence into the MVTec record
+  producer and KGTracePipeline.
+- Applies to `src/kgtracevis/experiments/mvtec_patchcore.py`,
+  `scripts/fit_mvtec_patchcore.py`, and `scripts/run_mvtec_patchcore_batch.py`.
+- Reason: the reusable experiment path must distinguish model evidence from
+  source folder labels, and must preserve enough quality metadata to decide
+  whether mask evidence is trustworthy.
+
+### 2. Signatures
+
+Single-object command:
+
+```text
+python scripts/fit_mvtec_patchcore.py
+  --object-dir PATH
+  [--output-root PATH]
+  [--name TEXT]
+  [--normal-label LABEL]
+  [--eval-label LABEL ...]
+  [--fit-label LABEL ...]
+  [--max-eval-per-label INT>=1]
+  [--top-k INT>=1]
+  [--device cpu|mps|gpu|auto]
+  [--overwrite]
+```
+
+Batch command:
+
+```text
+python scripts/run_mvtec_patchcore_batch.py
+  --dataset-root PATH
+  [--output-root PATH]
+  [--object NAME ...]
+  [--max-objects INT>=1]
+  [--max-eval-per-label INT>=1]
+  [--top-k INT>=1]
+  [--device cpu|mps|gpu|auto]
+  [--normal-label LABEL]
+  [--overwrite]
+```
+
+Reusable helper:
+
+```python
+@dataclass(frozen=True)
+class PatchCoreObjectRunConfig:
+    object_dir: Path
+    output_root: Path
+    name: str | None = None
+    normal_label: str = "good"
+    fit_labels: Sequence[str] | None = None
+    eval_labels: Sequence[str] | None = None
+    max_eval_per_label: int = 1
+    top_k: int = 5
+    device: str = "cpu"
+    overwrite: bool = False
+
+def run_patchcore_object(config: PatchCoreObjectRunConfig) -> dict[str, Any]:
+    ...
+```
+
+### 3. Contracts
+
+- `--dataset-root` may point either at `DS-MVTec/` or at its parent directory.
+- Valid object directories must contain `image/<normal_label>/`.
+- If `--object` is omitted, object discovery sorts valid object directories by
+  name and skips incomplete non-object entries such as metadata files.
+- PatchCore fitting uses `image/<normal_label>` as normal data and selected
+  `image/<defect>` directories plus matching `mask/<defect>` directories for
+  threshold calibration.
+- The generated eval root is a symlinked or copied MVTec-like layout under the
+  run directory: `<input_root>/<object>/test/<label>/...` and
+  `<input_root>/<object>/ground_truth/<label>/...`.
+- Source paths used for symlinks must be resolved before linking so relative
+  `object_dir` inputs do not create broken links.
+- Object summaries must include: `checkpoint`, `records_path`,
+  `adapter_summary`, `adapter_table`, `record_count`, selected fit/eval labels,
+  and `sanity`.
+- `sanity` must include detection counts for good and defect records, score
+  range, predicted mask-area range, and optional mean IoU when `mask_path` and
+  `gt_mask_path` are available.
+- Batch outputs must include `batch_summary.json` and `batch_summary.csv` with
+  one row per object, including status, artifact paths, quality metrics, and
+  error text for failures.
+- Folder labels remain source annotations. PatchCore outputs only anomaly
+  score, anomaly/normal prediction, heatmap, and localization mask evidence.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+| --- | --- |
+| `object_dir` does not exist | raise `FileNotFoundError` before fitting |
+| `max_eval_per_label < 1` or `top_k < 1` | raise `ValueError` |
+| Missing `image/<normal_label>` | raise `FileNotFoundError` |
+| Requested object missing under dataset root | raise `FileNotFoundError` during discovery |
+| Requested fit/eval label directory missing | raise `FileNotFoundError` |
+| PatchCore fit completes without a checkpoint | raise `FileNotFoundError` |
+| Existing object summary is valid and `--overwrite` is absent | record `status=skipped_existing` |
+| Existing object summary is unreadable/corrupt | record `status=failed`, preserve error text, continue batch |
+| One object fails during batch fit/eval | record `status=failed`, preserve error text, continue remaining objects |
+| Prediction label text is `abnormal` | treat as anomalous, not normal |
+
+### 5. Good/Base/Bad Cases
+
+Good:
+
+```bash
+uv run python scripts/run_mvtec_patchcore_batch.py \
+  --dataset-root /path/to/Defect_Spectrum/DS-MVTec \
+  --output-root runs/patchcore_defect_spectrum/batch_smoke \
+  --object bottle \
+  --max-eval-per-label 1 \
+  --device cpu \
+  --overwrite
+```
+
+Base:
+
+```python
+summary = run_patchcore_object(
+    PatchCoreObjectRunConfig(
+        object_dir=Path("DS-MVTec/bottle"),
+        output_root=Path("runs/patchcore/bottle"),
+        max_eval_per_label=1,
+        device="cpu",
+        overwrite=True,
+    )
+)
+assert summary["claim_boundary"].startswith("PatchCore outputs")
+```
+
+Bad:
+
+```python
+# Do not count substring "normal" inside "abnormal" as a normal prediction.
+summary = summarize_records([
+    {"defect_type": "crack", "detector": {"raw_pred_label": "abnormal"}}
+])
+assert summary["defect_pred_anomalous_count"] == 1
+```
+
+### 6. Tests Required
+
+- Object discovery accepts both `DS-MVTec/` and its parent directory.
+- Eval-root construction works for relative `object_dir` inputs by producing
+  readable symlink/copy targets.
+- Summary aggregation counts good-vs-defect predictions and score/mask ranges.
+- IoU aggregation is tested with tiny synthetic mask files.
+- Prediction parsing treats `abnormal`/`anomalous` before checking `normal`.
+- Batch JSON/CSV writing preserves failed-object rows and error text.
+- Do not put Anomalib training in unit tests; real PatchCore fit/eval belongs
+  in explicit smoke commands under `runs/`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+# Broken when object_dir is relative and the destination is nested in runs/.
+destination.symlink_to(image_path)
+```
+
+#### Correct
+
+```python
+destination.symlink_to(image_path.resolve())
+```
+
+#### Wrong
+
+```python
+if "normal" in label.lower():
+    return False
+if "abnormal" in label.lower():
+    return True
+```
+
+#### Correct
+
+```python
+if any(token in label.lower() for token in ("true", "anomal", "abnormal", "defect")):
+    return True
+if any(token in label.lower() for token in ("false", "normal", "good")):
+    return False
 ```
