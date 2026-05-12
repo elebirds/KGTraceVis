@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify reusable logic is under src and script stays thin."}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "Verify producer and adapter contracts remain intact."}
+{"file": ".trellis/spec/backend/mvtec-model-presets.md", "reason": "Verify calibrated Amazon PatchCore command respects model preset contracts."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify CLI output conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify test/check expectations."}

@@ -188,6 +188,10 @@ Interpretation:
   images predicted anomalous, 14/15 sampled good images predicted normal, and
   mean mask area ratio around 0.058. This is a pragmatic evidence-generation
   calibration, not an unsupervised MVTec benchmark.
+- `scripts/run_mvtec_calibrated_pipeline.py` is the one-command path for paper
+  and demo artifacts. It builds a bounded DS-MVTec input subset, applies the
+  calibrated Amazon PatchCore producer path, writes records, and runs the
+  Evidence adapter plus `KGTracePipeline` summary/table outputs.
 
 ### 4. Validation & Error Matrix
 

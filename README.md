@@ -376,6 +376,24 @@ uv run python scripts/calibrate_mvtec_patchcore_thresholds.py \
 These thresholds are explicitly supervised calibration artifacts for usable
 KGTraceVis evidence. They are not unsupervised MVTec benchmark results.
 
+To run the calibrated records through the full Evidence adapter and
+`KGTracePipeline` path in one command:
+
+```bash
+uv run python scripts/run_mvtec_calibrated_pipeline.py \
+  --dataset-root /path/to/Defect_Spectrum \
+  --artifact-root /path/to/patchcore-inspection/models/IM320_WR50_L2-3_P001_D1024-1024_PS-3_AN-1/models \
+  --threshold-config configs/mvtec_patchcore_thresholds.json \
+  --output-root runs/mvtec_calibrated_pipeline \
+  --max-good 1 \
+  --max-defect-per-label 1 \
+  --device cpu \
+  --overwrite
+```
+
+This writes producer records, generated Evidence JSON, the KGTrace summary, and
+a table-ready CSV under the output root.
+
 For Web/API image uploads, set the PatchCore checkpoint env var to the common
 root instead of one hard-coded object directory:
 

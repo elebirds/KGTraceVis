@@ -8,13 +8,19 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from kgtracevis.experiments.mvtec_calibrated_pipeline import (
+    MVTecCalibratedPipelineConfig,
+    run_mvtec_calibrated_pipeline,
+)
 from kgtracevis.experiments.mvtec_patchcore import (
     batch_row_from_object_summary,
+    build_ds_mvtec_subset_input,
     build_mvtec_like_eval_root,
     discover_ds_mvtec_object_dirs,
     summarize_records,
     write_batch_outputs,
 )
+from kgtracevis.producers.common import MVTecPrediction
 
 
 def test_discover_ds_mvtec_object_dirs_filters_valid_objects(tmp_path: Path) -> None:
@@ -54,6 +60,75 @@ def test_build_mvtec_like_eval_root_uses_valid_links_for_relative_inputs(
     assert (
         input_root / "capsule" / "ground_truth" / "crack" / "001_mask.png"
     ).read_bytes() == b"mask"
+
+
+def test_build_ds_mvtec_subset_input_samples_good_and_defects(tmp_path: Path) -> None:
+    """Shared DS-MVTec subset builder should create a standard MVTec-like input tree."""
+    root = tmp_path / "Defect_Spectrum" / "DS-MVTec"
+    _touch(root / "bottle" / "image" / "good" / "000.png", content=b"good")
+    _touch(root / "bottle" / "image" / "crack" / "001.png", content=b"defect")
+    _touch(root / "bottle" / "mask" / "crack" / "001_mask.png", content=b"mask")
+
+    input_root, manifest = build_ds_mvtec_subset_input(
+        dataset_root=tmp_path / "Defect_Spectrum",
+        output_root=tmp_path / "pipeline_input",
+        max_good=1,
+        max_defect_per_label=1,
+    )
+
+    assert (input_root / "bottle" / "test" / "good" / "000.png").read_bytes() == b"good"
+    assert (input_root / "bottle" / "test" / "crack" / "001.png").read_bytes() == b"defect"
+    assert (
+        input_root / "bottle" / "ground_truth" / "crack" / "001_mask.png"
+    ).read_bytes() == b"mask"
+    assert [row["label"] for row in manifest] == ["good", "crack"]
+
+
+def test_run_mvtec_calibrated_pipeline_writes_records_and_adapter_outputs(
+    tmp_path: Path,
+) -> None:
+    """The one-command pipeline should connect producer records to KGTracePipeline."""
+    root = tmp_path / "Defect_Spectrum" / "DS-MVTec"
+    _touch(root / "bottle" / "image" / "good" / "000.png", content=b"good")
+    _touch(root / "bottle" / "image" / "scratch" / "001.png", content=b"defect")
+    threshold_config = tmp_path / "thresholds.json"
+    threshold_config.write_text(
+        json.dumps(
+            {
+                "threshold_source": "test_supervised",
+                "uses_ground_truth": True,
+                "objects": {
+                    "bottle": {
+                        "score_threshold": 0.8,
+                        "map_threshold": 0.8,
+                        "min_area_ratio": 0.01,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    output = run_mvtec_calibrated_pipeline(
+        MVTecCalibratedPipelineConfig(
+            dataset_root=tmp_path / "Defect_Spectrum",
+            artifact_root=tmp_path / "artifacts",
+            threshold_config=threshold_config,
+            output_root=tmp_path / "pipeline",
+            max_good=1,
+            max_defect_per_label=1,
+            overwrite=True,
+        ),
+        predictor=_FakeCalibratedPredictor(),
+    )
+
+    assert output.summary["record_count"] == 2
+    assert output.summary["adapter_case_count"] == 2
+    assert output.records_path.is_file()
+    assert output.adapter_summary_path.is_file()
+    assert output.adapter_table_path.is_file()
+    assert output.summary["sanity"]["defect_pred_anomalous_count"] == 1
+    assert output.summary["sanity"]["good_pred_normal_count"] == 1
 
 
 def test_summarize_records_reports_detection_ranges_and_iou(tmp_path: Path) -> None:
@@ -110,6 +185,24 @@ def test_summarize_records_treats_abnormal_label_as_anomalous() -> None:
     assert summary["defect_pred_normal_count"] == 0
 
 
+def test_summarize_records_prefers_calibrated_top_level_prediction() -> None:
+    """Calibrated producer labels should drive pipeline sanity summaries."""
+    summary = summarize_records(
+        [
+            {
+                "case_id": "mvtec_bottle_test_good_001",
+                "defect_type": "good",
+                "score": 2.0,
+                "pred_label": "normal",
+                "detector": {"raw_pred_label": None, "pred_label": "normal"},
+            }
+        ]
+    )
+
+    assert summary["good_pred_normal_count"] == 1
+    assert summary["good_pred_anomalous_count"] == 0
+
+
 def test_batch_outputs_include_failed_object_rows(tmp_path: Path) -> None:
     """Batch summary JSON and CSV should preserve per-object status and errors."""
     object_summary = {
@@ -157,3 +250,17 @@ def test_batch_outputs_include_failed_object_rows(tmp_path: Path) -> None:
 def _touch(path: Path, *, content: bytes = b"") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
+
+
+class _FakeCalibratedPredictor:
+    """Deterministic MVTec predictor for calibrated pipeline tests."""
+
+    def predict(self, image_path: Path) -> MVTecPrediction:
+        label = image_path.parent.name
+        score = 0.9 if label != "good" else 0.2
+        return {
+            "score": score,
+            "confidence": score,
+            "anomaly_map": [[0.1, score], [0.2, score]],
+            "metadata": {"fixture": "calibrated_pipeline"},
+        }

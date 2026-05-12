@@ -253,6 +253,84 @@ def build_mvtec_like_eval_root(
     return input_root
 
 
+def build_ds_mvtec_subset_input(
+    *,
+    dataset_root: str | Path,
+    output_root: str | Path,
+    object_names: Sequence[str] | None = None,
+    max_objects: int | None = None,
+    max_good: int = 1,
+    max_defect_per_label: int = 1,
+    normal_label: str = "good",
+) -> tuple[Path, list[dict[str, Any]]]:
+    """Create a bounded MVTec-like input tree from DS-MVTec object folders."""
+    if max_good < 1:
+        raise ValueError("max_good must be >= 1")
+    if max_defect_per_label < 1:
+        raise ValueError("max_defect_per_label must be >= 1")
+
+    output_path = Path(output_root)
+    if output_path.exists():
+        shutil.rmtree(output_path)
+
+    object_dirs = discover_ds_mvtec_object_dirs(
+        dataset_root,
+        object_names=object_names,
+        max_objects=max_objects,
+        normal_label=normal_label,
+    )
+    input_root = output_path / "input_root"
+    manifest: list[dict[str, Any]] = []
+    for object_dir in object_dirs:
+        image_root = object_dir / "image"
+        mask_root = object_dir / "mask"
+        for image_path in image_files(image_root / normal_label)[:max_good]:
+            destination = input_root / object_dir.name / "test" / normal_label / image_path.name
+            symlink_or_copy(image_path, destination)
+            manifest.append(
+                {
+                    "object": object_dir.name,
+                    "label": normal_label,
+                    "image_path": str(image_path),
+                    "linked_path": str(destination),
+                }
+            )
+
+        defect_dirs = sorted(
+            path for path in image_root.iterdir() if path.is_dir() and path.name != normal_label
+        )
+        for defect_dir in defect_dirs:
+            for image_path in image_files(defect_dir)[:max_defect_per_label]:
+                destination = (
+                    input_root / object_dir.name / "test" / defect_dir.name / image_path.name
+                )
+                symlink_or_copy(image_path, destination)
+                row = {
+                    "object": object_dir.name,
+                    "label": defect_dir.name,
+                    "image_path": str(image_path),
+                    "linked_path": str(destination),
+                }
+                mask_path = mask_for_image(mask_root / defect_dir.name, image_path)
+                if mask_path is not None:
+                    mask_destination = (
+                        input_root
+                        / object_dir.name
+                        / "ground_truth"
+                        / defect_dir.name
+                        / mask_path.name
+                    )
+                    symlink_or_copy(mask_path, mask_destination)
+                    row["mask_path"] = str(mask_path)
+                    row["linked_mask_path"] = str(mask_destination)
+                manifest.append(row)
+
+    manifest_path = output_path / "manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return input_root, manifest
+
+
 def selected_labels(
     object_dir: Path,
     *,
@@ -534,10 +612,12 @@ def _binary_iou(predicted: np.ndarray, target: np.ndarray) -> float:
 
 
 def _prediction_label(record: Mapping[str, Any]) -> Any:
+    if record.get("pred_label") is not None:
+        return record["pred_label"]
     raw_detector = record.get("detector")
     detector: Mapping[str, Any] = raw_detector if isinstance(raw_detector, Mapping) else {}
     for key in ("raw_pred_label", "label", "pred_label"):
-        if key in detector:
+        if key in detector and detector[key] is not None:
             return detector[key]
     return None
 

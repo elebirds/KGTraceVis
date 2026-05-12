@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Reusable experiment logic must live under src/kgtracevis and scripts remain clients."}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "Pipeline writes producer records and runs dataset adapter/KGTrace evidence flow."}
+{"file": ".trellis/spec/backend/mvtec-model-presets.md", "reason": "Amazon PatchCore router and calibrated MVTec artifact contracts are central to the task."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "New CLI output should follow script logging conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Tests and quality checks must match backend expectations."}
