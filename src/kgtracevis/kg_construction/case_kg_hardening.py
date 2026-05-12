@@ -75,6 +75,21 @@ BEFORE_AFTER_COLUMNS = (
     "overlay_consistency_score",
     "claim_boundary",
 )
+EDGE_REVIEW_COLUMNS = (
+    "edge_id",
+    "scenario",
+    "layer",
+    "head",
+    "relation",
+    "tail",
+    "source",
+    "confidence",
+    "review_status",
+    "review_priority",
+    "suggested_action",
+    "evidence",
+    "claim_boundary",
+)
 
 
 @dataclass(frozen=True)
@@ -138,6 +153,8 @@ class CandidateKGOutput:
     edges_path: Path
     summary_path: Path
     validation_path: Path
+    review_queue_path: Path
+    coverage_report_path: Path
     before_after_path: Path
     explanations_path: Path
     node_count: int
@@ -550,6 +567,8 @@ def write_candidate_kg_artifacts(
     edges_path = destination / "edges_candidate.csv"
     summary_path = destination / "kg_generation_summary.json"
     validation_path = destination / "validation_report.json"
+    review_queue_path = destination / "edge_review_queue.csv"
+    coverage_report_path = destination / "coverage_report.json"
     before_after_path = destination / "selected_case_reasoning_before_after.csv"
     explanations_path = destination / "top_case_explanations.md"
     output_paths = [
@@ -557,6 +576,8 @@ def write_candidate_kg_artifacts(
         edges_path,
         summary_path,
         validation_path,
+        review_queue_path,
+        coverage_report_path,
         before_after_path,
         explanations_path,
     ]
@@ -569,6 +590,7 @@ def write_candidate_kg_artifacts(
     )
     export_nodes_csv(nodes, nodes_path)
     export_edges_csv(edges, edges_path)
+    write_edge_review_queue(edges, review_queue_path)
 
     validation = run_kg_qa(
         [*DEFAULT_NODE_PATHS, nodes_path],
@@ -582,6 +604,8 @@ def write_candidate_kg_artifacts(
             "nodes_candidate": str(nodes_path),
             "edges_candidate": str(edges_path),
             "validation_report": str(validation_path),
+            "edge_review_queue": str(review_queue_path),
+            "coverage_report": str(coverage_report_path),
             "before_after": str(before_after_path),
             "top_case_explanations": str(explanations_path),
         },
@@ -607,12 +631,21 @@ def write_candidate_kg_artifacts(
         top_case_sections.extend(_comparison_markdown_section(label, comparison[:8]))
     _write_dict_csv(before_after_rows, before_after_path, BEFORE_AFTER_COLUMNS)
     explanations_path.write_text("\n".join(top_case_sections), encoding="utf-8")
+    coverage_report = build_coverage_report(
+        nodes,
+        edges,
+        before_after_rows=before_after_rows,
+        validation_summary=validation.summary(),
+    )
+    coverage_report_path.write_text(json.dumps(coverage_report, indent=2), encoding="utf-8")
 
     return CandidateKGOutput(
         nodes_path=nodes_path,
         edges_path=edges_path,
         summary_path=summary_path,
         validation_path=validation_path,
+        review_queue_path=review_queue_path,
+        coverage_report_path=coverage_report_path,
         before_after_path=before_after_path,
         explanations_path=explanations_path,
         node_count=len(nodes),
@@ -652,6 +685,59 @@ def run_before_after_comparison(
     return _compare_pipeline_outputs(base, overlay)
 
 
+def write_edge_review_queue(edges: Sequence[KGEdge], output_path: str | Path) -> Path:
+    """Write a human-review queue for candidate KG edges."""
+    rows = [_edge_review_row(edge) for edge in sorted(edges, key=lambda item: item.edge_id)]
+    _write_dict_csv(rows, Path(output_path), EDGE_REVIEW_COLUMNS)
+    return Path(output_path)
+
+
+def build_coverage_report(
+    nodes: Sequence[KGNode],
+    edges: Sequence[KGEdge],
+    *,
+    before_after_rows: Sequence[Mapping[str, object]],
+    validation_summary: Mapping[str, object],
+) -> dict[str, object]:
+    """Build compact coverage metrics for candidate KG review."""
+    layer_counts: dict[str, int] = defaultdict(int)
+    edge_counts_by_scenario: dict[str, int] = defaultdict(int)
+    node_counts_by_scenario: dict[str, int] = defaultdict(int)
+    review_counts: dict[str, int] = defaultdict(int)
+    for node in nodes:
+        node_counts_by_scenario[node.scenario] += 1
+    for edge in edges:
+        layer_counts[_edge_layer(edge)] += 1
+        edge_counts_by_scenario[edge.scenario] += 1
+        review_counts[edge.review_status] += 1
+
+    positive_path_delta = sum(
+        1 for row in before_after_rows if _int(row.get("path_count_delta")) > 0
+    )
+    changed_target_count = sum(
+        1
+        for row in before_after_rows
+        if _text(row.get("base_top_target_entity_id"))
+        != _text(row.get("overlay_top_target_entity_id"))
+    )
+    return {
+        "artifact_type": "coverage_first_kg_coverage_report_v0",
+        "artifact_scope": "generated_reproducibility_output",
+        "claim_boundary": CLAIM_BOUNDARY,
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "node_counts_by_scenario": dict(sorted(node_counts_by_scenario.items())),
+        "edge_counts_by_scenario": dict(sorted(edge_counts_by_scenario.items())),
+        "edge_counts_by_layer": dict(sorted(layer_counts.items())),
+        "review_status_counts": dict(sorted(review_counts.items())),
+        "wm811k_pattern_coverage": [spec.pattern for spec in WAFER_PATTERNS],
+        "before_after_case_count": len(before_after_rows),
+        "positive_path_delta_case_count": positive_path_delta,
+        "changed_top_target_case_count": changed_target_count,
+        "validation_summary": dict(validation_summary),
+    }
+
+
 def validate_candidate_claim_boundaries(edges: Iterable[KGEdge]) -> list[str]:
     """Return claim-boundary violations for candidate KG edges."""
     findings: list[str] = []
@@ -663,6 +749,56 @@ def validate_candidate_claim_boundaries(edges: Iterable[KGEdge]) -> list[str]:
         if edge.relation == "CAUSED_BY" and edge.review_status != "reviewed":
             findings.append(f"{edge.edge_id} uses CAUSED_BY without reviewed status")
     return findings
+
+
+def _edge_review_row(edge: KGEdge) -> dict[str, object]:
+    priority = _review_priority(edge)
+    return {
+        "edge_id": edge.edge_id,
+        "scenario": edge.scenario,
+        "layer": _edge_layer(edge),
+        "head": edge.head,
+        "relation": edge.relation,
+        "tail": edge.tail,
+        "source": edge.source,
+        "confidence": round(edge.confidence, 6),
+        "review_status": edge.review_status,
+        "review_priority": priority,
+        "suggested_action": _suggested_review_action(edge, priority),
+        "evidence": edge.evidence,
+        "claim_boundary": CLAIM_BOUNDARY,
+    }
+
+
+def _edge_layer(edge: KGEdge) -> str:
+    if edge.relation == "HAS_ANOMALY":
+        return "observed_evidence"
+    if edge.relation in {"HAS_MORPHOLOGY", "OCCURS_ON", "HAS_LOCATION"}:
+        return "semantic_constraint"
+    return "candidate_mechanism"
+
+
+def _review_priority(edge: KGEdge) -> str:
+    if edge.review_status == "reviewed":
+        return "low"
+    layer = _edge_layer(edge)
+    if layer == "candidate_mechanism" and edge.confidence < 0.65:
+        return "high"
+    if layer == "candidate_mechanism":
+        return "medium"
+    if layer == "semantic_constraint" and edge.confidence < 0.8:
+        return "medium"
+    return "low"
+
+
+def _suggested_review_action(edge: KGEdge, priority: str) -> str:
+    if edge.review_status == "reviewed":
+        return "keep reviewed edge unless source changes"
+    if priority == "high":
+        return "review before paper emphasis or keep as low-confidence candidate"
+    if priority == "medium":
+        return "spot-check source wording and confidence"
+    return "bulk-approve if source registry is accepted"
 
 
 def _mvtec_audit_row(row: Mapping[str, str], record: Mapping[str, Any]) -> CaseAuditRow:

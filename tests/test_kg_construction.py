@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ from kgtracevis.kg_construction import (
     load_source_text,
     validate_candidate_claim_boundaries,
     validate_edges,
+    write_candidate_kg_artifacts,
 )
 from kgtracevis.kg_construction.case_kg_hardening import WAFER_PATTERNS
 from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS, NODE_COLUMNS
@@ -399,3 +401,23 @@ def test_candidate_kg_overlay_loads_and_keeps_loc_separate(tmp_path: Path) -> No
     assert candidates
     assert candidates[0].entity_id == "LocDefect"
     assert candidates[0].entity_id != "NearfullDefect"
+
+
+def test_candidate_kg_artifacts_include_review_queue_and_coverage_report(
+    tmp_path: Path,
+) -> None:
+    """Candidate KG build output should include review and coverage artifacts."""
+    output = write_candidate_kg_artifacts(output_dir=tmp_path, overwrite=True)
+
+    assert output.review_queue_path.is_file()
+    assert output.coverage_report_path.is_file()
+    with output.review_queue_path.open(newline="", encoding="utf-8") as handle:
+        review_rows = list(csv.DictReader(handle))
+    coverage = json.loads(output.coverage_report_path.read_text(encoding="utf-8"))
+
+    assert review_rows
+    assert any(row["review_priority"] == "high" for row in review_rows)
+    assert all("verified root cause" not in row["evidence"].lower() for row in review_rows)
+    assert coverage["edge_counts_by_layer"]["candidate_mechanism"] > 0
+    assert coverage["review_status_counts"]["auto"] > 0
+    assert coverage["wm811k_pattern_coverage"] == [spec.pattern for spec in WAFER_PATTERNS]

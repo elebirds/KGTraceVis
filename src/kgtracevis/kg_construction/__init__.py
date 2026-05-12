@@ -14,10 +14,12 @@ from kgtracevis.kg_construction.case_kg_hardening import (
     audit_mvtec_cases,
     audit_wm811k_cases,
     build_candidate_kg,
+    build_coverage_report,
     run_before_after_comparison,
     validate_candidate_claim_boundaries,
     write_candidate_kg_artifacts,
     write_case_audit_artifacts,
+    write_edge_review_queue,
 )
 from kgtracevis.kg_construction.confidence_assigner import assign_confidence, edge_weight
 from kgtracevis.kg_construction.export_kg_csv import (
@@ -52,6 +54,7 @@ __all__ = [
     "audit_mvtec_cases",
     "audit_wm811k_cases",
     "build_candidate_kg",
+    "build_coverage_report",
     "clean_candidate_nodes",
     "clean_candidate_triples",
     "edge_weight",
@@ -71,4 +74,5 @@ __all__ = [
     "validate_nodes",
     "write_candidate_kg_artifacts",
     "write_case_audit_artifacts",
+    "write_edge_review_queue",
 ]

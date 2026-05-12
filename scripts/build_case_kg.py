@@ -75,6 +75,8 @@ def main() -> None:
                 "edges_path": str(output.edges_path),
                 "summary_path": str(output.summary_path),
                 "validation_path": str(output.validation_path),
+                "review_queue_path": str(output.review_queue_path),
+                "coverage_report_path": str(output.coverage_report_path),
                 "before_after_path": str(output.before_after_path),
                 "explanations_path": str(output.explanations_path),
                 "node_count": output.node_count,

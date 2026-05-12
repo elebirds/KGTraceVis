@@ -37,6 +37,8 @@ source-attached, confidence-scored, and reviewable.
    - `runs/paper_case_kg/edges_candidate.csv`
    - `runs/paper_case_kg/kg_generation_summary.json`
    - `runs/paper_case_kg/validation_report.json`
+   - `runs/paper_case_kg/edge_review_queue.csv`
+   - `runs/paper_case_kg/coverage_report.json`
    - `runs/paper_case_kg/selected_case_reasoning_before_after.csv`
    - `runs/paper_case_kg/top_case_explanations.md`
 
@@ -75,3 +77,12 @@ source-attached, confidence-scored, and reviewable.
 
 Generated rows stay under `runs/` by default. Only manually reviewed, stable
 candidate rows should be copied into tracked `data/kg/*.csv`.
+
+Use `edge_review_queue.csv` to triage candidate edges:
+
+- high priority: low-confidence candidate mechanism edges that should be
+  reviewed before being emphasized in the paper;
+- medium priority: candidate mechanism or borderline semantic-constraint rows
+  that need spot checks;
+- low priority: observed evidence and straightforward semantic rows that can be
+  bulk-approved once their source registry entries are accepted.
