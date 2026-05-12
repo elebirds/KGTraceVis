@@ -25,6 +25,7 @@ from kgtracevis.producers.backends import (
     AnomalibMVTecBackend,
     SklearnWM811KBackend,
     TorchWM811KBackend,
+    _first_engine_prediction,
     anomalib_prediction_to_mvtec_prediction,
     load_trusted_sklearn_model,
     load_trusted_torch_model,
@@ -224,6 +225,13 @@ def test_anomalib_backend_normalizes_injected_inferencer_prediction(tmp_path: Pa
     assert prediction["metadata"]["device"] == "cpu"
 
 
+def test_first_engine_prediction_returns_first_item() -> None:
+    """Engine prediction normalization should accept Anomalib's nested output lists."""
+    prediction = SimpleNamespace(pred_score=0.42)
+
+    assert _first_engine_prediction([[prediction]]) is prediction
+
+
 def test_openvino_backend_resizes_static_input_after_shape_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -273,6 +281,23 @@ def test_anomalib_prediction_conversion_preserves_zero_scores() -> None:
     assert prediction["label"] == "0"
     assert prediction["mask"] == [[0, 0], [0, 0]]
     assert prediction["metadata"]["checkpoint"] == "local.pt"
+
+
+def test_anomalib_prediction_conversion_squeezes_spatial_singletons() -> None:
+    """PatchCore-style batch/channel dimensions should not break mask geometry."""
+    prediction = anomalib_prediction_to_mvtec_prediction(
+        {
+            "pred_score": 0.81,
+            "anomaly_map": np.asarray([[[0.1, 0.9], [0.2, 0.3]]]),
+            "pred_mask": np.asarray([[[False, True], [False, True]]]),
+        },
+        backend=ANOMALIB_TORCH_BACKEND,
+        checkpoint="local.ckpt",
+        device="cpu",
+    )
+
+    assert prediction["anomaly_map"] == [[0.1, 0.9], [0.2, 0.3]]
+    assert prediction["mask"] == [[False, True], [False, True]]
 
 
 def test_wm811k_producer_emits_adapter_compatible_model_records(tmp_path: Path) -> None:

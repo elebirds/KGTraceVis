@@ -10,7 +10,7 @@ TORCH_CUDA_INDEX ?= https://download.pytorch.org/whl/cu128
 
 .PHONY: help install setup setup-dev setup-ml setup-cuda web-install api web dev \
 	check-web test lint examples check kg-import noise app lock real-pipeline \
-	adapter-mvtec adapter-wm811k clean-web
+	download-model-assets download-patchcore download-stfpm adapter-mvtec adapter-wm811k clean-web
 
 help:
 	@echo "KGTraceVis developer targets"
@@ -34,6 +34,9 @@ help:
 	@echo "  make check        Run test + examples + web checks"
 	@echo ""
 	@echo "Pipelines:"
+	@echo "  make download-model-assets  Download default trusted model assets"
+	@echo "  make download-patchcore     Download default MVTec PatchCore checkpoint"
+	@echo "  make download-stfpm         Download default MVTec STFPM OpenVINO checkpoint"
 	@echo "  make real-pipeline   Download/run real MVTec + WM811K model pipeline"
 	@echo "  make adapter-mvtec   Run adapter pipeline on checked-in MVTec records"
 	@echo "  make adapter-wm811k  Run adapter pipeline on checked-in WM811K records"
@@ -94,6 +97,15 @@ lock:
 
 real-pipeline:
 	$(PYTHON) scripts/run_real_model_pipeline.py --output-root $(OUTPUT_ROOT)
+
+download-model-assets:
+	$(PYTHON) scripts/download_model_assets.py --output-root $(OUTPUT_ROOT)
+
+download-patchcore:
+	$(PYTHON) scripts/download_model_assets.py --output-root $(OUTPUT_ROOT) --model mvtec-patchcore
+
+download-stfpm:
+	$(PYTHON) scripts/download_model_assets.py --output-root $(OUTPUT_ROOT) --model mvtec-stfpm
 
 adapter-mvtec:
 	$(PYTHON) scripts/run_adapter_pipeline.py \

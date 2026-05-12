@@ -226,11 +226,20 @@ anything into `paper/`.
 Build local producer-output records before adapter ingestion:
 
 ```bash
+make download-model-assets
+make download-patchcore
+
+uv run python scripts/download_model_assets.py --model mvtec-stfpm
+uv run python scripts/download_model_assets.py --model mvtec-patchcore
+uv run python scripts/download_model_assets.py --model mvtec-efficientad \
+  --mvtec-efficientad-repo <trusted-hf-repo> \
+  --mvtec-efficientad-file <checkpoint-file>
+
 uv run python scripts/build_dataset_records.py --dataset mvtec \
   --input-root data/external/mvtec \
   --output-jsonl data/processed/records/mvtec_subset.jsonl \
-  --model-backend anomalib-torch \
-  --checkpoint data/external/checkpoints/mvtec_patchcore.pt \
+  --model-backend anomalib-engine \
+  --checkpoint runs/real_model_pipeline/assets/mvtec/checkpoints/mvtec_patchcore.ckpt \
   --device cpu \
   --overwrite
 
@@ -243,8 +252,16 @@ uv run python scripts/build_dataset_records.py --dataset wm811k \
 ```
 
 Use `--model-backend fake` for checkpoint-free smoke runs. Anomalib is imported
-only for `anomalib-torch` or `anomalib-openvino`; sklearn joblib/pickle
-checkpoints must be trusted local files.
+only for `anomalib-engine`, `anomalib-torch`, or `anomalib-openvino`; sklearn
+joblib/pickle checkpoints must be trusted local files.
+The downloader stores trusted public model assets under
+`runs/real_model_pipeline/assets/`, including the default MVTec STFPM OpenVINO
+checkpoint used by web image mode and a default capsule PatchCore Lightning
+checkpoint from `NTHoang2103/patchcore-mvtec-models`. EfficientAD downloads
+are wired into the same preset path, but require an explicitly trusted
+Hugging Face repo/file or `KGTRACEVIS_DOWNLOAD_MVTEC_EFFICIENTAD_REPO` because
+public EfficientAD files are usually component weights rather than one
+Anomalib-compatible inference checkpoint.
 
 Start the Streamlit demo:
 
@@ -315,8 +332,12 @@ artifacts under `runs/web_sessions/`. Image mode uses a selectable MVTec
 anomaly-detection/localization preset. `auto` prefers EfficientAD, then
 PatchCore, then the checked-in STFPM OpenVINO checkpoint. Configure replacement
 weights with `KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT` or
-`KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT`. The optional defect field in the UI is
+`KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT`; by default, the web API also recognizes
+the Makefile/API asset path under `runs/real_model_pipeline/assets/`. The optional defect field in the UI is
 a human prior, not a model-inferred semantic defect class.
+When a MVTec preset checkpoint is missing, the web UI can request its download
+through the API and then refresh the preset availability. STFPM and PatchCore
+have default trusted sources; EfficientAD requires a configured trusted source.
 
 ## Unified Evidence Schema
 

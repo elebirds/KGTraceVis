@@ -37,6 +37,8 @@ artifacts/*
 !artifacts/.gitkeep
 mlruns/
 wandb/
+results/
+openvino_cache/
 
 # Paper build
 paper/build/

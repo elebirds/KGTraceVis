@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from kgtracevis.producers import (
+    ANOMALIB_ENGINE_BACKEND,
     ANOMALIB_OPENVINO_BACKEND,
     ANOMALIB_TORCH_BACKEND,
     SKLEARN_BACKEND,
@@ -24,7 +25,7 @@ from kgtracevis.producers import (
 from kgtracevis.producers.mvtec_records import build_mvtec_records
 from kgtracevis.producers.wm811k_records import build_wm811k_records
 
-MVTEC_BACKENDS = (ANOMALIB_TORCH_BACKEND, ANOMALIB_OPENVINO_BACKEND)
+MVTEC_BACKENDS = (ANOMALIB_ENGINE_BACKEND, ANOMALIB_TORCH_BACKEND, ANOMALIB_OPENVINO_BACKEND)
 WM811K_BACKENDS = (SKLEARN_BACKEND, TORCH_RESNET_BACKEND)
 MODEL_BACKENDS = (*MVTEC_BACKENDS, *WM811K_BACKENDS)
 
@@ -44,7 +45,8 @@ def parse_args() -> argparse.Namespace:
         choices=MODEL_BACKENDS,
         help=(
             "Real inference backend. MVTec supports anomalib-torch and "
-            "anomalib-openvino. WM811K supports sklearn and torch-resnet34."
+            "anomalib-openvino. PatchCore Lightning checkpoints use anomalib-engine. "
+            "WM811K supports sklearn and torch-resnet34."
         ),
     )
     parser.add_argument(
@@ -153,7 +155,11 @@ def build_mvtec_predictor(
     device: str | None = None,
 ) -> MVTecAnomalyPredictor:
     """Return the selected MVTec predictor backend."""
-    if model_backend in {ANOMALIB_TORCH_BACKEND, ANOMALIB_OPENVINO_BACKEND}:
+    if model_backend in {
+        ANOMALIB_ENGINE_BACKEND,
+        ANOMALIB_TORCH_BACKEND,
+        ANOMALIB_OPENVINO_BACKEND,
+    }:
         return AnomalibMVTecBackend(
             backend=model_backend,
             checkpoint=checkpoint,

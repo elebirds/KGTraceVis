@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, ConfigDict
 
+from kgtracevis.producers.model_assets import MODEL_ASSET_CHOICES, ModelAsset
 from kgtracevis.service.handlers import (
     AnalyzeRequest,
     FeedbackRequest,
@@ -19,12 +21,22 @@ from kgtracevis.service.handlers import (
 )
 from kgtracevis.service.runs import (
     create_run_from_upload,
+    download_model_assets,
     get_run_detail,
     list_runs,
     mvtec_model_presets,
     parse_dataset_override,
     parse_upload_mode,
 )
+
+
+class ModelAssetDownloadRequest(BaseModel):
+    """Request body for downloading trusted public model assets."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    models: list[str] | None = None
+    force: bool = False
 
 
 def create_app() -> FastAPI:
@@ -72,6 +84,19 @@ def create_app() -> FastAPI:
             "default_preset": "auto",
             "presets": mvtec_model_presets(),
         }
+
+    @app.post("/api/model-assets/download")
+    def download_assets(request: ModelAssetDownloadRequest) -> dict[str, object]:
+        try:
+            requested = request.models or ["mvtec-stfpm"]
+            invalid = sorted({model for model in requested if model not in MODEL_ASSET_CHOICES})
+            if invalid:
+                supported = ", ".join(MODEL_ASSET_CHOICES)
+                raise ValueError(f"model asset must be one of: {supported}")
+            models = cast(tuple[ModelAsset, ...], tuple(requested))
+            return download_model_assets(models=models, force=request.force)
+        except (RuntimeError, ValueError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/runs/{run_id}")
     def run_detail(run_id: str) -> dict[str, object]:

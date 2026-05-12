@@ -19,17 +19,22 @@ from kgtracevis.experiments.adapter_pipeline import run_adapter_pipeline
 from kgtracevis.producers import (
     AnomalibMVTecBackend,
     build_mvtec_records,
+    download_selected_model_assets,
     list_mvtec_model_presets,
     write_jsonl_records,
 )
-from kgtracevis.producers.mvtec_models import resolve_mvtec_model_selection
+from kgtracevis.producers.model_assets import ModelAsset
+from kgtracevis.producers.mvtec_models import (
+    DEFAULT_MVTEC_EFFICIENTAD_CHECKPOINT,
+    DEFAULT_MVTEC_PATCHCORE_CHECKPOINT,
+    DEFAULT_MVTEC_STFPM_CHECKPOINT,
+    resolve_mvtec_model_selection,
+)
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
 from kgtracevis.schema.validators import load_evidence_json
 
 DEFAULT_RUNS_DIR = Path("runs/web_sessions")
-DEFAULT_MVTEC_WEB_CHECKPOINT = Path(
-    "runs/real_model_pipeline/assets/mvtec/checkpoints/openvino_model/stfpm_capsule.xml"
-)
+DEFAULT_MVTEC_WEB_CHECKPOINT = DEFAULT_MVTEC_STFPM_CHECKPOINT
 UploadMode = Literal["evidence", "records", "image"]
 RunStatus = Literal["completed", "failed"]
 
@@ -626,6 +631,15 @@ def mvtec_model_presets() -> list[dict[str, Any]]:
     return list_mvtec_model_presets()
 
 
+def download_model_assets(
+    *,
+    models: tuple[ModelAsset, ...] = ("mvtec-stfpm",),
+    force: bool = False,
+) -> dict[str, Any]:
+    """Download trusted default model assets for service clients."""
+    return download_selected_model_assets(models=models, force=force)
+
+
 def _evidence_with_analysis(evidence: Evidence, analysis: AnalysisResult) -> dict[str, Any]:
     payload = evidence.model_dump(mode="json")
     payload["kg_analysis"] = {
@@ -675,9 +689,9 @@ def _resolve_mvtec_device() -> str:
 
 def _default_checkpoint_for_preset(model_preset: str | None) -> Path:
     if model_preset == "efficientad":
-        return Path("data/external/checkpoints/mvtec_efficientad.pt")
+        return DEFAULT_MVTEC_EFFICIENTAD_CHECKPOINT
     if model_preset == "patchcore":
-        return Path("data/external/checkpoints/mvtec_patchcore.pt")
+        return DEFAULT_MVTEC_PATCHCORE_CHECKPOINT
     return DEFAULT_MVTEC_WEB_CHECKPOINT
 
 

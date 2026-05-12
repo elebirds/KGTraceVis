@@ -2,6 +2,7 @@ import type {
   AnalysisResponse,
   CaseSummary,
   Evidence,
+  ModelAssetDownloadResponse,
   MvtecModelPresetResponse,
   RunDetail,
   RunSummary,
@@ -46,6 +47,16 @@ export function listRuns(): Promise<RunSummary[]> {
 
 export function listMvtecModelPresets(): Promise<MvtecModelPresetResponse> {
   return requestJson<MvtecModelPresetResponse>("/api/runs/mvtec-model-presets");
+}
+
+export function downloadModelAssets(request: {
+  models: string[];
+  force?: boolean;
+}): Promise<ModelAssetDownloadResponse> {
+  return requestJson<ModelAssetDownloadResponse>("/api/model-assets/download", {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
 }
 
 export function loadCase(caseId: string): Promise<AnalysisResponse> {

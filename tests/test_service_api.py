@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from fastapi.testclient import TestClient
 
-from kgtracevis.producers.backends import ANOMALIB_TORCH_BACKEND
+from kgtracevis.producers.backends import ANOMALIB_ENGINE_BACKEND
 from kgtracevis.service import api as service_api
 from kgtracevis.service import runs as service_runs
 from kgtracevis.service.api import app
@@ -117,6 +117,7 @@ def test_image_upload_mode_defaults_to_unknown_label_when_unspecified(
                 "mode": "image",
                 "dataset": "mvtec",
                 "object_name": "capsule",
+                "model_preset": "stfpm",
                 "top_k": "2",
             },
         )
@@ -146,6 +147,68 @@ def test_mvtec_model_preset_route_reports_available_default(
     presets = {item["preset"]: item for item in payload["presets"]}
     assert presets["auto"]["resolved_preset"] == "efficientad"
     assert presets["efficientad"]["available"] is True
+
+
+def test_mvtec_model_preset_route_detects_makefile_patchcore_asset(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """The web preset route should recognize make download-patchcore output."""
+    monkeypatch.chdir(tmp_path)
+    checkpoint = (
+        tmp_path
+        / "runs"
+        / "real_model_pipeline"
+        / "assets"
+        / "mvtec"
+        / "checkpoints"
+        / "mvtec_patchcore.ckpt"
+    )
+    checkpoint.parent.mkdir(parents=True)
+    checkpoint.write_bytes(b"trusted local checkpoint placeholder")
+
+    client = TestClient(app)
+    response = client.get("/api/runs/mvtec-model-presets")
+
+    assert response.status_code == 200
+    presets = {item["preset"]: item for item in response.json()["presets"]}
+    assert presets["auto"]["resolved_preset"] == "patchcore"
+    assert presets["patchcore"]["available"] is True
+    assert presets["patchcore"]["checkpoint_path"].endswith(
+        "runs/real_model_pipeline/assets/mvtec/checkpoints/mvtec_patchcore.ckpt"
+    )
+
+
+def test_model_asset_download_route_uses_default_asset(monkeypatch) -> None:
+    """The web API should expose a trusted default model asset download action."""
+    captured: dict[str, object] = {}
+
+    def _patched_download_model_assets(*, models, force=False):
+        captured["models"] = models
+        captured["force"] = force
+        return {
+            "artifact_type": "model_asset_download_v0",
+            "assets_root": "runs/real_model_pipeline/assets",
+            "assets": {"mvtec_stfpm": {"checkpoint": "checkpoint.xml"}},
+        }
+
+    monkeypatch.setattr(service_api, "download_model_assets", _patched_download_model_assets)
+
+    client = TestClient(app)
+    response = client.post("/api/model-assets/download", json={})
+
+    assert response.status_code == 200
+    assert captured == {"models": ("mvtec-stfpm",), "force": False}
+    assert response.json()["assets"]["mvtec_stfpm"]["checkpoint"] == "checkpoint.xml"
+
+
+def test_model_asset_download_route_rejects_unknown_asset() -> None:
+    """The download route should only accept configured trusted model assets."""
+    client = TestClient(app)
+    response = client.post("/api/model-assets/download", json={"models": ["unknown-model"]})
+
+    assert response.status_code == 400
+    assert "model asset must be one of" in response.json()["detail"]
 
 
 def test_image_upload_missing_requested_model_preset_returns_400(
@@ -196,7 +259,7 @@ def test_image_upload_mode_runs_mvtec_producer_path(tmp_path: Path, monkeypatch)
                 "mask": np.array([[0, 1], [0, 1]], dtype=bool),
             }
 
-    checkpoint = tmp_path / "patchcore.pt"
+    checkpoint = tmp_path / "patchcore.ckpt"
     checkpoint.write_text("<xml />", encoding="utf-8")
     monkeypatch.setenv("KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT", str(checkpoint))
     monkeypatch.setattr(service_runs, "AnomalibMVTecBackend", FakeMVTecBackend)
@@ -221,7 +284,7 @@ def test_image_upload_mode_runs_mvtec_producer_path(tmp_path: Path, monkeypatch)
     assert detail.evidence["object"] == "capsule"
     assert detail.evidence["anomaly_type"] == "crack"
     assert detail.run.model_preset == "patchcore"
-    assert detail.run.model_backend == ANOMALIB_TORCH_BACKEND
+    assert detail.run.model_backend == ANOMALIB_ENGINE_BACKEND
     assert detail.analysis is not None
     assert detail.artifacts["records_path"].endswith("mvtec_image_records.jsonl")
     assert detail.artifacts["model_preset"] == "patchcore"

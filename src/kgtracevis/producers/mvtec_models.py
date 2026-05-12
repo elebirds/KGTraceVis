@@ -7,7 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from kgtracevis.producers.backends import ANOMALIB_OPENVINO_BACKEND, ANOMALIB_TORCH_BACKEND
+from kgtracevis.producers.backends import (
+    ANOMALIB_ENGINE_BACKEND,
+    ANOMALIB_OPENVINO_BACKEND,
+    ANOMALIB_TORCH_BACKEND,
+)
 
 MVTecModelPreset = Literal["auto", "stfpm", "patchcore", "efficientad"]
 MVTecResolvedPreset = Literal["stfpm", "patchcore", "efficientad"]
@@ -18,12 +22,21 @@ MVTEC_MODEL_PRESET_PRIORITY: tuple[MVTecResolvedPreset, ...] = (
     "patchcore",
     "stfpm",
 )
+MVTEC_MODEL_PRESET_DOWNLOAD_ASSETS: dict[MVTecResolvedPreset, str] = {
+    "efficientad": "mvtec-efficientad",
+    "patchcore": "mvtec-patchcore",
+    "stfpm": "mvtec-stfpm",
+}
 
 DEFAULT_MVTEC_STFPM_CHECKPOINT = Path(
     "runs/real_model_pipeline/assets/mvtec/checkpoints/openvino_model/stfpm_capsule.xml"
 )
-DEFAULT_MVTEC_PATCHCORE_CHECKPOINT = Path("data/external/checkpoints/mvtec_patchcore.pt")
-DEFAULT_MVTEC_EFFICIENTAD_CHECKPOINT = Path("data/external/checkpoints/mvtec_efficientad.pt")
+DEFAULT_MVTEC_PATCHCORE_CHECKPOINT = Path(
+    "runs/real_model_pipeline/assets/mvtec/checkpoints/mvtec_patchcore.ckpt"
+)
+DEFAULT_MVTEC_EFFICIENTAD_CHECKPOINT = Path(
+    "runs/real_model_pipeline/assets/mvtec/checkpoints/mvtec_efficientad.pt"
+)
 
 
 @dataclass(frozen=True)
@@ -68,7 +81,7 @@ MVTEC_MODEL_PRESET_SPECS: dict[MVTecResolvedPreset, MVTecModelPresetSpec] = {
         description="经典强基线，适合对比和离线评估。",
         checkpoint_env="KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT",
         default_checkpoint=DEFAULT_MVTEC_PATCHCORE_CHECKPOINT,
-        backend_hint=ANOMALIB_TORCH_BACKEND,
+        backend_hint=ANOMALIB_ENGINE_BACKEND,
         preferred_suffixes=(".pt", ".pth", ".ckpt"),
     ),
     "efficientad": MVTecModelPresetSpec(
@@ -98,6 +111,7 @@ def list_mvtec_model_presets() -> list[dict[str, Any]]:
             "checkpoint_path": (
                 str(selected_auto.checkpoint_path) if selected_auto is not None else None
             ),
+            "download_asset": _next_download_asset(resolved),
             "resolved_preset": selected_auto.preset if selected_auto is not None else None,
             "resolved_label": selected_auto.label if selected_auto is not None else None,
         }
@@ -114,6 +128,7 @@ def list_mvtec_model_presets() -> list[dict[str, Any]]:
                 "backend": selection.backend,
                 "checkpoint_path": str(selection.checkpoint_path) if selection.available else None,
                 "checkpoint_hint": selection.checkpoint_hint,
+                "download_asset": MVTEC_MODEL_PRESET_DOWNLOAD_ASSETS[selection.preset],
             }
         )
     return presets
@@ -165,6 +180,8 @@ def _resolve_checkpoint_path(spec: MVTecModelPresetSpec) -> Path:
 def _infer_backend(checkpoint_path: Path, default_backend: str) -> str:
     if checkpoint_path.suffix.lower() == ".xml":
         return ANOMALIB_OPENVINO_BACKEND
+    if checkpoint_path.suffix.lower() == ".ckpt":
+        return ANOMALIB_ENGINE_BACKEND
     if checkpoint_path.suffix.lower() in {".pt", ".pth", ".ckpt"}:
         return ANOMALIB_TORCH_BACKEND
     return default_backend
@@ -177,6 +194,15 @@ def _best_available_selection(
         selection = resolved[preset]
         if selection.available:
             return selection
+    return None
+
+
+def _next_download_asset(
+    resolved: dict[MVTecResolvedPreset, MVTecModelSelection],
+) -> str | None:
+    for preset in MVTEC_MODEL_PRESET_PRIORITY:
+        if not resolved[preset].available:
+            return MVTEC_MODEL_PRESET_DOWNLOAD_ASSETS[preset]
     return None
 
 

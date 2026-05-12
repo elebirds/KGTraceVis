@@ -157,6 +157,7 @@ export type MvtecModelPreset = {
   backend?: string | null;
   checkpoint_path?: string | null;
   checkpoint_hint?: string | null;
+  download_asset?: string | null;
   resolved_preset?: string | null;
   resolved_label?: string | null;
 };
@@ -164,4 +165,10 @@ export type MvtecModelPreset = {
 export type MvtecModelPresetResponse = {
   default_preset: string;
   presets: MvtecModelPreset[];
+};
+
+export type ModelAssetDownloadResponse = {
+  artifact_type: string;
+  assets_root: string;
+  assets: Record<string, Record<string, unknown>>;
 };

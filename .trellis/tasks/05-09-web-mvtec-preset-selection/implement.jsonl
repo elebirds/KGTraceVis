@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend/service quality and directory contract for web API changes."}
+{"file": ".trellis/spec/backend/mvtec-model-presets.md", "reason": "MVTec image-upload model preset and checkpoint resolution contract."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Ensure missing or explicit preset errors remain deterministic."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate and testing expectations for code changes."}

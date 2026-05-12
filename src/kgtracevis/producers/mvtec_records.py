@@ -273,6 +273,8 @@ def _array_or_none(value: Any) -> np.ndarray | None:
     array = np.asarray(value)
     if array.size == 0:
         return None
+    if array.ndim > 2:
+        array = np.squeeze(array)
     return array
 
 

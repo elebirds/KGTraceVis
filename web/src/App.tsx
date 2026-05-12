@@ -7,6 +7,7 @@ import {
   ListChecks,
   MessageSquare,
   Play,
+  Download,
   RefreshCw,
   RotateCcw,
   Search,
@@ -21,6 +22,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   analyzeEvidence,
+  downloadModelAssets,
   listCases,
   listMvtecModelPresets,
   listRuns,
@@ -124,6 +126,7 @@ export default function App() {
   const [runLoadingState, setRunLoadingState] = useState<LoadingState>("idle");
   const [actionMessage, setActionMessage] = useState<string>("");
   const [runMessage, setRunMessage] = useState<string>("");
+  const [assetDownloading, setAssetDownloading] = useState(false);
   const [error, setError] = useState<string>("");
   const [runError, setRunError] = useState<string>("");
   const [feedbackNote, setFeedbackNote] = useState("");
@@ -239,11 +242,14 @@ export default function App() {
     }
   }
 
-  async function loadModelPresets() {
+  async function loadModelPresets(preferredPreset = uploadModelPreset) {
     try {
       const response = await listMvtecModelPresets();
       setMvtecModelPresets(response.presets);
-      setUploadModelPreset(response.default_preset || "auto");
+      const nextPreset = response.presets.some((item) => item.preset === preferredPreset)
+        ? preferredPreset
+        : response.default_preset || "auto";
+      setUploadModelPreset(nextPreset);
     } catch (error_) {
       setRunError(messageOf(error_));
     }
@@ -290,6 +296,10 @@ export default function App() {
       setRunError("图片模式需要填写 MVTec 对象类别");
       return;
     }
+    if (uploadMode === "image" && selectedModelPreset && !selectedModelPreset.available) {
+      setRunError(`请先下载或配置 ${selectedModelPreset.label} checkpoint`);
+      return;
+    }
     try {
       setRunLoadingState("loading");
       const response = await uploadRun({
@@ -313,6 +323,26 @@ export default function App() {
     } catch (error_) {
       setRunLoadingState("error");
       setRunError(messageOf(error_));
+    }
+  }
+
+  async function downloadSelectedModelAsset(asset: string) {
+    if (!asset) {
+      return;
+    }
+    try {
+      setAssetDownloading(true);
+      setRunLoadingState("loading");
+      const response = await downloadModelAssets({ models: [asset] });
+      await loadModelPresets(selectedModelPreset?.preset ?? uploadModelPreset);
+      setRunLoadingState("ready");
+      setRunMessage(`权重已下载到 ${response.assets_root}`);
+      setRunError("");
+    } catch (error_) {
+      setRunLoadingState("error");
+      setRunError(messageOf(error_));
+    } finally {
+      setAssetDownloading(false);
     }
   }
 
@@ -485,7 +515,6 @@ export default function App() {
                         <option
                           key={option.preset}
                           value={option.preset}
-                          disabled={!option.available && option.preset !== "auto"}
                         >
                           {option.label}
                           {option.resolved_label ? ` -> ${option.resolved_label}` : ""}
@@ -506,6 +535,24 @@ export default function App() {
                         <div className="mt-1 text-zinc-500">
                           预期 checkpoint：{selectedModelPreset.checkpoint_hint}
                         </div>
+                      ) : null}
+                      {selectedModelPreset.checkpoint_path ? (
+                        <div className="mt-1 text-zinc-500">
+                          当前 checkpoint：{selectedModelPreset.checkpoint_path}
+                        </div>
+                      ) : null}
+                      {!selectedModelPreset.available && selectedModelPreset.download_asset ? (
+                        <button
+                          className="button mt-3"
+                          disabled={assetDownloading}
+                          onClick={() =>
+                            void downloadSelectedModelAsset(selectedModelPreset.download_asset || "")
+                          }
+                          type="button"
+                        >
+                          <Download className="h-4 w-4" />
+                          {assetDownloading ? "下载中..." : "下载默认权重"}
+                        </button>
                       ) : null}
                     </div>
                   ) : null}

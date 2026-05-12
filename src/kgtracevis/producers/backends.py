@@ -13,6 +13,7 @@ from kgtracevis.producers.common import MVTecPrediction, WM811KPrediction
 
 ANOMALIB_TORCH_BACKEND = "anomalib-torch"
 ANOMALIB_OPENVINO_BACKEND = "anomalib-openvino"
+ANOMALIB_ENGINE_BACKEND = "anomalib-engine"
 SKLEARN_BACKEND = "sklearn"
 TORCH_RESNET_BACKEND = "torch-resnet34"
 WM811K_CLASSES = [
@@ -39,7 +40,11 @@ class AnomalibMVTecBackend:
         inferencer: Any | None = None,
     ) -> None:
         """Create a backend, optionally with an injected inferencer for tests."""
-        if backend not in {ANOMALIB_TORCH_BACKEND, ANOMALIB_OPENVINO_BACKEND}:
+        if backend not in {
+            ANOMALIB_ENGINE_BACKEND,
+            ANOMALIB_TORCH_BACKEND,
+            ANOMALIB_OPENVINO_BACKEND,
+        }:
             raise ValueError(f"unsupported Anomalib backend: {backend}")
         self.backend = backend
         self.checkpoint = Path(checkpoint) if checkpoint is not None else None
@@ -48,6 +53,9 @@ class AnomalibMVTecBackend:
 
     def predict(self, image_path: Path) -> MVTecPrediction:
         """Run Anomalib inference for one image and normalize the prediction shape."""
+        if self.backend == ANOMALIB_ENGINE_BACKEND:
+            return self._predict_with_engine(image_path)
+
         try:
             raw_prediction = self.inferencer.predict(image_path)
         except TypeError as exc:
@@ -109,6 +117,8 @@ class AnomalibMVTecBackend:
     def _load_inferencer(self) -> Any:
         if self.checkpoint is None:
             raise ValueError(f"--checkpoint is required for --model-backend {self.backend}")
+        if self.backend == ANOMALIB_ENGINE_BACKEND:
+            return None
         try:
             from anomalib.deploy import OpenVINOInferencer, TorchInferencer
         except ImportError as exc:
@@ -122,6 +132,35 @@ class AnomalibMVTecBackend:
         )
         return _instantiate_anomalib_inferencer(
             inferencer_cls,
+            checkpoint=self.checkpoint,
+            device=self.device,
+        )
+
+    def _predict_with_engine(self, image_path: Path) -> MVTecPrediction:
+        """Run an Anomalib Lightning checkpoint with Engine.predict."""
+        if self.checkpoint is None:
+            raise ValueError(f"--checkpoint is required for --model-backend {self.backend}")
+        try:
+            from anomalib.data import PredictDataset
+            from anomalib.engine import Engine
+            from anomalib.models import Patchcore
+        except ImportError as exc:
+            raise ImportError(
+                "Anomalib is required for --model-backend "
+                f"{self.backend}; install it in the local runtime"
+            ) from exc
+
+        model = Patchcore()
+        engine = Engine()
+        prediction_batches = engine.predict(
+            model=model,
+            dataset=PredictDataset(path=image_path),
+            ckpt_path=self.checkpoint,
+        )
+        raw_prediction = _first_engine_prediction(prediction_batches)
+        return anomalib_prediction_to_mvtec_prediction(
+            raw_prediction,
+            backend=self.backend,
             checkpoint=self.checkpoint,
             device=self.device,
         )
@@ -421,6 +460,23 @@ def _instantiate_anomalib_inferencer(
     return inferencer_cls(checkpoint)
 
 
+def _first_engine_prediction(prediction_batches: Any) -> Any:
+    if prediction_batches is None:
+        raise ValueError("Anomalib Engine returned no prediction batches")
+    batches = prediction_batches
+    if not isinstance(batches, Sequence) or isinstance(batches, (str, bytes, bytearray)):
+        batches = [batches]
+    for batch in batches:
+        if batch is None:
+            continue
+        if isinstance(batch, Sequence) and not isinstance(batch, (str, bytes, bytearray, Mapping)):
+            if batch:
+                return batch[0]
+            continue
+        return batch
+    raise ValueError("Anomalib Engine returned no predictions")
+
+
 def _read_rgb_image(image_path: Path) -> np.ndarray:
     """Read an image path into an RGB numpy array for OpenVINO compatibility inference."""
     try:
@@ -521,7 +577,10 @@ def _first_prediction_value(prediction: Any, keys: Sequence[str]) -> Any:
 
 def _array_like_to_jsonable(value: Any) -> Any:
     if hasattr(value, "tolist") and callable(value.tolist):
-        return value.tolist()
+        array = np.asarray(value)
+        if array.ndim > 2:
+            array = np.squeeze(array)
+        return array.tolist()
     return value
 
 
