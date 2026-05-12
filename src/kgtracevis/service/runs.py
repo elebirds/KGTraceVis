@@ -17,9 +17,13 @@ from kgtracevis.core import KGTracePipeline
 from kgtracevis.core.result import AnalysisResult
 from kgtracevis.experiments.adapter_pipeline import run_adapter_pipeline
 from kgtracevis.producers import (
+    AMAZON_PATCHCORE_BACKEND,
+    AmazonPatchCoreBackend,
     AnomalibMVTecBackend,
+    MVTecAnomalyPredictor,
     build_mvtec_records,
     download_selected_model_assets,
+    is_amazon_patchcore_artifact_dir,
     list_mvtec_model_presets,
     write_jsonl_records,
 )
@@ -525,7 +529,7 @@ def _run_mvtec_image_upload(
     top_k: int,
     pipeline: KGTracePipeline,
     output_dir: Path,
-    predictor: AnomalibMVTecBackend | None = None,
+    predictor: MVTecAnomalyPredictor | None = None,
     checkpoint: str | Path | None = None,
 ) -> RunDetail:
     image_root = input_path.parent / "mvtec_image_root"
@@ -540,8 +544,8 @@ def _run_mvtec_image_upload(
         checkpoint_path = _resolve_mvtec_checkpoint(checkpoint, model_preset=selection.preset)
     else:
         checkpoint_path = selection.checkpoint_path
-    active_predictor = predictor or AnomalibMVTecBackend(
-        backend=selection.backend,
+    active_predictor = predictor or _build_mvtec_upload_predictor(
+        model_backend=selection.backend,
         checkpoint=checkpoint_path,
         device=_resolve_mvtec_device(),
     )
@@ -626,6 +630,22 @@ def _run_mvtec_image_upload(
     return detail
 
 
+def _build_mvtec_upload_predictor(
+    *,
+    model_backend: str,
+    checkpoint: Path,
+    device: str | None,
+) -> MVTecAnomalyPredictor:
+    """Build the selected raw-image upload predictor."""
+    if model_backend == AMAZON_PATCHCORE_BACKEND:
+        return AmazonPatchCoreBackend(checkpoint=checkpoint, device=device)
+    return AnomalibMVTecBackend(
+        backend=model_backend,
+        checkpoint=checkpoint,
+        device=device,
+    )
+
+
 def mvtec_model_presets() -> list[dict[str, Any]]:
     """Return the selectable MVTec model presets for the web UI."""
     return list_mvtec_model_presets()
@@ -675,7 +695,7 @@ def _resolve_mvtec_checkpoint(
         os.environ.get(_checkpoint_env_for_preset(model_preset))
         or candidate
     )
-    if candidate.is_file():
+    if candidate.is_file() or is_amazon_patchcore_artifact_dir(candidate):
         return candidate
     raise FileNotFoundError(
         f"MVTec checkpoint not found: {candidate}. Set {_checkpoint_env_for_preset(model_preset)} "

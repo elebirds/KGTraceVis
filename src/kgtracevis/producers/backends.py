@@ -14,8 +14,13 @@ from kgtracevis.producers.common import MVTecPrediction, WM811KPrediction
 ANOMALIB_TORCH_BACKEND = "anomalib-torch"
 ANOMALIB_OPENVINO_BACKEND = "anomalib-openvino"
 ANOMALIB_ENGINE_BACKEND = "anomalib-engine"
+AMAZON_PATCHCORE_BACKEND = "amazon-patchcore"
 SKLEARN_BACKEND = "sklearn"
 TORCH_RESNET_BACKEND = "torch-resnet34"
+AMAZON_PATCHCORE_MODEL_SOURCE = "amazon-science/patchcore-inspection"
+AMAZON_PATCHCORE_MODEL_FORMAT = "amazon-patchcore-faiss-pkl"
+_AMAZON_PATCHCORE_PARAMS_SUFFIX = "patchcore_params.pkl"
+_AMAZON_PATCHCORE_INDEX_SUFFIX = "nnscorer_search_index.faiss"
 WM811K_CLASSES = [
     "Center",
     "Donut",
@@ -26,6 +31,84 @@ WM811K_CLASSES = [
     "Scratch",
     "Near-full",
 ]
+
+
+class AmazonPatchCoreBackend:
+    """Wrap official Amazon PatchCore artifacts as an MVTec producer predictor."""
+
+    def __init__(
+        self,
+        *,
+        checkpoint: str | Path | None = None,
+        device: str | None = None,
+        model: Any | None = None,
+        image_size: int | None = None,
+        resize: int | None = None,
+        faiss_on_gpu: bool = False,
+        faiss_num_workers: int = 4,
+    ) -> None:
+        """Create a backend from an official artifact directory or injected model."""
+        if model is None and checkpoint is None:
+            raise ValueError(
+                f"--checkpoint is required for --model-backend {AMAZON_PATCHCORE_BACKEND}"
+            )
+        self.checkpoint = Path(checkpoint) if checkpoint is not None else None
+        self.device = device
+        self.image_size = image_size
+        self.resize = resize
+        self.faiss_on_gpu = faiss_on_gpu
+        self.faiss_num_workers = faiss_num_workers
+        self.artifact_prepend = (
+            discover_amazon_patchcore_prepend(self.checkpoint)
+            if self.checkpoint is not None
+            else ""
+        )
+        self.model = model if model is not None else self._load_model()
+
+    def predict(self, image_path: Path) -> MVTecPrediction:
+        """Run official PatchCore inference for one image and normalize outputs."""
+        raw_prediction = self._predict_raw(image_path)
+        return amazon_patchcore_prediction_to_mvtec_prediction(
+            raw_prediction,
+            checkpoint=self.checkpoint,
+            device=self.device,
+            artifact_prepend=self.artifact_prepend,
+        )
+
+    def _load_model(self) -> Any:
+        try:
+            import patchcore.common as patchcore_common
+            import patchcore.patchcore as patchcore_module
+            import torch
+        except ImportError as exc:  # pragma: no cover - depends on optional external repo.
+            raise ImportError(
+                "Official Amazon PatchCore inference requires the "
+                "amazon-science/patchcore-inspection package on PYTHONPATH plus FAISS. "
+                "Clone https://github.com/amazon-science/patchcore-inspection and run "
+                "with PYTHONPATH pointing at its src directory."
+            ) from exc
+
+        torch_device = _resolve_amazon_patchcore_device(torch, self.device)
+        nn_method = patchcore_common.FaissNN(self.faiss_on_gpu, self.faiss_num_workers)
+        patchcore_model = patchcore_module.PatchCore(torch_device)
+        patchcore_model.load_from_path(
+            load_path=str(self.checkpoint),
+            device=torch_device,
+            nn_method=nn_method,
+            prepend=self.artifact_prepend,
+        )
+        return patchcore_model
+
+    def _predict_raw(self, image_path: Path) -> Any:
+        image_tensor = _official_patchcore_image_tensor(
+            image_path,
+            image_size=_amazon_patchcore_image_size(self.model, self.image_size),
+            resize=self.resize,
+        )
+        try:
+            return self.model.predict(image_tensor)
+        except TypeError:
+            return self.model.predict(image_path)
 
 
 class AnomalibMVTecBackend:
@@ -166,6 +249,40 @@ class AnomalibMVTecBackend:
         )
 
 
+def amazon_patchcore_prediction_to_mvtec_prediction(
+    prediction: Any,
+    *,
+    checkpoint: str | Path | None = None,
+    device: str | None = None,
+    artifact_prepend: str = "",
+) -> MVTecPrediction:
+    """Convert an official Amazon PatchCore prediction into `MVTecPrediction`."""
+    score = _float_or_none(_amazon_patchcore_score(prediction))
+    anomaly_map = _amazon_patchcore_anomaly_map(prediction)
+    label = _text_or_none(_first_prediction_value(prediction, ("pred_label", "label")))
+    metadata = {
+        "source_backend": AMAZON_PATCHCORE_BACKEND,
+        "checkpoint": str(checkpoint) if checkpoint is not None else None,
+        "device": device,
+        "model_source": AMAZON_PATCHCORE_MODEL_SOURCE,
+        "model_format": AMAZON_PATCHCORE_MODEL_FORMAT,
+        "artifact_prepend": artifact_prepend,
+        "raw_pred_label": label,
+    }
+    normalized: MVTecPrediction = {"metadata": metadata}
+    if score is not None:
+        normalized["score"] = score
+        normalized["confidence"] = score
+    if label is not None:
+        normalized["label"] = label
+    if anomaly_map is not None:
+        normalized["anomaly_map"] = _array_like_to_jsonable(anomaly_map)
+    explicit_mask = _first_prediction_value(prediction, ("pred_mask", "binary_mask"))
+    if explicit_mask is not None:
+        normalized["mask"] = _array_like_to_jsonable(explicit_mask)
+    return normalized
+
+
 def anomalib_prediction_to_mvtec_prediction(
     prediction: Any,
     *,
@@ -201,6 +318,57 @@ def anomalib_prediction_to_mvtec_prediction(
     if mask is not None:
         normalized["mask"] = _array_like_to_jsonable(mask)
     return normalized
+
+
+def is_amazon_patchcore_artifact_dir(path: str | Path | None) -> bool:
+    """Return whether a path looks like an official Amazon PatchCore artifact directory."""
+    if path is None:
+        return False
+    candidate = Path(path)
+    if not candidate.is_dir():
+        return False
+    try:
+        discover_amazon_patchcore_prepend(candidate)
+    except (FileNotFoundError, ValueError):
+        return False
+    return True
+
+
+def discover_amazon_patchcore_prepend(checkpoint: str | Path | None) -> str:
+    """Validate an official PatchCore artifact directory and return its filename prefix."""
+    if checkpoint is None:
+        raise ValueError("Amazon PatchCore checkpoint directory is required")
+    checkpoint_dir = Path(checkpoint)
+    if not checkpoint_dir.is_dir():
+        raise FileNotFoundError(
+            "Amazon PatchCore checkpoint must be a directory containing "
+            f"{_AMAZON_PATCHCORE_PARAMS_SUFFIX} and {_AMAZON_PATCHCORE_INDEX_SUFFIX}: "
+            f"{checkpoint_dir}"
+        )
+
+    params_prefixes = _amazon_patchcore_prefixes(
+        checkpoint_dir,
+        suffix=_AMAZON_PATCHCORE_PARAMS_SUFFIX,
+    )
+    index_prefixes = _amazon_patchcore_prefixes(
+        checkpoint_dir,
+        suffix=_AMAZON_PATCHCORE_INDEX_SUFFIX,
+    )
+    prefixes = sorted(set(params_prefixes).intersection(index_prefixes))
+    if "" in prefixes:
+        return ""
+    if len(prefixes) == 1:
+        return prefixes[0]
+    if not prefixes:
+        raise FileNotFoundError(
+            "Amazon PatchCore checkpoint directory is missing required artifact files: "
+            f"{checkpoint_dir / _AMAZON_PATCHCORE_PARAMS_SUFFIX} and "
+            f"{checkpoint_dir / _AMAZON_PATCHCORE_INDEX_SUFFIX}"
+        )
+    raise ValueError(
+        "Amazon PatchCore ensemble artifact directories are not supported by this "
+        f"single-model backend yet; found prefixes={prefixes}"
+    )
 
 
 class SklearnWM811KBackend:
@@ -458,6 +626,97 @@ def _instantiate_anomalib_inferencer(
             except TypeError:
                 pass
     return inferencer_cls(checkpoint)
+
+
+def _resolve_amazon_patchcore_device(torch: Any, device: str | None) -> Any:
+    normalized = device.lower() if isinstance(device, str) else device
+    if normalized is None or normalized == "auto":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    if normalized == "gpu":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(normalized)
+
+
+def _official_patchcore_image_tensor(
+    image_path: Path,
+    *,
+    image_size: int,
+    resize: int | None = None,
+) -> Any:
+    """Read and normalize one image with the official MVTec PatchCore transform."""
+    try:
+        import torch
+        from PIL import Image
+        from torchvision import transforms
+    except ImportError as exc:  # pragma: no cover - depends on optional ml extra.
+        raise ImportError(
+            "Pillow, torch, and torchvision are required for Amazon PatchCore inference"
+        ) from exc
+
+    resize_size = resize or round(image_size * 8 / 7)
+    transform = transforms.Compose(
+        [
+            transforms.Resize(resize_size),
+            transforms.CenterCrop(image_size),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
+        ]
+    )
+    with Image.open(image_path) as image:
+        tensor = transform(image.convert("RGB"))
+    return torch.unsqueeze(tensor, dim=0)
+
+
+def _amazon_patchcore_image_size(model: Any, requested_image_size: int | None) -> int:
+    if requested_image_size is not None:
+        return requested_image_size
+    input_shape = getattr(model, "input_shape", None)
+    if isinstance(input_shape, Sequence) and not isinstance(input_shape, (str, bytes, bytearray)):
+        dims = [int(dim) for dim in input_shape if _static_dimension(dim) is not None]
+        if len(dims) >= 2:
+            return dims[-1]
+    return 320
+
+
+def _amazon_patchcore_score(prediction: Any) -> Any:
+    if isinstance(prediction, Mapping):
+        value = _first_prediction_value(prediction, ("pred_score", "score", "image_score"))
+        if value is not None:
+            return value
+        return _first_sequence_value(
+            _first_prediction_value(prediction, ("scores", "image_scores"))
+        )
+    if isinstance(prediction, Sequence) and not isinstance(prediction, (str, bytes, bytearray)):
+        return _first_sequence_value(prediction[0]) if prediction else None
+    return _first_prediction_value(prediction, ("pred_score", "score"))
+
+
+def _amazon_patchcore_anomaly_map(prediction: Any) -> Any:
+    if isinstance(prediction, Mapping):
+        value = _first_prediction_value(prediction, ("anomaly_map", "segmentation"))
+        if value is not None:
+            return value
+        value = _first_prediction_value(prediction, ("segmentations", "anomaly_maps", "masks"))
+        return _first_sequence_value(value)
+    if isinstance(prediction, Sequence) and not isinstance(prediction, (str, bytes, bytearray)):
+        if len(prediction) < 2:
+            return None
+        return _first_sequence_value(prediction[1])
+    return _first_prediction_value(prediction, ("anomaly_map", "segmentation"))
+
+
+def _amazon_patchcore_prefixes(checkpoint_dir: Path, *, suffix: str) -> list[str]:
+    prefixes: list[str] = []
+    for artifact in sorted(checkpoint_dir.glob(f"*{suffix}")):
+        prefixes.append(artifact.name[: -len(suffix)])
+    return prefixes
 
 
 def _first_engine_prediction(prediction_batches: Any) -> Any:

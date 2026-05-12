@@ -10,11 +10,13 @@ from pathlib import Path
 from typing import Any
 
 from kgtracevis.producers import (
+    AMAZON_PATCHCORE_BACKEND,
     ANOMALIB_ENGINE_BACKEND,
     ANOMALIB_OPENVINO_BACKEND,
     ANOMALIB_TORCH_BACKEND,
     SKLEARN_BACKEND,
     TORCH_RESNET_BACKEND,
+    AmazonPatchCoreBackend,
     AnomalibMVTecBackend,
     MVTecAnomalyPredictor,
     SklearnWM811KBackend,
@@ -25,7 +27,12 @@ from kgtracevis.producers import (
 from kgtracevis.producers.mvtec_records import build_mvtec_records
 from kgtracevis.producers.wm811k_records import build_wm811k_records
 
-MVTEC_BACKENDS = (ANOMALIB_ENGINE_BACKEND, ANOMALIB_TORCH_BACKEND, ANOMALIB_OPENVINO_BACKEND)
+MVTEC_BACKENDS = (
+    ANOMALIB_ENGINE_BACKEND,
+    ANOMALIB_TORCH_BACKEND,
+    ANOMALIB_OPENVINO_BACKEND,
+    AMAZON_PATCHCORE_BACKEND,
+)
 WM811K_BACKENDS = (SKLEARN_BACKEND, TORCH_RESNET_BACKEND)
 MODEL_BACKENDS = (*MVTEC_BACKENDS, *WM811K_BACKENDS)
 
@@ -46,6 +53,7 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Real inference backend. MVTec supports anomalib-torch and "
             "anomalib-openvino. PatchCore Lightning checkpoints use anomalib-engine. "
+            "Official Amazon PatchCore artifact directories use amazon-patchcore. "
             "WM811K supports sklearn and torch-resnet34."
         ),
     )
@@ -162,6 +170,11 @@ def build_mvtec_predictor(
     }:
         return AnomalibMVTecBackend(
             backend=model_backend,
+            checkpoint=checkpoint,
+            device=device,
+        )
+    if model_backend == AMAZON_PATCHCORE_BACKEND:
+        return AmazonPatchCoreBackend(
             checkpoint=checkpoint,
             device=device,
         )

@@ -8,9 +8,11 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from kgtracevis.producers.backends import (
+    AMAZON_PATCHCORE_BACKEND,
     ANOMALIB_ENGINE_BACKEND,
     ANOMALIB_OPENVINO_BACKEND,
     ANOMALIB_TORCH_BACKEND,
+    is_amazon_patchcore_artifact_dir,
 )
 
 MVTecModelPreset = Literal["auto", "stfpm", "patchcore", "efficientad"]
@@ -78,7 +80,7 @@ MVTEC_MODEL_PRESET_SPECS: dict[MVTecResolvedPreset, MVTecModelPresetSpec] = {
     "patchcore": MVTecModelPresetSpec(
         preset="patchcore",
         label="PatchCore",
-        description="经典强基线，适合对比和离线评估。",
+        description="经典强基线，支持 Anomalib checkpoint 或 Amazon 官方 artifact 目录。",
         checkpoint_env="KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT",
         default_checkpoint=DEFAULT_MVTEC_PATCHCORE_CHECKPOINT,
         backend_hint=ANOMALIB_ENGINE_BACKEND,
@@ -153,7 +155,7 @@ def resolve_mvtec_model_selection(model_preset: str | None = None) -> MVTecModel
 def _selection_for_preset(preset: MVTecResolvedPreset) -> MVTecModelSelection:
     spec = MVTEC_MODEL_PRESET_SPECS[preset]
     checkpoint_path = _resolve_checkpoint_path(spec)
-    available = checkpoint_path.is_file()
+    available = checkpoint_path.is_file() or is_amazon_patchcore_artifact_dir(checkpoint_path)
     return MVTecModelSelection(
         preset=spec.preset,
         label=spec.label,
@@ -180,6 +182,8 @@ def _resolve_checkpoint_path(spec: MVTecModelPresetSpec) -> Path:
 def _infer_backend(checkpoint_path: Path, default_backend: str) -> str:
     if checkpoint_path.suffix.lower() == ".xml":
         return ANOMALIB_OPENVINO_BACKEND
+    if is_amazon_patchcore_artifact_dir(checkpoint_path):
+        return AMAZON_PATCHCORE_BACKEND
     if checkpoint_path.suffix.lower() == ".ckpt":
         return ANOMALIB_ENGINE_BACKEND
     if checkpoint_path.suffix.lower() in {".pt", ".pth", ".ckpt"}:

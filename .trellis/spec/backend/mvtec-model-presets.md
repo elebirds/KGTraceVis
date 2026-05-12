@@ -54,10 +54,15 @@ GET /api/runs/mvtec-model-presets
   OpenVINO checkpoint path.
 - `patchcore` resolves from `KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT` or
   `runs/real_model_pipeline/assets/mvtec/checkpoints/mvtec_patchcore.ckpt`.
+  The configured path may be either an Anomalib-compatible checkpoint file or
+  an official Amazon PatchCore artifact directory containing
+  `patchcore_params.pkl` and `nnscorer_search_index.faiss`.
 - `efficientad` resolves from `KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT` or
   `runs/real_model_pipeline/assets/mvtec/checkpoints/mvtec_efficientad.pt`.
-- `.xml` checkpoints use `anomalib-openvino`; `.pt`, `.pth`, and `.ckpt`
-  checkpoints use `anomalib-torch`.
+- `.xml` checkpoints use `anomalib-openvino`; `.ckpt` PatchCore Lightning
+  checkpoints use `anomalib-engine`; `.pt` and `.pth` checkpoints use
+  `anomalib-torch`; official Amazon PatchCore artifact directories use
+  `amazon-patchcore`.
 - Image upload run summaries and artifacts must record `model_preset`,
   `model_backend`, and `checkpoint_path`.
 - `defect_type` remains optional human/source prior. Do not present it as a

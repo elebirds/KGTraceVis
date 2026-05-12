@@ -179,6 +179,27 @@ def test_mvtec_model_preset_route_detects_makefile_patchcore_asset(
     )
 
 
+def test_mvtec_model_preset_route_detects_amazon_patchcore_artifact_dir(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """The web preset route should recognize official Amazon PatchCore artifacts."""
+    checkpoint = tmp_path / "models" / "mvtec_bottle"
+    checkpoint.mkdir(parents=True)
+    (checkpoint / "patchcore_params.pkl").write_bytes(b"params")
+    (checkpoint / "nnscorer_search_index.faiss").write_bytes(b"faiss")
+    monkeypatch.setenv("KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT", str(checkpoint))
+
+    client = TestClient(app)
+    response = client.get("/api/runs/mvtec-model-presets")
+
+    assert response.status_code == 200
+    presets = {item["preset"]: item for item in response.json()["presets"]}
+    assert presets["patchcore"]["available"] is True
+    assert presets["patchcore"]["backend"] == "amazon-patchcore"
+    assert presets["patchcore"]["checkpoint_path"] == str(checkpoint)
+
+
 def test_model_asset_download_route_uses_default_asset(monkeypatch) -> None:
     """The web API should expose a trusted default model asset download action."""
     captured: dict[str, object] = {}

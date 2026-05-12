@@ -18,15 +18,19 @@ import kgtracevis.producers.backends as producer_backends
 from kgtracevis.adapters.batch import evidence_from_records, load_records
 from kgtracevis.mask.mask_feature_extractor import summarize_mask_features
 from kgtracevis.producers.backends import (
+    AMAZON_PATCHCORE_BACKEND,
     ANOMALIB_OPENVINO_BACKEND,
     ANOMALIB_TORCH_BACKEND,
     SKLEARN_BACKEND,
     TORCH_RESNET_BACKEND,
+    AmazonPatchCoreBackend,
     AnomalibMVTecBackend,
     SklearnWM811KBackend,
     TorchWM811KBackend,
     _first_engine_prediction,
+    amazon_patchcore_prediction_to_mvtec_prediction,
     anomalib_prediction_to_mvtec_prediction,
+    discover_amazon_patchcore_prepend,
     load_trusted_sklearn_model,
     load_trusted_torch_model,
 )
@@ -138,6 +142,23 @@ class InjectedAnomalibInferencer:
         )
 
 
+class InjectedAmazonPatchCoreModel:
+    """Official PatchCore-like model used without installing FAISS or patchcore."""
+
+    input_shape = (3, 320, 320)
+
+    def __init__(self) -> None:
+        self.seen_tensor = False
+
+    def predict(self, image_tensor: Any) -> tuple[list[np.float32], list[np.ndarray]]:
+        """Return the official PatchCore `(scores, segmentations)` shape."""
+        self.seen_tensor = image_tensor == "tensor"
+        return (
+            [np.float32(0.88)],
+            [np.asarray([[0.0, 0.6], [0.2, 0.9]], dtype=np.float32)],
+        )
+
+
 class ShapeSensitiveOpenVINOInferencer:
     """OpenVINO-like inferencer whose default predict path does not resize images."""
 
@@ -223,6 +244,69 @@ def test_anomalib_backend_normalizes_injected_inferencer_prediction(tmp_path: Pa
     assert prediction["anomaly_map"] == [[0.1, 0.7], [0.2, 0.3]]
     assert prediction["metadata"]["source_backend"] == ANOMALIB_TORCH_BACKEND
     assert prediction["metadata"]["device"] == "cpu"
+
+
+def test_amazon_patchcore_backend_normalizes_official_prediction_shape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Amazon PatchCore backend should emit standard MVTec predictions."""
+    checkpoint = _amazon_patchcore_artifact_dir(tmp_path / "mvtec_bottle")
+    model = InjectedAmazonPatchCoreModel()
+    monkeypatch.setattr(
+        producer_backends,
+        "_official_patchcore_image_tensor",
+        lambda *_args, **_kwargs: "tensor",
+    )
+    backend = AmazonPatchCoreBackend(
+        checkpoint=checkpoint,
+        device="cpu",
+        model=model,
+    )
+
+    prediction = backend.predict(tmp_path / "image.png")
+
+    assert model.seen_tensor is True
+    assert prediction["score"] == pytest.approx(0.88)
+    assert prediction["confidence"] == pytest.approx(0.88)
+    np.testing.assert_allclose(
+        np.asarray(prediction["anomaly_map"], dtype=float),
+        np.asarray([[0.0, 0.6], [0.2, 0.9]], dtype=float),
+    )
+    assert prediction["metadata"]["source_backend"] == AMAZON_PATCHCORE_BACKEND
+    assert prediction["metadata"]["checkpoint"] == str(checkpoint)
+    assert prediction["metadata"]["model_source"] == "amazon-science/patchcore-inspection"
+    assert prediction["metadata"]["model_format"] == "amazon-patchcore-faiss-pkl"
+
+
+def test_amazon_patchcore_conversion_accepts_mapping_outputs() -> None:
+    """Normalization should tolerate dict-shaped official wrapper outputs."""
+    prediction = amazon_patchcore_prediction_to_mvtec_prediction(
+        {
+            "scores": [0.72],
+            "segmentations": [np.asarray([[0.1, 0.7], [0.0, 0.3]])],
+        },
+        checkpoint="official/mvtec_bottle",
+        device="cpu",
+    )
+
+    assert prediction["score"] == pytest.approx(0.72)
+    assert prediction["confidence"] == pytest.approx(0.72)
+    assert prediction["anomaly_map"] == [[0.1, 0.7], [0.0, 0.3]]
+    assert prediction["metadata"]["source_backend"] == AMAZON_PATCHCORE_BACKEND
+
+
+def test_amazon_patchcore_artifact_validation_names_required_files(tmp_path: Path) -> None:
+    """Official artifact dirs should fail clearly when files are absent."""
+    with pytest.raises(FileNotFoundError, match="patchcore_params.pkl"):
+        discover_amazon_patchcore_prepend(tmp_path / "missing")
+
+    incomplete = tmp_path / "incomplete"
+    incomplete.mkdir()
+    (incomplete / "patchcore_params.pkl").write_bytes(b"params")
+
+    with pytest.raises(FileNotFoundError, match="nnscorer_search_index.faiss"):
+        discover_amazon_patchcore_prepend(incomplete)
 
 
 def test_first_engine_prediction_returns_first_item() -> None:
@@ -400,7 +484,19 @@ def test_cli_backend_selection_supports_real_backend_names(
         def predict(self, image_path: Path) -> MVTecPrediction:
             return {"score": 0.1}
 
+    class SentinelAmazonPatchCoreBackend:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+        def predict(self, image_path: Path) -> MVTecPrediction:
+            return {"score": 0.2}
+
     monkeypatch.setattr(build_script, "AnomalibMVTecBackend", SentinelAnomalibBackend)
+    monkeypatch.setattr(
+        build_script,
+        "AmazonPatchCoreBackend",
+        SentinelAmazonPatchCoreBackend,
+    )
     mvtec_predictor = build_script.build_mvtec_predictor(
         model_backend=ANOMALIB_OPENVINO_BACKEND,
         checkpoint=tmp_path / "model.xml",
@@ -409,6 +505,15 @@ def test_cli_backend_selection_supports_real_backend_names(
     assert isinstance(mvtec_predictor, SentinelAnomalibBackend)
     assert mvtec_predictor.kwargs["backend"] == ANOMALIB_OPENVINO_BACKEND
     assert mvtec_predictor.kwargs["device"] == "cpu"
+
+    amazon_predictor = build_script.build_mvtec_predictor(
+        model_backend=AMAZON_PATCHCORE_BACKEND,
+        checkpoint=tmp_path / "amazon_patchcore" / "mvtec_bottle",
+        device="cpu",
+    )
+    assert isinstance(amazon_predictor, SentinelAmazonPatchCoreBackend)
+    assert amazon_predictor.kwargs["checkpoint"] == tmp_path / "amazon_patchcore" / "mvtec_bottle"
+    assert amazon_predictor.kwargs["device"] == "cpu"
 
     with pytest.raises(ValueError, match="unsupported MVTec"):
         build_script.build_mvtec_predictor(model_backend="fake")
@@ -609,6 +714,13 @@ def test_filter_forbidden_outputs_recurses_through_records() -> None:
 def _touch(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("fixture", encoding="utf-8")
+
+
+def _amazon_patchcore_artifact_dir(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "patchcore_params.pkl").write_bytes(b"params")
+    (path / "nnscorer_search_index.faiss").write_bytes(b"faiss")
+    return path
 
 
 def _build_torch_wm811k_model(torch: Any, torchvision: Any) -> Any:
