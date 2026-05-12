@@ -43,6 +43,20 @@ def parse_args() -> argparse.Namespace:
         help="Number of ranked candidate/plausible explanation paths per case.",
     )
     parser.add_argument("--overwrite", action="store_true", help="Replace existing outputs.")
+    parser.add_argument(
+        "--kg-node-path",
+        action="append",
+        default=[],
+        type=Path,
+        help="Additional KG node CSV overlay path. May be passed multiple times.",
+    )
+    parser.add_argument(
+        "--kg-edge-path",
+        action="append",
+        default=[],
+        type=Path,
+        help="Additional KG edge CSV overlay path. May be passed multiple times.",
+    )
     return parser.parse_args()
 
 
@@ -56,6 +70,8 @@ def main() -> None:
         dataset=dataset,
         top_k=args.top_k,
         overwrite=args.overwrite,
+        kg_node_paths=args.kg_node_path,
+        kg_edge_paths=args.kg_edge_path,
     )
     print(
         json.dumps(

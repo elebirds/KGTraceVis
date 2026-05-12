@@ -8,6 +8,17 @@ from kgtracevis.kg_construction.candidate_triple_extractor import (
     CandidateTriple,
     extract_candidate_triples,
 )
+from kgtracevis.kg_construction.case_kg_hardening import (
+    CandidateKGOutput,
+    CaseAuditRow,
+    audit_mvtec_cases,
+    audit_wm811k_cases,
+    build_candidate_kg,
+    run_before_after_comparison,
+    validate_candidate_claim_boundaries,
+    write_candidate_kg_artifacts,
+    write_case_audit_artifacts,
+)
 from kgtracevis.kg_construction.confidence_assigner import assign_confidence, edge_weight
 from kgtracevis.kg_construction.export_kg_csv import (
     export_edges_csv,
@@ -31,11 +42,16 @@ from kgtracevis.kg_construction.triple_cleaner import (
 
 __all__ = [
     "CandidateEntity",
+    "CandidateKGOutput",
     "CandidateTriple",
+    "CaseAuditRow",
     "KGQAFinding",
     "KGQAReport",
     "SourceRecord",
     "assign_confidence",
+    "audit_mvtec_cases",
+    "audit_wm811k_cases",
+    "build_candidate_kg",
     "clean_candidate_nodes",
     "clean_candidate_triples",
     "edge_weight",
@@ -48,7 +64,11 @@ __all__ = [
     "load_source_text",
     "load_structured_records",
     "run_kg_qa",
+    "run_before_after_comparison",
+    "validate_candidate_claim_boundaries",
     "validate_edges",
     "validate_kg_csv_contract",
     "validate_nodes",
+    "write_candidate_kg_artifacts",
+    "write_case_audit_artifacts",
 ]

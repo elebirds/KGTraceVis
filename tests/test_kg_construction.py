@@ -12,6 +12,8 @@ from kgtracevis.kg_construction import (
     CandidateEntity,
     CandidateTriple,
     assign_confidence,
+    audit_mvtec_cases,
+    build_candidate_kg,
     clean_candidate_nodes,
     clean_candidate_triples,
     export_kg_csv,
@@ -19,8 +21,10 @@ from kgtracevis.kg_construction import (
     extract_candidate_triples,
     load_source_registry,
     load_source_text,
+    validate_candidate_claim_boundaries,
     validate_edges,
 )
+from kgtracevis.kg_construction.case_kg_hardening import WAFER_PATTERNS
 from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS, NODE_COLUMNS
 from kgtracevis.kg_construction.source_loader import SourceRecord
 
@@ -303,3 +307,95 @@ def test_candidate_triples_do_not_extract_from_free_text() -> None:
     records = [{"text": "Scratch may be caused by a tool mark."}]
 
     assert extract_candidate_triples(records) == []
+
+
+def test_mvtec_case_audit_scores_clean_semantic_case(tmp_path: Path) -> None:
+    """Case audit should rank clean, semantic MVTec defects above weak rows."""
+    records_path = tmp_path / "records.jsonl"
+    records_path.write_text(
+        "\n".join(
+            [
+                (
+                    '{"case_id":"mvtec_metal_nut_test_scratch_000","dataset":"mvtec",'
+                    '"object":"metal_nut","source_label":"scratch","pred_label":"anomalous",'
+                    '"score":9.1,"confidence":0.97,'
+                    '"mask_stats":{"area_ratio":0.02}}'
+                ),
+                (
+                    '{"case_id":"mvtec_bottle_test_good_000","dataset":"mvtec",'
+                    '"object":"bottle","source_label":"good","pred_label":"normal",'
+                    '"score":1.0,"confidence":0.92,'
+                    '"mask_stats":{"area_ratio":0.0}}'
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    table_path = tmp_path / "table.csv"
+    table_path.write_text(
+        "\n".join(
+            [
+                (
+                    "case_id,dataset,adapter_name,anomaly_type,location,morphology,"
+                    "consistency_score,linked_entity_count,correction_candidate_count,"
+                    "path_count,top_target_entity_id,top_target_name,top_target_label,"
+                    "best_score,explanation_scope,claim_boundary"
+                ),
+                (
+                    "mvtec_metal_nut_test_scratch_000,mvtec,mvtec,scratch,surface,"
+                    "linear,1.0,4,0,2,MechanicalContact,Mechanical contact,RootCause,"
+                    "0.7,candidate,"
+                ),
+                (
+                    "mvtec_bottle_test_good_000,mvtec,mvtec,good,surface,spot,1.0,2,"
+                    "0,0,,,,,candidate,"
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    rows = audit_mvtec_cases(records_path, table_path)
+
+    assert rows[0].case_id == "mvtec_metal_nut_test_scratch_000"
+    assert rows[0].kg_path_specific is True
+    assert rows[0].evidence_clean is True
+    assert rows[0].explainability_score > rows[1].explainability_score
+
+
+def test_coverage_first_candidate_kg_covers_wm811k_patterns_and_claims() -> None:
+    """Candidate KG should cover all public WM811K pattern classes safely."""
+    nodes, edges, summary = build_candidate_kg()
+    node_ids = {node.id for node in nodes}
+    edge_ids = {edge.edge_id for edge in edges}
+    graph_edge_ids = {edge.edge_id for edge in KnowledgeGraph.from_default_paths().edges}
+
+    for spec in WAFER_PATTERNS:
+        if spec.node_id != "NearfullDefect":
+            assert spec.node_id in node_ids
+        assert (
+            f"WaferObject|HAS_ANOMALY|{spec.node_id}|wafer" in edge_ids | graph_edge_ids
+        )
+
+    assert "LocDefect|HAS_PLAUSIBLE_CAUSE|GlueRemovalInsufficient|wafer" not in edge_ids
+    assert validate_candidate_claim_boundaries(edges) == []
+    assert summary["wm811k_pattern_coverage"] == [spec.pattern for spec in WAFER_PATTERNS]
+
+
+def test_candidate_kg_overlay_loads_and_keeps_loc_separate(tmp_path: Path) -> None:
+    """Overlay KG should link WM811K Loc to LocDefect, not NearfullDefect."""
+    nodes, edges, _summary = build_candidate_kg()
+    nodes_path = tmp_path / "nodes_candidate.csv"
+    edges_path = tmp_path / "edges_candidate.csv"
+    export_kg_csv(nodes, edges, nodes_path=nodes_path, edges_path=edges_path)
+
+    graph = KnowledgeGraph.from_paths(
+        ["data/kg/nodes.csv", nodes_path],
+        ["data/kg/edges.csv", "data/kg/mvtec_rca_reference.csv", edges_path],
+        skip_missing=True,
+    )
+    candidates = graph.candidates("loc", scenario="wafer", top_k=3)
+
+    assert candidates
+    assert candidates[0].entity_id == "LocDefect"
+    assert candidates[0].entity_id != "NearfullDefect"

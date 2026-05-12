@@ -12,6 +12,7 @@ from typing import Any
 
 from kgtracevis.adapters.batch import evidence_from_records, load_records, write_evidence_files
 from kgtracevis.core import KGTracePipeline
+from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
 
 SUMMARY_FILENAME = "adapter_pipeline_summary.json"
@@ -57,6 +58,8 @@ def run_adapter_pipeline(
     top_k: int = 5,
     overwrite: bool = False,
     pipeline: KGTracePipeline | None = None,
+    kg_node_paths: list[str | Path] | None = None,
+    kg_edge_paths: list[str | Path] | None = None,
 ) -> AdapterPipelineOutput:
     """Run records through Evidence adapters and ``KGTracePipeline``.
 
@@ -82,7 +85,13 @@ def run_adapter_pipeline(
         overwrite=overwrite,
     )
 
-    active_pipeline = pipeline or KGTracePipeline()
+    if pipeline is not None and (kg_node_paths or kg_edge_paths):
+        raise ValueError("pass either pipeline or KG CSV overlay paths, not both")
+
+    active_pipeline = pipeline or _pipeline_from_kg_paths(
+        kg_node_paths=kg_node_paths,
+        kg_edge_paths=kg_edge_paths,
+    )
     cases = [
         _case_summary(
             evidence_path=evidence_path,
@@ -98,6 +107,8 @@ def run_adapter_pipeline(
         output_dir=destination_dir,
         dataset=dataset,
         top_k=top_k,
+        kg_node_paths=kg_node_paths,
+        kg_edge_paths=kg_edge_paths,
         evidence_paths=evidence_paths,
         cases=cases,
     )
@@ -149,6 +160,8 @@ def _run_summary(
     output_dir: Path,
     dataset: DatasetName | None,
     top_k: int,
+    kg_node_paths: list[str | Path] | None,
+    kg_edge_paths: list[str | Path] | None,
     evidence_paths: list[Path],
     cases: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -170,8 +183,12 @@ def _run_summary(
         },
         "pipeline": {
             "name": "KGTracePipeline",
-            "kg_backend": "csv_default_paths",
+            "kg_backend": "csv_default_paths_with_overlay"
+            if kg_node_paths or kg_edge_paths
+            else "csv_default_paths",
             "top_k": top_k,
+            "kg_node_paths": [str(path) for path in kg_node_paths or []],
+            "kg_edge_paths": [str(path) for path in kg_edge_paths or []],
         },
         "note": (
             "Path targets are candidate/plausible explanation nodes generated from "
@@ -180,6 +197,21 @@ def _run_summary(
         "case_count": len(cases),
         "cases": cases,
     }
+
+
+def _pipeline_from_kg_paths(
+    *,
+    kg_node_paths: list[str | Path] | None,
+    kg_edge_paths: list[str | Path] | None,
+) -> KGTracePipeline:
+    if not kg_node_paths and not kg_edge_paths:
+        return KGTracePipeline()
+    graph = KnowledgeGraph.from_paths(
+        [*DEFAULT_NODE_PATHS, *(kg_node_paths or [])],
+        [*DEFAULT_EDGE_PATHS, *(kg_edge_paths or [])],
+        skip_missing=True,
+    )
+    return KGTracePipeline(graph=graph)
 
 
 def _case_summary(

@@ -27,6 +27,9 @@ def rank_root_cause_paths(
     gamma: float = 0.10,
 ) -> list[dict[str, Any]]:
     """Rank candidate RCA paths using relation confidence and evidence match."""
+    if _is_non_anomalous_type(evidence.anomaly_type):
+        return []
+
     selected = selected_entities_by_field(linked_entities)
     selected_ids = set(selected.values())
     source_ids = {
@@ -113,3 +116,10 @@ def _path_id(case_id: str, nodes: list[str], relations: list[str]) -> str:
     signature = "|".join((*nodes, *relations))
     digest = hashlib.sha1(signature.encode("utf-8")).hexdigest()[:10]
     return f"path_{case_id}_{digest}"
+
+
+def _is_non_anomalous_type(value: str | None) -> bool:
+    if value is None:
+        return True
+    token = "_".join("".join(ch.lower() if ch.isalnum() else " " for ch in value).split())
+    return token in {"", "good", "normal", "none", "unknown", "no_label", "unlabeled"}
