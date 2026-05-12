@@ -5,13 +5,13 @@ from __future__ import annotations
 import os
 import pickle
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import numpy as np
 
-from kgtracevis.producers.common import MVTecPrediction, WM811KPrediction
+from kgtracevis.producers.common import MVTecAnomalyPredictor, MVTecPrediction, WM811KPrediction
 
 ANOMALIB_TORCH_BACKEND = "anomalib-torch"
 ANOMALIB_OPENVINO_BACKEND = "anomalib-openvino"
@@ -21,8 +21,28 @@ SKLEARN_BACKEND = "sklearn"
 TORCH_RESNET_BACKEND = "torch-resnet34"
 AMAZON_PATCHCORE_MODEL_SOURCE = "amazon-science/patchcore-inspection"
 AMAZON_PATCHCORE_MODEL_FORMAT = "amazon-patchcore-faiss-pkl"
+WM811K_RESNET_MODEL_SOURCE = "radai-agent/radai-wm811k-defect-detection"
+WM811K_RESNET_MODEL_FILE = "best_radai_resnet.pt"
 _AMAZON_PATCHCORE_PARAMS_SUFFIX = "patchcore_params.pkl"
 _AMAZON_PATCHCORE_INDEX_SUFFIX = "nnscorer_search_index.faiss"
+_GIT_LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1"
+AMAZON_PATCHCORE_MVTEC_OBJECTS = (
+    "bottle",
+    "cable",
+    "capsule",
+    "carpet",
+    "grid",
+    "hazelnut",
+    "leather",
+    "metal_nut",
+    "pill",
+    "screw",
+    "tile",
+    "toothbrush",
+    "transistor",
+    "wood",
+    "zipper",
+)
 WM811K_CLASSES = [
     "Center",
     "Donut",
@@ -112,6 +132,45 @@ class AmazonPatchCoreBackend:
             return self.model.predict(image_tensor)
         except TypeError:
             return self.model.predict(image_path)
+
+
+class AmazonPatchCoreObjectRouter:
+    """Route MVTec images to object-specific official PatchCore artifacts."""
+
+    def __init__(
+        self,
+        *,
+        checkpoint_root: str | Path,
+        device: str | None = None,
+        predictor_factory: Callable[[Path], MVTecAnomalyPredictor] | None = None,
+    ) -> None:
+        """Create a lazy object router from a root containing `mvtec_<object>` dirs."""
+        self.checkpoint_root = Path(checkpoint_root)
+        self.device = device
+        self._predictor_factory = predictor_factory
+        self._predictors: dict[str, MVTecAnomalyPredictor] = {}
+
+    def predict(self, image_path: Path) -> MVTecPrediction:
+        """Resolve the image object from its path, then run that object's predictor."""
+        object_name = infer_amazon_patchcore_mvtec_object_from_path(image_path)
+        predictor = self._predictor_for_object(object_name)
+        return predictor.predict(image_path)
+
+    def _predictor_for_object(self, object_name: str) -> MVTecAnomalyPredictor:
+        canonical = normalize_amazon_patchcore_mvtec_object(object_name)
+        predictor = self._predictors.get(canonical)
+        if predictor is not None:
+            return predictor
+        checkpoint = resolve_amazon_patchcore_artifact_dir(
+            self.checkpoint_root,
+            object_name=canonical,
+        )
+        if self._predictor_factory is not None:
+            predictor = self._predictor_factory(checkpoint)
+        else:
+            predictor = AmazonPatchCoreBackend(checkpoint=checkpoint, device=self.device)
+        self._predictors[canonical] = predictor
+        return predictor
 
 
 class AnomalibMVTecBackend:
@@ -337,6 +396,131 @@ def is_amazon_patchcore_artifact_dir(path: str | Path | None) -> bool:
     return True
 
 
+def is_amazon_patchcore_artifact_collection(path: str | Path | None) -> bool:
+    """Return whether a path contains at least one official MVTec artifact dir."""
+    if path is None:
+        return False
+    candidate = Path(path)
+    if not candidate.is_dir():
+        return False
+    return bool(list_amazon_patchcore_artifact_dirs(candidate))
+
+
+def list_amazon_patchcore_mvtec_objects() -> list[str]:
+    """Return the canonical MVTec object names supported by official artifacts."""
+    return list(AMAZON_PATCHCORE_MVTEC_OBJECTS)
+
+
+def list_amazon_patchcore_artifact_dirs(root: str | Path) -> dict[str, Path]:
+    """List available official PatchCore artifact dirs by canonical object name."""
+    root_path = Path(root)
+    discovered: dict[str, Path] = {}
+    if not root_path.is_dir():
+        return discovered
+
+    if is_amazon_patchcore_artifact_dir(root_path):
+        try:
+            object_name = normalize_amazon_patchcore_mvtec_object(root_path.name)
+        except ValueError:
+            object_name = ""
+        if object_name:
+            return {object_name: root_path}
+
+    for object_name in AMAZON_PATCHCORE_MVTEC_OBJECTS:
+        matches = [
+            candidate
+            for candidate in _amazon_patchcore_candidate_artifact_paths(
+                root_path,
+                object_name=object_name,
+            )
+            if is_amazon_patchcore_artifact_dir(candidate)
+        ]
+        if matches:
+            discovered[object_name] = _preferred_amazon_patchcore_artifact_path(matches)
+    return discovered
+
+
+def normalize_amazon_patchcore_mvtec_object(object_name: str) -> str:
+    """Normalize user-facing MVTec object names to canonical PatchCore names."""
+    normalized = object_name.strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized.startswith("mvtec_"):
+        normalized = normalized.removeprefix("mvtec_")
+    supported = set(AMAZON_PATCHCORE_MVTEC_OBJECTS)
+    if normalized not in supported:
+        joined = ", ".join(AMAZON_PATCHCORE_MVTEC_OBJECTS)
+        raise ValueError(
+            f"unsupported MVTec object for Amazon PatchCore artifacts: {object_name!r}; "
+            f"supported objects: {joined}"
+        )
+    return normalized
+
+
+def amazon_patchcore_mvtec_artifact_dir_name(object_name: str) -> str:
+    """Return the official artifact directory name for one MVTec object."""
+    return f"mvtec_{normalize_amazon_patchcore_mvtec_object(object_name)}"
+
+
+def infer_amazon_patchcore_mvtec_object_from_path(image_path: str | Path) -> str:
+    """Infer a canonical MVTec object name from an image path."""
+    path = Path(image_path)
+    for part in path.parts:
+        try:
+            return normalize_amazon_patchcore_mvtec_object(part)
+        except ValueError:
+            continue
+    joined = ", ".join(AMAZON_PATCHCORE_MVTEC_OBJECTS)
+    raise ValueError(
+        f"could not infer a supported MVTec object from image path {path}; "
+        f"supported objects: {joined}"
+    )
+
+
+def resolve_amazon_patchcore_artifact_dir(
+    checkpoint_root: str | Path,
+    *,
+    object_name: str | None = None,
+) -> Path:
+    """Resolve an official object artifact dir from a root or a single artifact dir."""
+    root = Path(checkpoint_root)
+    if object_name is None:
+        if is_amazon_patchcore_artifact_dir(root):
+            return root
+        available = list_amazon_patchcore_artifact_dirs(root)
+        if len(available) == 1:
+            return next(iter(available.values()))
+        objects = ", ".join(sorted(available)) or "none"
+        raise ValueError(
+            "Amazon PatchCore object_name is required when checkpoint root contains "
+            f"multiple or no object artifacts: {root}; available objects: {objects}"
+        )
+
+    canonical = normalize_amazon_patchcore_mvtec_object(object_name)
+    expected_name = amazon_patchcore_mvtec_artifact_dir_name(canonical)
+    if root.name == expected_name and is_amazon_patchcore_artifact_dir(root):
+        return root
+    if root.name == expected_name and root.is_dir():
+        _raise_unusable_amazon_patchcore_artifact_dir(root, object_name=canonical)
+
+    candidates = _amazon_patchcore_candidate_artifact_paths(root, object_name=canonical)
+    matches = [candidate for candidate in candidates if is_amazon_patchcore_artifact_dir(candidate)]
+    if matches:
+        return _preferred_amazon_patchcore_artifact_path(matches)
+    invalid_dirs = [candidate for candidate in candidates if candidate.is_dir()]
+    if invalid_dirs:
+        _raise_unusable_amazon_patchcore_artifact_dir(invalid_dirs[0], object_name=canonical)
+
+    available = list_amazon_patchcore_artifact_dirs(root)
+    available_text = ", ".join(sorted(available)) or "none"
+    expected_paths = ", ".join(
+        str(path) for path in _amazon_patchcore_expected_artifact_paths(root, canonical)
+    )
+    raise FileNotFoundError(
+        f"Amazon PatchCore artifact for object {canonical!r} was not found under {root}. "
+        f"Expected {expected_name} at one of: {expected_paths}. "
+        f"Available objects: {available_text}."
+    )
+
+
 def _prepare_amazon_patchcore_runtime() -> None:
     if sys.platform == "darwin":
         os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -352,6 +536,22 @@ def discover_amazon_patchcore_prepend(checkpoint: str | Path | None) -> str:
             "Amazon PatchCore checkpoint must be a directory containing "
             f"{_AMAZON_PATCHCORE_PARAMS_SUFFIX} and {_AMAZON_PATCHCORE_INDEX_SUFFIX}: "
             f"{checkpoint_dir}"
+        )
+
+    pointer_files = [
+        artifact
+        for artifact in checkpoint_dir.glob("*")
+        if (
+            artifact.name.endswith(_AMAZON_PATCHCORE_PARAMS_SUFFIX)
+            or artifact.name.endswith(_AMAZON_PATCHCORE_INDEX_SUFFIX)
+        )
+        and _is_git_lfs_pointer_file(artifact)
+    ]
+    if pointer_files:
+        joined = ", ".join(str(path) for path in sorted(pointer_files))
+        raise FileNotFoundError(
+            "Amazon PatchCore artifact files are Git LFS pointer files, not downloaded "
+            f"model artifacts: {joined}. Run git lfs pull for this object artifact."
         )
 
     params_prefixes = _amazon_patchcore_prefixes(
@@ -425,12 +625,16 @@ class TorchWM811KBackend:
         checkpoint: str | Path | None = None,
         model: Any | None = None,
         device: str | None = None,
+        model_source: str | None = None,
+        model_file: str | None = None,
     ) -> None:
         """Create a classifier backend from an injected model or trusted checkpoint."""
         if model is None and checkpoint is None:
             raise ValueError("--checkpoint is required for --model-backend torch-resnet34")
         self.checkpoint = Path(checkpoint) if checkpoint is not None else None
         self.device = _resolve_torch_device(device)
+        self.model_source = model_source
+        self.model_file = model_file
         self.model = model if model is not None else load_trusted_torch_model(self.checkpoint)
         self.model.to(self.device)
         self.model.eval()
@@ -455,16 +659,23 @@ class TorchWM811KBackend:
             confidence = float(probabilities[0, pred_idx].item())
 
         label = WM811K_CLASSES[pred_idx] if pred_idx < len(WM811K_CLASSES) else "unknown"
+        metadata = {
+            "source_backend": TORCH_RESNET_BACKEND,
+            "checkpoint": str(self.checkpoint) if self.checkpoint is not None else None,
+            "device": str(self.device),
+            "classes": WM811K_CLASSES,
+            "task": "defect_pattern_classification",
+            "produces_root_cause": False,
+        }
+        if self.model_source:
+            metadata["model_source"] = self.model_source
+        if self.model_file:
+            metadata["model_file"] = self.model_file
         return {
             "pattern": label,
             "score": confidence,
             "confidence": confidence,
-            "metadata": {
-                "source_backend": TORCH_RESNET_BACKEND,
-                "checkpoint": str(self.checkpoint) if self.checkpoint is not None else None,
-                "device": str(self.device),
-                "classes": WM811K_CLASSES,
-            },
+            "metadata": metadata,
         }
 
 
@@ -725,6 +936,52 @@ def _amazon_patchcore_prefixes(checkpoint_dir: Path, *, suffix: str) -> list[str
     for artifact in sorted(checkpoint_dir.glob(f"*{suffix}")):
         prefixes.append(artifact.name[: -len(suffix)])
     return prefixes
+
+
+def _is_git_lfs_pointer_file(path: Path) -> bool:
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(len(_GIT_LFS_POINTER_PREFIX))
+    except OSError:
+        return False
+    return header == _GIT_LFS_POINTER_PREFIX
+
+
+def _raise_unusable_amazon_patchcore_artifact_dir(path: Path, *, object_name: str) -> NoReturn:
+    try:
+        discover_amazon_patchcore_prepend(path)
+    except (FileNotFoundError, ValueError) as exc:
+        raise FileNotFoundError(
+            f"Amazon PatchCore artifact directory for object {object_name!r} exists "
+            f"but is not usable: {path}. {exc}"
+        ) from exc
+    raise FileNotFoundError(
+        f"Amazon PatchCore artifact directory for object {object_name!r} exists "
+        f"but is not usable: {path}."
+    )
+
+
+def _amazon_patchcore_expected_artifact_paths(root: Path, object_name: str) -> list[Path]:
+    artifact_dir = amazon_patchcore_mvtec_artifact_dir_name(object_name)
+    return [
+        root / artifact_dir,
+        root / "models" / artifact_dir,
+    ]
+
+
+def _amazon_patchcore_candidate_artifact_paths(root: Path, *, object_name: str) -> list[Path]:
+    expected = _amazon_patchcore_expected_artifact_paths(root, object_name)
+    artifact_dir = amazon_patchcore_mvtec_artifact_dir_name(object_name)
+    recursive = sorted(root.glob(f"**/{artifact_dir}")) if root.is_dir() else []
+    candidates = expected + recursive
+    unique: dict[str, Path] = {}
+    for candidate in candidates:
+        unique.setdefault(candidate.as_posix(), candidate)
+    return list(unique.values())
+
+
+def _preferred_amazon_patchcore_artifact_path(paths: Sequence[Path]) -> Path:
+    return sorted(paths, key=lambda path: (len(path.parts), path.as_posix()))[0]
 
 
 def _first_engine_prediction(prediction_batches: Any) -> Any:

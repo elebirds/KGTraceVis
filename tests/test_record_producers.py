@@ -24,16 +24,23 @@ from kgtracevis.producers.backends import (
     SKLEARN_BACKEND,
     TORCH_RESNET_BACKEND,
     AmazonPatchCoreBackend,
+    AmazonPatchCoreObjectRouter,
     AnomalibMVTecBackend,
     SklearnWM811KBackend,
     TorchWM811KBackend,
     _first_engine_prediction,
     _prepare_amazon_patchcore_runtime,
+    amazon_patchcore_mvtec_artifact_dir_name,
     amazon_patchcore_prediction_to_mvtec_prediction,
     anomalib_prediction_to_mvtec_prediction,
     discover_amazon_patchcore_prepend,
+    is_amazon_patchcore_artifact_collection,
+    is_amazon_patchcore_artifact_dir,
+    list_amazon_patchcore_artifact_dirs,
     load_trusted_sklearn_model,
     load_trusted_torch_model,
+    normalize_amazon_patchcore_mvtec_object,
+    resolve_amazon_patchcore_artifact_dir,
 )
 from kgtracevis.producers.common import (
     MVTecPrediction,
@@ -41,6 +48,10 @@ from kgtracevis.producers.common import (
     deterministic_subset,
     filter_forbidden_outputs,
     write_jsonl_records,
+)
+from kgtracevis.producers.mvtec_calibration import (
+    calibrate_thresholds_from_records,
+    threshold_config_from_mapping,
 )
 from kgtracevis.producers.mvtec_records import build_mvtec_records, mask_stats_from_array
 from kgtracevis.producers.wm811k_records import build_wm811k_records
@@ -95,7 +106,14 @@ class FakeWM811KClassifier:
             "pattern": pattern,
             "confidence": 0.84,
             "saliency_map": [[0.1 for _value in row] for row in wafer_map],
-            "metadata": {"fixture": "wm811k"},
+            "metadata": {
+                "fixture": "wm811k",
+                "model_source": "radai-agent/radai-wm811k-defect-detection",
+                "model_file": "best_radai_resnet.pt",
+                "classes": ["Center", "Near-full"],
+                "task": "defect_pattern_classification",
+                "produces_root_cause": False,
+            },
         }
 
 
@@ -228,6 +246,87 @@ def test_mvtec_producer_emits_adapter_compatible_model_records(tmp_path: Path) -
     assert evidence[0].kg_analysis.top_k_paths == []
 
 
+def test_mvtec_producer_applies_object_threshold_config(tmp_path: Path) -> None:
+    """Calibrated thresholds should control label/confidence and mask generation."""
+    root = tmp_path / "mvtec"
+    _touch(root / "bottle" / "test" / "scratch" / "000.png")
+    _touch(root / "bottle" / "test" / "good" / "001.png")
+    config = threshold_config_from_mapping(
+        {
+            "threshold_source": "supervised_ds_mvtec_quick_calibration",
+            "uses_ground_truth": True,
+            "objects": {
+                "bottle": {
+                    "score_threshold": 0.8,
+                    "map_threshold": 0.8,
+                    "min_area_ratio": 0.01,
+                    "method": "supervised_f1_quick",
+                }
+            },
+        }
+    )
+
+    records = build_mvtec_records(
+        root,
+        FakeMVTecPredictor(),
+        output_dir=tmp_path / "generated",
+        model_backend="fake",
+        threshold_config=config,
+        include_good=True,
+    )
+
+    by_label = {record["defect_type"]: record for record in records}
+    scratch = by_label["scratch"]
+    good = by_label["good"]
+    assert scratch["confidence"] == 1.0
+    assert scratch["pred_label"] == "anomalous"
+    assert scratch["detector"]["score_threshold"] == 0.8
+    assert scratch["detector"]["map_threshold"] == 0.8
+    assert scratch["detector"]["threshold_source"] == "supervised_ds_mvtec_quick_calibration"
+    assert scratch["mask_stats"]["area_ratio"] > 0
+    assert good["confidence"] == 0.0
+    assert good["pred_label"] == "normal"
+    assert good["mask_stats"]["area_ratio"] == 0.0
+
+
+def test_calibrate_thresholds_from_records_uses_scores_and_gt_masks(tmp_path: Path) -> None:
+    """Calibration helpers should produce object-specific score and map thresholds."""
+    good_heatmap = tmp_path / "good_heatmap.json"
+    defect_heatmap = tmp_path / "defect_heatmap.json"
+    gt_mask = tmp_path / "defect_mask.png"
+    good_heatmap.write_text(json.dumps([[0.1, 0.2], [0.1, 0.2]]), encoding="utf-8")
+    defect_heatmap.write_text(json.dumps([[0.1, 0.9], [0.2, 0.8]]), encoding="utf-8")
+    _write_mask(gt_mask, [[0, 255], [0, 255]])
+
+    thresholds = calibrate_thresholds_from_records(
+        [
+            {
+                "object": "bottle",
+                "defect_type": "good",
+                "score": 0.2,
+                "heatmap_path": str(good_heatmap),
+            },
+            {
+                "object": "bottle",
+                "defect_type": "scratch",
+                "score": 0.9,
+                "heatmap_path": str(defect_heatmap),
+                "gt_mask_path": str(gt_mask),
+            },
+        ],
+        min_area_ratio=0.02,
+    )
+
+    assert len(thresholds) == 1
+    threshold = thresholds[0]
+    assert threshold.object_name == "bottle"
+    assert threshold.score_threshold == pytest.approx(0.9)
+    assert threshold.map_threshold is not None
+    assert 0.2 < threshold.map_threshold <= 0.9
+    assert threshold.min_area_ratio == 0.02
+    assert threshold.uses_ground_truth is True
+
+
 def test_anomalib_backend_normalizes_injected_inferencer_prediction(tmp_path: Path) -> None:
     """Anomalib wrappers should normalize predictions without importing anomalib in tests."""
     backend = AnomalibMVTecBackend(
@@ -320,6 +419,89 @@ def test_amazon_patchcore_artifact_validation_names_required_files(tmp_path: Pat
 
     with pytest.raises(FileNotFoundError, match="nnscorer_search_index.faiss"):
         discover_amazon_patchcore_prepend(incomplete)
+
+
+def test_amazon_patchcore_object_root_resolves_mvtec_artifact_dirs(
+    tmp_path: Path,
+) -> None:
+    """Object roots should map canonical MVTec names to official artifact dirs."""
+    root = tmp_path / "models"
+    bottle_dir = _amazon_patchcore_artifact_dir(root / "mvtec_bottle")
+    metal_nut_dir = _amazon_patchcore_artifact_dir(root / "mvtec_metal_nut")
+
+    assert normalize_amazon_patchcore_mvtec_object("MVTec Metal-Nut") == "metal_nut"
+    assert amazon_patchcore_mvtec_artifact_dir_name("metal nut") == "mvtec_metal_nut"
+    assert resolve_amazon_patchcore_artifact_dir(root, object_name="bottle") == bottle_dir
+    assert resolve_amazon_patchcore_artifact_dir(root, object_name="metal nut") == metal_nut_dir
+    assert list_amazon_patchcore_artifact_dirs(root) == {
+        "bottle": bottle_dir,
+        "metal_nut": metal_nut_dir,
+    }
+
+
+def test_amazon_patchcore_lfs_pointer_artifacts_are_not_available(
+    tmp_path: Path,
+) -> None:
+    """Git LFS pointer files should not count as usable official artifacts."""
+    root = tmp_path / "models"
+    pointer_dir = root / "mvtec_bottle"
+    _amazon_patchcore_pointer_artifact_dir(pointer_dir)
+
+    with pytest.raises(FileNotFoundError, match="Git LFS pointer"):
+        discover_amazon_patchcore_prepend(pointer_dir)
+    with pytest.raises(FileNotFoundError, match="Git LFS pointer"):
+        resolve_amazon_patchcore_artifact_dir(root, object_name="bottle")
+
+    assert is_amazon_patchcore_artifact_dir(pointer_dir) is False
+    assert is_amazon_patchcore_artifact_collection(root) is False
+    assert list_amazon_patchcore_artifact_dirs(root) == {}
+
+
+def test_amazon_patchcore_object_root_missing_object_error_is_actionable(
+    tmp_path: Path,
+) -> None:
+    """Missing object artifacts should name the expected object directory."""
+    root = tmp_path / "models"
+    _amazon_patchcore_artifact_dir(root / "mvtec_bottle")
+
+    with pytest.raises(FileNotFoundError, match="mvtec_capsule"):
+        resolve_amazon_patchcore_artifact_dir(root, object_name="capsule")
+
+
+def test_amazon_patchcore_object_router_lazily_routes_by_image_path(
+    tmp_path: Path,
+) -> None:
+    """The routed predictor should instantiate one backend per encountered object."""
+    root = tmp_path / "models"
+    bottle_dir = _amazon_patchcore_artifact_dir(root / "mvtec_bottle")
+    capsule_dir = _amazon_patchcore_artifact_dir(root / "mvtec_capsule")
+    seen: list[Path] = []
+
+    class SentinelPredictor:
+        def __init__(self, checkpoint: Path) -> None:
+            self.checkpoint = checkpoint
+
+        def predict(self, _image_path: Path) -> MVTecPrediction:
+            return {"score": 0.42, "metadata": {"checkpoint": str(self.checkpoint)}}
+
+    def predictor_factory(checkpoint: Path) -> SentinelPredictor:
+        seen.append(checkpoint)
+        return SentinelPredictor(checkpoint)
+
+    router = AmazonPatchCoreObjectRouter(
+        checkpoint_root=root,
+        predictor_factory=predictor_factory,
+    )
+
+    bottle_prediction = router.predict(tmp_path / "input" / "bottle" / "test" / "bad" / "0.png")
+    capsule_prediction = router.predict(
+        tmp_path / "input" / "capsule" / "test" / "bad" / "0.png"
+    )
+    router.predict(tmp_path / "input" / "bottle" / "test" / "bad" / "1.png")
+
+    assert bottle_prediction["metadata"]["checkpoint"] == str(bottle_dir)
+    assert capsule_prediction["metadata"]["checkpoint"] == str(capsule_dir)
+    assert seen == [bottle_dir, capsule_dir]
 
 
 def test_amazon_patchcore_runtime_guard_sets_macos_openmp_workaround(
@@ -475,6 +657,11 @@ def test_wm811k_producer_emits_adapter_compatible_model_records(tmp_path: Path) 
     assert record["annotation_type"] == "native_ground_truth"
     assert Path(str(record["saliency_path"])).exists()
     assert record["classifier"]["backend"] == "fake"
+    assert record["classifier"]["model_source"] == "radai-agent/radai-wm811k-defect-detection"
+    assert record["classifier"]["model_file"] == "best_radai_resnet.pt"
+    assert record["classifier"]["task"] == "defect_pattern_classification"
+    assert record["classifier"]["produces_root_cause"] is False
+    assert record["classifier"]["classes"] == ["Center", "Near-full"]
     assert _forbidden_keys(record) == []
 
     evidence = evidence_from_records(records, dataset="wafer")
@@ -540,11 +727,23 @@ def test_cli_backend_selection_supports_real_backend_names(
         def predict(self, image_path: Path) -> MVTecPrediction:
             return {"score": 0.2}
 
+    class SentinelAmazonPatchCoreObjectRouter:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+        def predict(self, image_path: Path) -> MVTecPrediction:
+            return {"score": 0.3}
+
     monkeypatch.setattr(build_script, "AnomalibMVTecBackend", SentinelAnomalibBackend)
     monkeypatch.setattr(
         build_script,
         "AmazonPatchCoreBackend",
         SentinelAmazonPatchCoreBackend,
+    )
+    monkeypatch.setattr(
+        build_script,
+        "AmazonPatchCoreObjectRouter",
+        SentinelAmazonPatchCoreObjectRouter,
     )
     mvtec_predictor = build_script.build_mvtec_predictor(
         model_backend=ANOMALIB_OPENVINO_BACKEND,
@@ -563,6 +762,28 @@ def test_cli_backend_selection_supports_real_backend_names(
     assert isinstance(amazon_predictor, SentinelAmazonPatchCoreBackend)
     assert amazon_predictor.kwargs["checkpoint"] == tmp_path / "amazon_patchcore" / "mvtec_bottle"
     assert amazon_predictor.kwargs["device"] == "cpu"
+
+    amazon_router = build_script.build_mvtec_predictor(
+        model_backend=AMAZON_PATCHCORE_BACKEND,
+        object_checkpoint_root=tmp_path / "amazon_patchcore",
+        device="cpu",
+    )
+    assert isinstance(amazon_router, SentinelAmazonPatchCoreObjectRouter)
+    assert amazon_router.kwargs["checkpoint_root"] == tmp_path / "amazon_patchcore"
+    assert amazon_router.kwargs["device"] == "cpu"
+
+    with pytest.raises(ValueError, match="cannot both be set"):
+        build_script.build_mvtec_predictor(
+            model_backend=AMAZON_PATCHCORE_BACKEND,
+            checkpoint=tmp_path / "amazon_patchcore" / "mvtec_bottle",
+            object_checkpoint_root=tmp_path / "amazon_patchcore",
+        )
+
+    with pytest.raises(ValueError, match="only supported"):
+        build_script.build_mvtec_predictor(
+            model_backend=ANOMALIB_OPENVINO_BACKEND,
+            object_checkpoint_root=tmp_path / "amazon_patchcore",
+        )
 
     with pytest.raises(ValueError, match="unsupported MVTec"):
         build_script.build_mvtec_predictor(model_backend="fake")
@@ -589,8 +810,12 @@ def test_cli_backend_selection_supports_real_backend_names(
         model_backend=TORCH_RESNET_BACKEND,
         checkpoint=torch_checkpoint,
         device="cpu",
+        model_source_repo="radai-agent/radai-wm811k-defect-detection",
+        model_source_file="best_radai_resnet.pt",
     )
     assert isinstance(torch_classifier, TorchWM811KBackend)
+    assert torch_classifier.model_source == "radai-agent/radai-wm811k-defect-detection"
+    assert torch_classifier.model_file == "best_radai_resnet.pt"
 
     with pytest.raises(ValueError, match="unsupported WM811K"):
         build_script.build_wm811k_classifier(model_backend=ANOMALIB_TORCH_BACKEND)
@@ -604,13 +829,22 @@ def test_torch_wm811k_backend_loads_trusted_checkpoint(tmp_path: Path) -> None:
     checkpoint = tmp_path / "wm811k_torch.pt"
     torch.save({"model_state_dict": model.state_dict()}, checkpoint)
 
-    backend = TorchWM811KBackend(checkpoint=checkpoint, device="cpu")
+    backend = TorchWM811KBackend(
+        checkpoint=checkpoint,
+        device="cpu",
+        model_source="radai-agent/radai-wm811k-defect-detection",
+        model_file="best_radai_resnet.pt",
+    )
     prediction = backend.predict([[2, 2, 2], [2, 0, 2], [2, 2, 2]])
 
     assert prediction["pattern"] == "Near-full"
     assert prediction["confidence"] > 0.99
     assert prediction["metadata"]["source_backend"] == TORCH_RESNET_BACKEND
     assert prediction["metadata"]["device"] == "cpu"
+    assert prediction["metadata"]["model_source"] == "radai-agent/radai-wm811k-defect-detection"
+    assert prediction["metadata"]["model_file"] == "best_radai_resnet.pt"
+    assert prediction["metadata"]["task"] == "defect_pattern_classification"
+    assert prediction["metadata"]["produces_root_cause"] is False
 
 
 def test_producers_preserve_zero_numeric_model_outputs(tmp_path: Path) -> None:
@@ -801,10 +1035,29 @@ def _touch(path: Path) -> None:
     path.write_text("fixture", encoding="utf-8")
 
 
+def _write_mask(path: Path, values: Sequence[Sequence[int]]) -> None:
+    from PIL import Image
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(np.asarray(values, dtype=np.uint8)).save(path)
+
+
 def _amazon_patchcore_artifact_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     (path / "patchcore_params.pkl").write_bytes(b"params")
     (path / "nnscorer_search_index.faiss").write_bytes(b"faiss")
+    return path
+
+
+def _amazon_patchcore_pointer_artifact_dir(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    pointer = (
+        b"version https://git-lfs.github.com/spec/v1\n"
+        b"oid sha256:0123456789abcdef\n"
+        b"size 123456\n"
+    )
+    (path / "patchcore_params.pkl").write_bytes(pointer)
+    (path / "nnscorer_search_index.faiss").write_bytes(pointer)
     return path
 
 

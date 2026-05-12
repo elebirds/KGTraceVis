@@ -21,6 +21,13 @@ from kgtracevis.producers import (
     build_wm811k_records,
     write_jsonl_records,
 )
+from kgtracevis.producers.model_assets import (
+    DEFAULT_WM811K_INPUT_FILE,
+    DEFAULT_WM811K_INPUT_REPO,
+    DEFAULT_WM811K_INPUT_REPO_TYPE,
+    download_wm811k_input_table,
+    download_wm811k_resnet,
+)
 
 DEFAULT_MVTEC_REPO = "alexsu52/stfpm_mvtec_capsule"
 DEFAULT_MVTEC_CHECKPOINT = "openvino_model.tar"
@@ -28,8 +35,6 @@ DEFAULT_MVTEC_IMAGE_REPO = "NTHoang2103/patchcore-mvtec-models"
 DEFAULT_MVTEC_IMAGE = "clean/capsule/Patchcore/mvtec/capsule/v0/images/crack/000.png"
 DEFAULT_WM811K_REPO = "radai-agent/radai-wm811k-defect-detection"
 DEFAULT_WM811K_CHECKPOINT = "best_radai_resnet.pt"
-DEFAULT_WM811K_INPUT_REPO = "lslattery/wafer-defect-detection"
-DEFAULT_WM811K_INPUT_FILE = "test.pkl"
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,6 +54,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wm811k-checkpoint", default=DEFAULT_WM811K_CHECKPOINT)
     parser.add_argument("--wm811k-input-repo", default=DEFAULT_WM811K_INPUT_REPO)
     parser.add_argument("--wm811k-input-file", default=DEFAULT_WM811K_INPUT_FILE)
+    parser.add_argument("--wm811k-input-repo-type", default=DEFAULT_WM811K_INPUT_REPO_TYPE)
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -108,18 +114,27 @@ def main() -> None:
         overwrite=True,
     )
 
-    wm811k_checkpoint = _download_hf_file(
-        args.wm811k_repo,
-        args.wm811k_checkpoint,
-        wm811k_assets / "checkpoints",
+    wm811k_checkpoint_summary = download_wm811k_resnet(
+        repo_id=args.wm811k_repo,
+        filename=args.wm811k_checkpoint,
+        destination_dir=wm811k_assets / "checkpoints",
+        force=args.overwrite,
     )
-    wm811k_input = _download_hf_file(
-        args.wm811k_input_repo,
-        args.wm811k_input_file,
-        wm811k_assets / "input_tables",
-        repo_type="dataset",
+    wm811k_checkpoint = Path(str(wm811k_checkpoint_summary["checkpoint"]))
+    wm811k_input_summary = download_wm811k_input_table(
+        repo_id=args.wm811k_input_repo,
+        filename=args.wm811k_input_file,
+        repo_type=args.wm811k_input_repo_type,
+        destination_dir=wm811k_assets / "input_tables",
+        force=args.overwrite,
     )
-    wm811k_predictor = TorchWM811KBackend(checkpoint=wm811k_checkpoint, device="auto")
+    wm811k_input = Path(str(wm811k_input_summary["input_table"]))
+    wm811k_predictor = TorchWM811KBackend(
+        checkpoint=wm811k_checkpoint,
+        device="auto",
+        model_source=args.wm811k_repo,
+        model_file=args.wm811k_checkpoint,
+    )
     wm811k_records = build_wm811k_records(
         wm811k_input,
         wm811k_predictor,
@@ -156,7 +171,17 @@ def main() -> None:
         },
         "wm811k": {
             "checkpoint": str(wm811k_checkpoint),
+            "checkpoint_source": {
+                "repo_id": wm811k_checkpoint_summary["repo_id"],
+                "filename": wm811k_checkpoint_summary["filename"],
+                "backend": wm811k_checkpoint_summary["backend"],
+            },
             "input_table": str(wm811k_input),
+            "input_source": {
+                "source_repo": wm811k_input_summary["source_repo"],
+                "filename": wm811k_input_summary["filename"],
+                "repo_type": wm811k_input_summary["repo_type"],
+            },
             "records": str(wm811k_records_path),
             "adapter_summary": str(wm811k_pipeline.summary_path),
             "adapter_table": str(wm811k_pipeline.table_path),

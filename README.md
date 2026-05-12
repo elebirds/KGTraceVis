@@ -234,6 +234,7 @@ uv run python scripts/download_model_assets.py --model mvtec-patchcore
 uv run python scripts/download_model_assets.py --model mvtec-efficientad \
   --mvtec-efficientad-repo <trusted-hf-repo> \
   --mvtec-efficientad-file <checkpoint-file>
+uv run python scripts/download_model_assets.py --model wm811k-resnet --include-wm811k-data
 
 uv run python scripts/build_dataset_records.py --dataset mvtec \
   --input-root data/external/mvtec \
@@ -243,17 +244,33 @@ uv run python scripts/build_dataset_records.py --dataset mvtec \
   --device cpu \
   --overwrite
 
+uv run python scripts/build_dataset_records.py --dataset mvtec \
+  --input-root data/external/mvtec \
+  --output-jsonl data/processed/records/mvtec_amazon_patchcore.jsonl \
+  --model-backend amazon-patchcore \
+  --object-checkpoint-root /path/to/patchcore/models \
+  --device cpu \
+  --overwrite
+
 uv run python scripts/build_dataset_records.py --dataset wm811k \
-  --input data/external/wafer/LSWMD.pkl \
+  --input runs/real_model_pipeline/assets/wm811k/input_tables/test.pkl \
   --output-jsonl data/processed/records/wm811k_subset.jsonl \
-  --model-backend sklearn \
-  --checkpoint data/external/checkpoints/wm811k_classifier.joblib \
+  --model-backend torch-resnet34 \
+  --checkpoint runs/real_model_pipeline/assets/wm811k/checkpoints/best_radai_resnet.pt \
+  --model-source-repo radai-agent/radai-wm811k-defect-detection \
+  --model-source-file best_radai_resnet.pt \
   --overwrite
 ```
 
 Use `--model-backend fake` for checkpoint-free smoke runs. Anomalib is imported
 only for `anomalib-engine`, `anomalib-torch`, or `anomalib-openvino`; sklearn
-joblib/pickle checkpoints must be trusted local files.
+joblib/pickle checkpoints must be trusted local files. The public WM811K ResNet
+asset is a defect-pattern classifier over the labeled WM811K patterns only; it
+does not provide verified root-cause labels or a normal-wafer detector.
+`--include-wm811k-data` downloads the public Hugging Face dataset table
+`lslattery/wafer-defect-detection` / `test.pkl` into
+`runs/real_model_pipeline/assets/wm811k/input_tables/`; override it with
+`--wm811k-input-repo`, `--wm811k-input-file`, and `--wm811k-input-repo-type`.
 The downloader stores trusted public model assets under
 `runs/real_model_pipeline/assets/`, including the default MVTec STFPM OpenVINO
 checkpoint used by web image mode and a default capsule PatchCore Lightning
@@ -262,6 +279,117 @@ are wired into the same preset path, but require an explicitly trusted
 Hugging Face repo/file or `KGTRACEVIS_DOWNLOAD_MVTEC_EFFICIENTAD_REPO` because
 public EfficientAD files are usually component weights rather than one
 Anomalib-compatible inference checkpoint.
+Official Amazon PatchCore artifacts are object-specific directories named
+`mvtec_<object>` containing `patchcore_params.pkl` and
+`nnscorer_search_index.faiss`. For full MVTec coverage, point
+`KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT` or CLI `--object-checkpoint-root` at the
+root containing directories such as `mvtec_bottle`, `mvtec_capsule`, and
+`mvtec_metal_nut`; KGTraceVis resolves the object-specific artifact from the
+sample's object name. Lightweight Git LFS clones that contain only pointer
+files are not considered usable artifacts; run `git lfs pull` for the selected
+object directories before using the root.
+
+### Official Amazon PatchCore Artifacts
+
+The official Amazon PatchCore artifacts are object-specific, not one global
+MVTec model. Each MVTec object needs its own `mvtec_<object>` directory with
+real Git LFS contents:
+
+```text
+amazon_patchcore_models/
+`-- IM320_WR50_L2-3_P001_D1024-1024_PS-3_AN-1/
+    `-- models/
+        |-- mvtec_bottle/
+        |   |-- patchcore_params.pkl
+        |   `-- nnscorer_search_index.faiss
+        |-- mvtec_capsule/
+        |   |-- patchcore_params.pkl
+        |   `-- nnscorer_search_index.faiss
+        `-- mvtec_metal_nut/
+            |-- patchcore_params.pkl
+            `-- nnscorer_search_index.faiss
+```
+
+Clone without smudging the full Git LFS payload, then pull only the selected
+objects you need:
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/amazon-science/patchcore-inspection.git
+cd patchcore-inspection
+git lfs install --local
+
+# Selected objects. Adjust the run folder if using a different artifact set.
+git lfs pull \
+  -I "models/IM320_WR50_L2-3_P001_D1024-1024_PS-3_AN-1/models/mvtec_bottle/**" \
+  -I "models/IM320_WR50_L2-3_P001_D1024-1024_PS-3_AN-1/models/mvtec_capsule/**"
+
+# Or pull every official artifact tracked by the repo.
+git lfs pull -I "models/**"
+```
+
+Avoid pointer-only false positives by checking that artifact files are real
+binary payloads, not small text pointers:
+
+```bash
+head -n 1 models/IM320_WR50_L2-3_P001_D1024-1024_PS-3_AN-1/models/mvtec_bottle/patchcore_params.pkl
+du -h models/IM320_WR50_L2-3_P001_D1024-1024_PS-3_AN-1/models/mvtec_bottle/*
+```
+
+If the first line starts with `version https://git-lfs.github.com/spec/v1`, run
+`git lfs pull` for that object before using it. KGTraceVis also rejects
+pointer-only `.pkl` and `.faiss` files during availability checks.
+
+For batch record generation, pass the common root and let KGTraceVis resolve
+the object-specific directory from each sample path:
+
+```bash
+export KMP_DUPLICATE_LIB_OK=TRUE
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+
+uv run python scripts/build_dataset_records.py --dataset mvtec \
+  --input-root data/external/mvtec \
+  --output-jsonl data/processed/records/mvtec_amazon_patchcore.jsonl \
+  --model-backend amazon-patchcore \
+  --object-checkpoint-root /path/to/patchcore-inspection/models/IM320_WR50_L2-3_P001_D1024-1024_PS-3_AN-1/models \
+  --threshold-config configs/mvtec_patchcore_thresholds.json \
+  --device cpu \
+  --overwrite
+```
+
+For paper-deadline evidence generation, KGTraceVis includes a supervised quick
+calibration path that writes per-object PatchCore score/map thresholds:
+
+```bash
+uv run python scripts/calibrate_mvtec_patchcore_thresholds.py \
+  --dataset-root /path/to/Defect_Spectrum \
+  --artifact-root /path/to/patchcore-inspection/models/IM320_WR50_L2-3_P001_D1024-1024_PS-3_AN-1/models \
+  --output-config configs/mvtec_patchcore_thresholds.json \
+  --output-csv configs/mvtec_patchcore_thresholds.csv \
+  --max-good 1 \
+  --max-defect-per-label 1 \
+  --device cpu \
+  --overwrite
+```
+
+These thresholds are explicitly supervised calibration artifacts for usable
+KGTraceVis evidence. They are not unsupervised MVTec benchmark results.
+
+For Web/API image uploads, set the PatchCore checkpoint env var to the common
+root instead of one hard-coded object directory:
+
+```bash
+export KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT=/path/to/patchcore-inspection/models/IM320_WR50_L2-3_P001_D1024-1024_PS-3_AN-1/models
+```
+
+When `model_preset=patchcore`, the API resolves the root by the uploaded
+`object_name` (`bottle` -> `mvtec_bottle`, `metal_nut` -> `mvtec_metal_nut`).
+The current local official Amazon PatchCore root has been downloaded for all 15
+MVTec objects. A calibrated full-class smoke run using
+`configs/mvtec_patchcore_thresholds.json` produced 30 records, 15/15 defect
+samples predicted anomalous, 14/15 sampled good images predicted normal, and a
+mean mask area ratio of about 0.058 instead of near-full-image masks.
 
 Start the Streamlit demo:
 
@@ -332,9 +460,14 @@ artifacts under `runs/web_sessions/`. Image mode uses a selectable MVTec
 anomaly-detection/localization preset. `auto` prefers EfficientAD, then
 PatchCore, then the checked-in STFPM OpenVINO checkpoint. Configure replacement
 weights with `KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT` or
-`KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT`; by default, the web API also recognizes
-the Makefile/API asset path under `runs/real_model_pipeline/assets/`. The optional defect field in the UI is
-a human prior, not a model-inferred semantic defect class.
+`KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT`; the PatchCore value may be either one
+checkpoint/artifact directory or a full Amazon PatchCore root containing
+`mvtec_<object>` directories. In image mode, Amazon PatchCore roots are resolved
+by the uploaded `object_name`. Git LFS pointer-only directories are reported as
+unavailable until the real `.pkl` and `.faiss` files are downloaded. By default,
+the web API also recognizes the Makefile/API asset path under
+`runs/real_model_pipeline/assets/`. The optional defect field in the UI is a
+human prior, not a model-inferred semantic defect class.
 When a MVTec preset checkpoint is missing, the web UI can request its download
 through the API and then refresh the preset availability. STFPM and PatchCore
 have default trusted sources; EfficientAD requires a configured trusted source.

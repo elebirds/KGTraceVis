@@ -12,6 +12,7 @@ from kgtracevis.producers.backends import (
     ANOMALIB_ENGINE_BACKEND,
     ANOMALIB_OPENVINO_BACKEND,
     ANOMALIB_TORCH_BACKEND,
+    is_amazon_patchcore_artifact_collection,
     is_amazon_patchcore_artifact_dir,
 )
 
@@ -155,7 +156,11 @@ def resolve_mvtec_model_selection(model_preset: str | None = None) -> MVTecModel
 def _selection_for_preset(preset: MVTecResolvedPreset) -> MVTecModelSelection:
     spec = MVTEC_MODEL_PRESET_SPECS[preset]
     checkpoint_path = _resolve_checkpoint_path(spec)
-    available = checkpoint_path.is_file() or is_amazon_patchcore_artifact_dir(checkpoint_path)
+    available = (
+        checkpoint_path.is_file()
+        or is_amazon_patchcore_artifact_dir(checkpoint_path)
+        or is_amazon_patchcore_artifact_collection(checkpoint_path)
+    )
     return MVTecModelSelection(
         preset=spec.preset,
         label=spec.label,
@@ -182,7 +187,10 @@ def _resolve_checkpoint_path(spec: MVTecModelPresetSpec) -> Path:
 def _infer_backend(checkpoint_path: Path, default_backend: str) -> str:
     if checkpoint_path.suffix.lower() == ".xml":
         return ANOMALIB_OPENVINO_BACKEND
-    if is_amazon_patchcore_artifact_dir(checkpoint_path):
+    if (
+        is_amazon_patchcore_artifact_dir(checkpoint_path)
+        or is_amazon_patchcore_artifact_collection(checkpoint_path)
+    ):
         return AMAZON_PATCHCORE_BACKEND
     if checkpoint_path.suffix.lower() == ".ckpt":
         return ANOMALIB_ENGINE_BACKEND

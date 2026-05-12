@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist for producer/adaptor and evidence contract changes."}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "Producer/adaptor contract and dataset evidence boundary guidance for WM811K Evidence outputs."}
+{"file": ".trellis/spec/backend/wm811k-model-presets.md", "reason": "WM811K public model asset, producer metadata, and evidence-boundary contracts."}
+{"file": ".trellis/tasks/05-13-wm811k-model-evidence-integration/prd.md", "reason": "Task goal, requirements, acceptance criteria, and scope boundaries."}
+{"file": ".trellis/tasks/05-13-wm811k-model-evidence-integration/research/wm811k-model-options.md", "reason": "Model option research and recommended WM811K integration path."}

@@ -107,15 +107,33 @@ metadata.
 Real WM811K command:
 
 ```bash
+uv run python scripts/download_model_assets.py --model wm811k-resnet --include-wm811k-data
+
 uv run python scripts/build_dataset_records.py \
   --dataset wm811k \
-  --input data/external/wafer/LSWMD.pkl \
+  --input runs/real_model_pipeline/assets/wm811k/input_tables/test.pkl \
   --output-jsonl data/processed/records/wm811k_subset.jsonl \
   --model-backend torch-resnet34 \
-  --checkpoint data/external/checkpoints/wm811k_resnet34.pt \
+  --checkpoint runs/real_model_pipeline/assets/wm811k/checkpoints/best_radai_resnet.pt \
+  --model-source-repo radai-agent/radai-wm811k-defect-detection \
+  --model-source-file best_radai_resnet.pt \
   --max-per-label 50 \
   --overwrite
 ```
+
+The public `wm811k-resnet` asset downloads
+`radai-agent/radai-wm811k-defect-detection` / `best_radai_resnet.pt`, a
+ResNet34 wafer-map classifier over the eight labeled defect patterns (`Center`,
+`Donut`, `Edge-Loc`, `Edge-Ring`, `Loc`, `Random`, `Scratch`, `Near-full`).
+With `--include-wm811k-data`, the same command also downloads the public
+Hugging Face dataset table `lslattery/wafer-defect-detection` / `test.pkl`
+under `runs/real_model_pipeline/assets/wm811k/input_tables/`. The table source
+can be changed with `--wm811k-input-repo`, `--wm811k-input-file`, and
+`--wm811k-input-repo-type`.
+It is defect-pattern evidence only. It does not classify normal wafers and does
+not emit verified root-cause labels. Producer records preserve the checkpoint
+path/hash, optional source repo/file, class list, native WM811K row provenance,
+and observed descriptor stats for downstream entity linking and KG reasoning.
 
 Local sklearn-compatible classifiers are selected with `--model-backend
 sklearn`. The checkpoint is loaded with joblib first, then pickle as a fallback.

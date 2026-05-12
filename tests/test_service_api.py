@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from fastapi.testclient import TestClient
 
-from kgtracevis.producers.backends import ANOMALIB_ENGINE_BACKEND
+from kgtracevis.producers.backends import AMAZON_PATCHCORE_BACKEND, ANOMALIB_ENGINE_BACKEND
 from kgtracevis.service import api as service_api
 from kgtracevis.service import runs as service_runs
 from kgtracevis.service.api import app
@@ -200,6 +200,58 @@ def test_mvtec_model_preset_route_detects_amazon_patchcore_artifact_dir(
     assert presets["patchcore"]["checkpoint_path"] == str(checkpoint)
 
 
+def test_mvtec_model_preset_route_detects_amazon_patchcore_artifact_root(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """The web preset route should recognize full official PatchCore object roots."""
+    root = tmp_path / "models"
+    checkpoint = root / "mvtec_bottle"
+    checkpoint.mkdir(parents=True)
+    (checkpoint / "patchcore_params.pkl").write_bytes(b"params")
+    (checkpoint / "nnscorer_search_index.faiss").write_bytes(b"faiss")
+    monkeypatch.setenv("KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT", str(root))
+
+    client = TestClient(app)
+    response = client.get("/api/runs/mvtec-model-presets")
+
+    assert response.status_code == 200
+    presets = {item["preset"]: item for item in response.json()["presets"]}
+    assert presets["patchcore"]["available"] is True
+    assert presets["patchcore"]["backend"] == "amazon-patchcore"
+    assert presets["patchcore"]["checkpoint_path"] == str(root)
+
+
+def test_mvtec_model_preset_route_ignores_amazon_patchcore_lfs_pointers(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Lightweight Git LFS clones should not make PatchCore look available."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT", raising=False)
+    monkeypatch.delenv("KGTRACEVIS_MVTEC_STFPM_CHECKPOINT", raising=False)
+    pointer = (
+        b"version https://git-lfs.github.com/spec/v1\n"
+        b"oid sha256:0123456789abcdef\n"
+        b"size 123456\n"
+    )
+    root = tmp_path / "models"
+    checkpoint = root / "mvtec_bottle"
+    checkpoint.mkdir(parents=True)
+    (checkpoint / "patchcore_params.pkl").write_bytes(pointer)
+    (checkpoint / "nnscorer_search_index.faiss").write_bytes(pointer)
+    monkeypatch.setenv("KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT", str(root))
+
+    client = TestClient(app)
+    response = client.get("/api/runs/mvtec-model-presets")
+
+    assert response.status_code == 200
+    presets = {item["preset"]: item for item in response.json()["presets"]}
+    assert presets["patchcore"]["available"] is False
+    assert presets["patchcore"]["checkpoint_path"] is None
+    assert presets["auto"]["resolved_preset"] is None
+
+
 def test_model_asset_download_route_uses_default_asset(monkeypatch) -> None:
     """The web API should expose a trusted default model asset download action."""
     captured: dict[str, object] = {}
@@ -309,6 +361,52 @@ def test_image_upload_mode_runs_mvtec_producer_path(tmp_path: Path, monkeypatch)
     assert detail.analysis is not None
     assert detail.artifacts["records_path"].endswith("mvtec_image_records.jsonl")
     assert detail.artifacts["model_preset"] == "patchcore"
+
+
+def test_image_upload_mode_resolves_amazon_patchcore_object_root(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Image uploads should select the uploaded object's official artifact dir."""
+    captured: dict[str, object] = {}
+
+    class FakeAmazonPatchCoreBackend:
+        def __init__(self, **kwargs) -> None:
+            captured.update(kwargs)
+
+        def predict(self, _image_path: Path) -> dict[str, object]:
+            return {
+                "score": 0.84,
+                "confidence": 0.84,
+                "mask": np.array([[1, 0], [1, 0]], dtype=bool),
+                "metadata": {"fixture": "amazon-patchcore"},
+            }
+
+    root = tmp_path / "models"
+    capsule_checkpoint = root / "mvtec_capsule"
+    capsule_checkpoint.mkdir(parents=True)
+    (capsule_checkpoint / "patchcore_params.pkl").write_bytes(b"params")
+    (capsule_checkpoint / "nnscorer_search_index.faiss").write_bytes(b"faiss")
+    monkeypatch.setenv("KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT", str(root))
+    monkeypatch.setattr(service_runs, "AmazonPatchCoreBackend", FakeAmazonPatchCoreBackend)
+
+    detail = service_runs.create_run_from_upload(
+        "010.png",
+        b"not-read-by-fake-predictor",
+        mode="image",
+        dataset="mvtec",
+        object_name="capsule",
+        defect_type=None,
+        model_preset="patchcore",
+        top_k=2,
+        runs_dir=tmp_path / "web_sessions",
+    )
+
+    assert captured["checkpoint"] == capsule_checkpoint
+    assert detail.run.model_backend == AMAZON_PATCHCORE_BACKEND
+    assert detail.artifacts["checkpoint_path"] == str(capsule_checkpoint)
+    assert detail.evidence is not None
+    assert detail.evidence["object"] == "capsule"
 
 
 def test_what_if_request_clears_stale_observations_and_runs_analysis() -> None:

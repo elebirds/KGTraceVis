@@ -1,0 +1,144 @@
+{
+  "artifact_type": "mvtec_patchcore_threshold_config_v0",
+  "threshold_source": "supervised_ds_mvtec_quick_calibration",
+  "uses_ground_truth": true,
+  "calibration_scope": "object_specific",
+  "method": "supervised_f1_quick",
+  "objects": {
+    "bottle": {
+      "score_threshold": 6.113035202026367,
+      "map_threshold": 3.044040244152865,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "cable": {
+      "score_threshold": 4.746807098388672,
+      "map_threshold": 4.661370120636404,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "capsule": {
+      "score_threshold": 2.5804691314697266,
+      "map_threshold": 1.7935012889234987,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "carpet": {
+      "score_threshold": 3.0963497161865234,
+      "map_threshold": 3.041027261786265,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "grid": {
+      "score_threshold": 3.3612918853759766,
+      "map_threshold": 3.154207660260726,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "hazelnut": {
+      "score_threshold": 5.359149932861328,
+      "map_threshold": 4.482683028726892,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "leather": {
+      "score_threshold": 4.7841644287109375,
+      "map_threshold": 4.539089014385542,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "metal_nut": {
+      "score_threshold": 4.563810348510742,
+      "map_threshold": 3.3433932996775964,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "pill": {
+      "score_threshold": 2.9909534454345703,
+      "map_threshold": 2.271998501570491,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "screw": {
+      "score_threshold": 2.037822723388672,
+      "map_threshold": 2.426710640147679,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "tile": {
+      "score_threshold": 3.4146499633789062,
+      "map_threshold": 2.8190241340555082,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "toothbrush": {
+      "score_threshold": 7.716699600219727,
+      "map_threshold": 3.3215893033432544,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "transistor": {
+      "score_threshold": 4.446233749389648,
+      "map_threshold": 2.3034736769539963,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "wood": {
+      "score_threshold": 3.1587696075439453,
+      "map_threshold": 2.236735847364899,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    },
+    "zipper": {
+      "score_threshold": 2.750154495239258,
+      "map_threshold": 1.6645447004097966,
+      "min_area_ratio": 0.001,
+      "threshold_source": "supervised_ds_mvtec_quick_calibration",
+      "uses_ground_truth": true,
+      "calibration_scope": "object_specific",
+      "method": "supervised_f1_quick"
+    }
+  }
+}

@@ -25,6 +25,7 @@ Before writing backend code:
 | [Database Guidelines](./database-guidelines.md) | KG CSV, in-memory graph, and Neo4j conventions | Active |
 | [Error Handling](./error-handling.md) | Validation and ambiguity handling | Active |
 | [MVTec Model Presets](./mvtec-model-presets.md) | Web image-upload model preset and checkpoint contracts | Active |
+| [WM811K Model Presets](./wm811k-model-presets.md) | Wafer model asset, producer metadata, and evidence-boundary contracts | Active |
 | [Quality Guidelines](./quality-guidelines.md) | Test, lint, and traceability rules | Active |
 | [Logging Guidelines](./logging-guidelines.md) | Script output and future logging boundaries | Active |
 

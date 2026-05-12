@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend quality checklist for verification."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate and evidence/KG boundary checks."}
+{"file": ".trellis/spec/backend/wm811k-model-presets.md", "reason": "WM811K model asset and evidence-boundary checks."}
+{"file": ".trellis/tasks/05-13-wm811k-model-evidence-integration/prd.md", "reason": "Acceptance criteria to verify."}
+{"file": ".trellis/tasks/05-13-wm811k-model-evidence-integration/research/wm811k-model-options.md", "reason": "Research-backed constraints to verify against implementation."}

@@ -23,8 +23,10 @@ from kgtracevis.producers import (
     MVTecAnomalyPredictor,
     build_mvtec_records,
     download_selected_model_assets,
+    is_amazon_patchcore_artifact_collection,
     is_amazon_patchcore_artifact_dir,
     list_mvtec_model_presets,
+    resolve_amazon_patchcore_artifact_dir,
     write_jsonl_records,
 )
 from kgtracevis.producers.model_assets import ModelAsset
@@ -544,6 +546,11 @@ def _run_mvtec_image_upload(
         checkpoint_path = _resolve_mvtec_checkpoint(checkpoint, model_preset=selection.preset)
     else:
         checkpoint_path = selection.checkpoint_path
+    if selection.backend == AMAZON_PATCHCORE_BACKEND:
+        checkpoint_path = resolve_amazon_patchcore_artifact_dir(
+            checkpoint_path,
+            object_name=object_folder,
+        )
     active_predictor = predictor or _build_mvtec_upload_predictor(
         model_backend=selection.backend,
         checkpoint=checkpoint_path,
@@ -695,7 +702,11 @@ def _resolve_mvtec_checkpoint(
         os.environ.get(_checkpoint_env_for_preset(model_preset))
         or candidate
     )
-    if candidate.is_file() or is_amazon_patchcore_artifact_dir(candidate):
+    if (
+        candidate.is_file()
+        or is_amazon_patchcore_artifact_dir(candidate)
+        or is_amazon_patchcore_artifact_collection(candidate)
+    ):
         return candidate
     raise FileNotFoundError(
         f"MVTec checkpoint not found: {candidate}. Set {_checkpoint_env_for_preset(model_preset)} "

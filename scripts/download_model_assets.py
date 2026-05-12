@@ -15,6 +15,9 @@ from kgtracevis.producers.model_assets import (
     DEFAULT_MVTEC_STFPM_FILE,
     DEFAULT_MVTEC_STFPM_REPO,
     DEFAULT_WM811K_FILE,
+    DEFAULT_WM811K_INPUT_FILE,
+    DEFAULT_WM811K_INPUT_REPO,
+    DEFAULT_WM811K_INPUT_REPO_TYPE,
     DEFAULT_WM811K_REPO,
     MODEL_ASSET_CHOICES,
     ModelAsset,
@@ -47,6 +50,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mvtec-stfpm-file", default=DEFAULT_MVTEC_STFPM_FILE)
     parser.add_argument("--wm811k-repo", default=DEFAULT_WM811K_REPO)
     parser.add_argument("--wm811k-file", default=DEFAULT_WM811K_FILE)
+    parser.add_argument(
+        "--include-wm811k-data",
+        action="store_true",
+        help="Also download the default public WM811K input table used by real runs.",
+    )
+    parser.add_argument("--wm811k-input-repo", default=DEFAULT_WM811K_INPUT_REPO)
+    parser.add_argument("--wm811k-input-file", default=DEFAULT_WM811K_INPUT_FILE)
+    parser.add_argument("--wm811k-input-repo-type", default=DEFAULT_WM811K_INPUT_REPO_TYPE)
     parser.add_argument("--force", action="store_true", help="Re-download and replace assets.")
     return parser.parse_args()
 
@@ -68,6 +79,10 @@ def main() -> None:
         mvtec_stfpm_file=args.mvtec_stfpm_file,
         wm811k_repo=args.wm811k_repo,
         wm811k_file=args.wm811k_file,
+        include_wm811k_data=args.include_wm811k_data,
+        wm811k_input_repo=args.wm811k_input_repo,
+        wm811k_input_file=args.wm811k_input_file,
+        wm811k_input_repo_type=args.wm811k_input_repo_type,
     )
     summary["output_root"] = str(output_root)
 

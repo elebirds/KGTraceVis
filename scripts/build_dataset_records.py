@@ -17,6 +17,7 @@ from kgtracevis.producers import (
     SKLEARN_BACKEND,
     TORCH_RESNET_BACKEND,
     AmazonPatchCoreBackend,
+    AmazonPatchCoreObjectRouter,
     AnomalibMVTecBackend,
     MVTecAnomalyPredictor,
     SklearnWM811KBackend,
@@ -24,6 +25,7 @@ from kgtracevis.producers import (
     WM811KClassifier,
     write_jsonl_records,
 )
+from kgtracevis.producers.mvtec_calibration import load_mvtec_threshold_config
 from kgtracevis.producers.mvtec_records import build_mvtec_records
 from kgtracevis.producers.wm811k_records import build_wm811k_records
 
@@ -65,7 +67,38 @@ def parse_args() -> argparse.Namespace:
             "joblib/pickle files must be trusted local files."
         ),
     )
+    parser.add_argument(
+        "--model-source-repo",
+        help=(
+            "Optional public model source repo recorded in WM811K torch-resnet34 "
+            "producer metadata, for example radai-agent/radai-wm811k-defect-detection."
+        ),
+    )
+    parser.add_argument(
+        "--model-source-file",
+        help=(
+            "Optional public model source filename recorded in WM811K torch-resnet34 "
+            "producer metadata, for example best_radai_resnet.pt."
+        ),
+    )
+    parser.add_argument(
+        "--object-checkpoint-root",
+        type=Path,
+        help=(
+            "Root containing official Amazon PatchCore object artifact directories "
+            "such as mvtec_bottle and mvtec_capsule. Only valid with "
+            "--model-backend amazon-patchcore."
+        ),
+    )
     parser.add_argument("--threshold", default=0.5, type=float)
+    parser.add_argument(
+        "--threshold-config",
+        type=Path,
+        help=(
+            "Optional MVTec per-object threshold config JSON. Applies calibrated "
+            "score/map thresholds when building producer records."
+        ),
+    )
     parser.add_argument("--max-cases", type=int)
     parser.add_argument("--max-per-label", type=int)
     parser.add_argument("--seed", type=int)
@@ -98,19 +131,22 @@ def main() -> None:
         predictor = build_mvtec_predictor(
             model_backend=args.model_backend,
             checkpoint=args.checkpoint,
+            object_checkpoint_root=args.object_checkpoint_root,
             device=args.device,
         )
+        checkpoint_for_records = args.object_checkpoint_root or args.checkpoint
         records = build_mvtec_records(
             args.input_root,
             predictor,
             output_dir=artifact_dir,
             model_backend=args.model_backend,
-            checkpoint=args.checkpoint,
+            checkpoint=checkpoint_for_records,
             threshold=args.threshold,
             max_cases=args.max_cases,
             max_per_label=args.max_per_label,
             seed=args.seed,
             include_good=args.include_good,
+            threshold_config=load_mvtec_threshold_config(args.threshold_config),
         )
     else:
         if args.input is None:
@@ -124,6 +160,8 @@ def main() -> None:
             model_backend=args.model_backend,
             checkpoint=args.checkpoint,
             device=args.device,
+            model_source_repo=args.model_source_repo,
+            model_source_file=args.model_source_file,
         )
         records = build_wm811k_records(
             args.input,
@@ -160,9 +198,17 @@ def build_mvtec_predictor(
     *,
     model_backend: str,
     checkpoint: Path | None = None,
+    object_checkpoint_root: Path | None = None,
     device: str | None = None,
 ) -> MVTecAnomalyPredictor:
     """Return the selected MVTec predictor backend."""
+    if object_checkpoint_root is not None and model_backend != AMAZON_PATCHCORE_BACKEND:
+        raise ValueError(
+            "--object-checkpoint-root is only supported with "
+            f"--model-backend {AMAZON_PATCHCORE_BACKEND}"
+        )
+    if checkpoint is not None and object_checkpoint_root is not None:
+        raise ValueError("--checkpoint and --object-checkpoint-root cannot both be set")
     if model_backend in {
         ANOMALIB_ENGINE_BACKEND,
         ANOMALIB_TORCH_BACKEND,
@@ -174,6 +220,11 @@ def build_mvtec_predictor(
             device=device,
         )
     if model_backend == AMAZON_PATCHCORE_BACKEND:
+        if object_checkpoint_root is not None:
+            return AmazonPatchCoreObjectRouter(
+                checkpoint_root=object_checkpoint_root,
+                device=device,
+            )
         return AmazonPatchCoreBackend(
             checkpoint=checkpoint,
             device=device,
@@ -188,12 +239,19 @@ def build_wm811k_classifier(
     model_backend: str,
     checkpoint: Path | None = None,
     device: str | None = None,
+    model_source_repo: str | None = None,
+    model_source_file: str | None = None,
 ) -> WM811KClassifier:
     """Return the selected WM811K classifier backend."""
     if model_backend == SKLEARN_BACKEND:
         return SklearnWM811KBackend(checkpoint=checkpoint)
     if model_backend == TORCH_RESNET_BACKEND:
-        return TorchWM811KBackend(checkpoint=checkpoint, device=device)
+        return TorchWM811KBackend(
+            checkpoint=checkpoint,
+            device=device,
+            model_source=model_source_repo,
+            model_file=model_source_file,
+        )
     raise ValueError(
         f"unsupported WM811K --model-backend {model_backend!r}; expected one of {WM811K_BACKENDS}"
     )

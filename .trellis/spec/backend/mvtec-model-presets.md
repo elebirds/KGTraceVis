@@ -57,6 +57,10 @@ GET /api/runs/mvtec-model-presets
   The configured path may be either an Anomalib-compatible checkpoint file or
   an official Amazon PatchCore artifact directory containing
   `patchcore_params.pkl` and `nnscorer_search_index.faiss`.
+  It may also be an official Amazon PatchCore object root containing one or
+  more object-specific directories named `mvtec_<object>`, such as
+  `mvtec_bottle` or `mvtec_metal_nut`; service image uploads must resolve this
+  root by the uploaded `object_name` before instantiating the predictor.
 - `efficientad` resolves from `KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT` or
   `runs/real_model_pipeline/assets/mvtec/checkpoints/mvtec_efficientad.pt`.
 - `.xml` checkpoints use `anomalib-openvino`; `.ckpt` PatchCore Lightning
@@ -73,6 +77,70 @@ GET /api/runs/mvtec-model-presets
 - Official Amazon PatchCore `score` is an unbounded distance-like value. Keep it
   as raw `score`, clamp producer `confidence` to `[0, 1]`, and do not interpret
   a fixed `threshold=0.5` mask as reliable localization without calibration.
+- Official Amazon PatchCore artifacts are object-specific. Full MVTec coverage
+  requires one artifact directory per object under a common root. Supported
+  object names follow MVTec AD names (`bottle`, `metal_nut`, `toothbrush`, etc.)
+  and resolve to directories named `mvtec_<object>`.
+- Git LFS pointer-only Amazon PatchCore files do not count as available
+  artifacts. Availability checks must require the real `patchcore_params.pkl`
+  and `nnscorer_search_index.faiss` contents, not just matching filenames.
+
+### Official Amazon PatchCore Artifact Root Contract
+
+Official Amazon PatchCore artifacts are saved per object. Do not document or
+implement them as one global all-MVTec model. A full root should look like:
+
+```text
+<patchcore-artifact-root>/
+|-- mvtec_bottle/
+|   |-- patchcore_params.pkl
+|   `-- nnscorer_search_index.faiss
+|-- mvtec_capsule/
+|   |-- patchcore_params.pkl
+|   `-- nnscorer_search_index.faiss
+`-- mvtec_metal_nut/
+    |-- patchcore_params.pkl
+    `-- nnscorer_search_index.faiss
+```
+
+The root may also be an ancestor of that `models/` directory, because runtime
+resolution searches for supported `mvtec_<object>` artifact directories. The
+preferred user-facing path is the direct `models/` root so errors stay short.
+
+Git LFS usage must avoid pointer-only false availability. Recommended clone and
+pull patterns:
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/amazon-science/patchcore-inspection.git
+cd patchcore-inspection
+git lfs install --local
+
+# Selected object artifacts.
+git lfs pull -I "models/<run-name>/models/mvtec_bottle/**"
+git lfs pull -I "models/<run-name>/models/mvtec_metal_nut/**"
+
+# All model artifacts tracked by the repo.
+git lfs pull -I "models/**"
+```
+
+If `patchcore_params.pkl` or `nnscorer_search_index.faiss` starts with
+`version https://git-lfs.github.com/spec/v1`, the file is a pointer and must be
+pulled before the object is considered available.
+
+CLI record generation should pass the full object root with
+`--object-checkpoint-root` and `--model-backend amazon-patchcore`; the router
+resolves the object from each image path. Web/API image upload should allow
+`KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT` to point at the same root and then
+resolve by uploaded `object_name`.
+
+On macOS, official Amazon PatchCore smoke runs may require:
+
+```bash
+export KMP_DUPLICATE_LIB_OK=TRUE
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+```
 
 ### Official Amazon PatchCore Smoke Baseline
 
@@ -108,6 +176,18 @@ Interpretation:
   samples under the current fixed threshold, so mask-derived
   location/morphology should be treated as low-trust until anomaly-map
   normalization or threshold calibration is added.
+- The selected official artifact root has since been downloaded for all 15
+  MVTec objects and verified through full-class smoke on CPU.
+- Supervised quick calibration is available through
+  `scripts/calibrate_mvtec_patchcore_thresholds.py`, producing
+  `configs/mvtec_patchcore_thresholds.json/csv`. Passing
+  `--threshold-config configs/mvtec_patchcore_thresholds.json` to
+  `scripts/build_dataset_records.py` applies per-object `score_threshold` and
+  `map_threshold` values while preserving raw scores and threshold provenance.
+- The calibrated full-class smoke produced 30 records, 15/15 sampled defect
+  images predicted anomalous, 14/15 sampled good images predicted normal, and
+  mean mask area ratio around 0.058. This is a pragmatic evidence-generation
+  calibration, not an unsupervised MVTec benchmark.
 
 ### 4. Validation & Error Matrix
 
@@ -117,6 +197,8 @@ Interpretation:
 | Explicit preset has no checkpoint | return API 400 with the preset/env/default path |
 | `auto` has no available checkpoints | return API 400 listing configured checkpoint options |
 | Checkpoint exists but Anomalib cannot load it | fail at producer boundary; do not emit fake records |
+| Amazon PatchCore object root lacks uploaded object | return API 400/FileNotFound with expected `mvtec_<object>` path and available objects |
+| Amazon PatchCore files are Git LFS pointers | treat preset/root/object as unavailable and instruct the user to run `git lfs pull` |
 | Raw image omits `defect_type` | emit `anomaly_type="unknown"` unless other source labels exist |
 
 ### 5. Good/Base/Bad Cases

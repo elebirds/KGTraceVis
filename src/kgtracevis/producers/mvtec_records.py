@@ -16,6 +16,13 @@ from kgtracevis.producers.common import (
     model_metadata,
     write_array_json,
 )
+from kgtracevis.producers.mvtec_calibration import (
+    MVTecThresholdConfig,
+    calibrated_confidence,
+    calibrated_label,
+    calibration_metadata,
+    mask_from_anomaly_map,
+)
 
 IMAGE_SUFFIXES = {".bmp", ".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 
@@ -48,6 +55,7 @@ def build_mvtec_records(
     max_per_label: int | None = None,
     seed: int | None = None,
     include_good: bool = False,
+    threshold_config: MVTecThresholdConfig | None = None,
 ) -> list[dict[str, Any]]:
     """Run a predictor over a MVTec-like folder tree and return record dictionaries."""
     root = Path(input_root)
@@ -70,6 +78,7 @@ def build_mvtec_records(
             model_backend=model_backend,
             checkpoint=checkpoint,
             threshold=threshold,
+            threshold_config=threshold_config,
         )
         for sample in selected
     ]
@@ -106,11 +115,23 @@ def _record_from_sample(
     model_backend: str,
     checkpoint: str | Path | None,
     threshold: float,
+    threshold_config: MVTecThresholdConfig | None,
 ) -> dict[str, Any]:
     case_id = _case_id(sample, root)
     anomaly_map = _array_or_none(prediction.get("anomaly_map"))
     predicted_mask = _array_or_none(prediction.get("mask"))
-    if predicted_mask is None and anomaly_map is not None:
+    object_thresholds = (
+        threshold_config.for_object(sample.object_name) if threshold_config else None
+    )
+    score_threshold = object_thresholds.score_threshold if object_thresholds else None
+    map_threshold = object_thresholds.map_threshold if object_thresholds else None
+    if object_thresholds is not None and anomaly_map is not None and map_threshold is not None:
+        predicted_mask = mask_from_anomaly_map(
+            anomaly_map,
+            map_threshold=map_threshold,
+            min_area_ratio=object_thresholds.min_area_ratio,
+        )
+    elif predicted_mask is None and anomaly_map is not None:
         predicted_mask = anomaly_map >= threshold
 
     heatmap_path = _text_or_none(
@@ -131,20 +152,30 @@ def _record_from_sample(
     confidence = _unit_confidence_or_none(_float_or_none(prediction.get("confidence")))
     if confidence is None:
         confidence = _unit_confidence_or_none(score)
+    if object_thresholds is not None:
+        confidence = calibrated_confidence(score, score_threshold)
+    pred_label = calibrated_label(score, score_threshold) if object_thresholds is not None else None
     prediction_metadata = (
         prediction.get("metadata") if isinstance(prediction.get("metadata"), Mapping) else None
     )
+    extra_metadata = dict(prediction_metadata or {})
+    if object_thresholds is not None:
+        extra_metadata.update(calibration_metadata(object_thresholds))
+        if pred_label is not None:
+            extra_metadata["pred_label"] = pred_label
     detector_metadata = model_metadata(
         name="mvtec_anomaly_predictor",
         backend=model_backend,
         checkpoint=checkpoint,
-        threshold=threshold,
-        extra=prediction_metadata,
+        threshold=score_threshold if score_threshold is not None else threshold,
+        extra=extra_metadata,
     )
     if score is not None:
         detector_metadata["pred_score"] = score
     if confidence is not None:
         detector_metadata["confidence"] = confidence
+    if pred_label is not None:
+        detector_metadata["pred_label"] = pred_label
 
     record: dict[str, Any] = {
         "dataset": "mvtec",
@@ -162,6 +193,8 @@ def _record_from_sample(
         "detector": detector_metadata,
         "model_name": detector_metadata["name"],
     }
+    if pred_label is not None:
+        record["pred_label"] = pred_label
     if sample.gt_mask_path is not None:
         record["gt_mask_path"] = str(sample.gt_mask_path)
     if mask_path is not None:

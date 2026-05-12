@@ -1,4 +1,4 @@
-"""Trusted public model asset download helpers."""
+"""Trusted public producer asset download helpers."""
 
 from __future__ import annotations
 
@@ -7,6 +7,13 @@ import shutil
 import tarfile
 from pathlib import Path
 from typing import Any, Literal
+
+from kgtracevis.producers.backends import (
+    TORCH_RESNET_BACKEND,
+    WM811K_CLASSES,
+    WM811K_RESNET_MODEL_FILE,
+    WM811K_RESNET_MODEL_SOURCE,
+)
 
 ModelAsset = Literal["mvtec-efficientad", "mvtec-patchcore", "mvtec-stfpm", "wm811k-resnet"]
 
@@ -19,8 +26,11 @@ DEFAULT_MVTEC_PATCHCORE_FILE = (
 )
 DEFAULT_MVTEC_STFPM_REPO = "alexsu52/stfpm_mvtec_capsule"
 DEFAULT_MVTEC_STFPM_FILE = "openvino_model.tar"
-DEFAULT_WM811K_REPO = "radai-agent/radai-wm811k-defect-detection"
-DEFAULT_WM811K_FILE = "best_radai_resnet.pt"
+DEFAULT_WM811K_REPO = WM811K_RESNET_MODEL_SOURCE
+DEFAULT_WM811K_FILE = WM811K_RESNET_MODEL_FILE
+DEFAULT_WM811K_INPUT_REPO = "lslattery/wafer-defect-detection"
+DEFAULT_WM811K_INPUT_FILE = "test.pkl"
+DEFAULT_WM811K_INPUT_REPO_TYPE = "dataset"
 MODEL_ASSET_CHOICES: tuple[ModelAsset, ...] = (
     "mvtec-efficientad",
     "mvtec-patchcore",
@@ -47,14 +57,19 @@ def download_selected_model_assets(
     mvtec_stfpm_file: str = DEFAULT_MVTEC_STFPM_FILE,
     wm811k_repo: str = DEFAULT_WM811K_REPO,
     wm811k_file: str = DEFAULT_WM811K_FILE,
+    include_wm811k_data: bool = False,
+    wm811k_input_repo: str = DEFAULT_WM811K_INPUT_REPO,
+    wm811k_input_file: str = DEFAULT_WM811K_INPUT_FILE,
+    wm811k_input_repo_type: str = DEFAULT_WM811K_INPUT_REPO_TYPE,
 ) -> dict[str, Any]:
-    """Download selected trusted public model assets and return a JSON-safe summary."""
+    """Download selected trusted public producer assets and return a JSON-safe summary."""
     root = Path(assets_root)
     selected = _dedupe_models(models)
     summary: dict[str, Any] = {
         "artifact_type": "model_asset_download_v0",
         "assets_root": str(root),
         "assets": {},
+        "data_assets": {},
     }
 
     if "mvtec-efficientad" in selected:
@@ -92,6 +107,15 @@ def download_selected_model_assets(
             repo_id=wm811k_repo,
             filename=wm811k_file,
             destination_dir=root / "wm811k" / "checkpoints",
+            force=force,
+        )
+
+    if include_wm811k_data:
+        summary["data_assets"]["wm811k_input_table"] = download_wm811k_input_table(
+            repo_id=wm811k_input_repo,
+            filename=wm811k_input_file,
+            repo_type=wm811k_input_repo_type,
+            destination_dir=root / "wm811k" / "input_tables",
             force=force,
         )
 
@@ -185,10 +209,46 @@ def download_wm811k_resnet(
     """Download the default WM811K ResNet checkpoint."""
     checkpoint = _download_hf_file(repo_id, filename, Path(destination_dir), force=force)
     return {
+        "preset": "wm811k-resnet",
         "repo_id": repo_id,
+        "filename": filename,
         "checkpoint": str(checkpoint),
         "env": "KGTRACEVIS_WM811K_CHECKPOINT",
-        "backend": "torch-resnet34",
+        "backend": TORCH_RESNET_BACKEND,
+        "classes": list(WM811K_CLASSES),
+        "task": "defect_pattern_classification",
+        "produces_root_cause": False,
+    }
+
+
+def download_wm811k_input_table(
+    *,
+    repo_id: str = DEFAULT_WM811K_INPUT_REPO,
+    filename: str = DEFAULT_WM811K_INPUT_FILE,
+    repo_type: str = DEFAULT_WM811K_INPUT_REPO_TYPE,
+    destination_dir: str | Path = DEFAULT_MODEL_ASSETS_ROOT / "wm811k" / "input_tables",
+    force: bool = False,
+) -> dict[str, Any]:
+    """Download the default public WM811K pandas-readable input table."""
+    input_table = _download_hf_file(
+        repo_id,
+        filename,
+        Path(destination_dir),
+        force=force,
+        repo_type=repo_type,
+    )
+    return {
+        "dataset": "wm811k",
+        "source_repo": repo_id,
+        "repo_id": repo_id,
+        "filename": filename,
+        "repo_type": repo_type,
+        "input_table": str(input_table),
+        "table_format": Path(filename).suffix.lstrip(".") or "unknown",
+        "claim_boundary": (
+            "WM811K input rows and classifier outputs provide observed wafer-map "
+            "defect-pattern evidence only; they are not verified root-cause labels."
+        ),
     }
 
 
@@ -210,6 +270,7 @@ def _download_hf_file(
     *,
     force: bool,
     output_name: str | None = None,
+    repo_type: str | None = None,
 ) -> Path:
     """Download one file from Hugging Face Hub into a local asset directory."""
     try:
@@ -224,7 +285,10 @@ def _download_hf_file(
     destination = destination_dir / (output_name or filename.replace("/", "__"))
     if destination.is_file() and not force:
         return destination
-    cached_path = Path(hf_hub_download(repo_id=repo_id, filename=filename))
+    download_kwargs: dict[str, Any] = {"repo_id": repo_id, "filename": filename}
+    if repo_type:
+        download_kwargs["repo_type"] = repo_type
+    cached_path = Path(hf_hub_download(**download_kwargs))
     shutil.copy2(cached_path, destination)
     return destination
 

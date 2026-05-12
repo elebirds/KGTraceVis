@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Reusable calibration belongs under src/kgtracevis; scripts remain clients."}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "Producer-output record contracts and MVTec evidence boundaries."}
+{"file": ".trellis/spec/backend/mvtec-model-presets.md", "reason": "Official Amazon PatchCore score/mask and artifact-root contracts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Explicit validation errors for config and calibration inputs."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Focused tests and quality checks for backend changes."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Calibration script output conventions."}
