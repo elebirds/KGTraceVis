@@ -52,8 +52,10 @@ paper = [
 ]
 ml = [
     "anomalib>=2.4.1",
+    "faiss-cpu>=1.13.2",
     "huggingface-hub>=1.14.0",
     "openvino>=2026.1.0",
+    "pretrainedmodels>=0.7.4",
     "torch>=2.11.0",
     "torchvision>=0.26.0",
 ]

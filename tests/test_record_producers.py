@@ -28,6 +28,7 @@ from kgtracevis.producers.backends import (
     SklearnWM811KBackend,
     TorchWM811KBackend,
     _first_engine_prediction,
+    _prepare_amazon_patchcore_runtime,
     amazon_patchcore_prediction_to_mvtec_prediction,
     anomalib_prediction_to_mvtec_prediction,
     discover_amazon_patchcore_prepend,
@@ -279,6 +280,18 @@ def test_amazon_patchcore_backend_normalizes_official_prediction_shape(
     assert prediction["metadata"]["model_format"] == "amazon-patchcore-faiss-pkl"
 
 
+def test_amazon_patchcore_backend_clamps_unbounded_scores_to_confidence() -> None:
+    """Official PatchCore distance scores should not become invalid Evidence confidence."""
+    prediction = amazon_patchcore_prediction_to_mvtec_prediction(
+        ([3556.79], [np.asarray([[0.0, 1.0]])]),
+        checkpoint="official/mvtec_bottle",
+        device="cpu",
+    )
+
+    assert prediction["score"] == pytest.approx(3556.79)
+    assert prediction["confidence"] == 1.0
+
+
 def test_amazon_patchcore_conversion_accepts_mapping_outputs() -> None:
     """Normalization should tolerate dict-shaped official wrapper outputs."""
     prediction = amazon_patchcore_prediction_to_mvtec_prediction(
@@ -307,6 +320,42 @@ def test_amazon_patchcore_artifact_validation_names_required_files(tmp_path: Pat
 
     with pytest.raises(FileNotFoundError, match="nnscorer_search_index.faiss"):
         discover_amazon_patchcore_prepend(incomplete)
+
+
+def test_amazon_patchcore_runtime_guard_sets_macos_openmp_workaround(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The official FAISS backend should avoid macOS libomp aborts at load time."""
+    monkeypatch.setattr(producer_backends.sys, "platform", "darwin")
+    monkeypatch.delenv("KMP_DUPLICATE_LIB_OK", raising=False)
+
+    _prepare_amazon_patchcore_runtime()
+
+    assert producer_backends.os.environ["KMP_DUPLICATE_LIB_OK"] == "TRUE"
+
+
+def test_amazon_patchcore_runtime_guard_preserves_existing_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The macOS OpenMP workaround should not override an explicit user setting."""
+    monkeypatch.setattr(producer_backends.sys, "platform", "darwin")
+    monkeypatch.setenv("KMP_DUPLICATE_LIB_OK", "FALSE")
+
+    _prepare_amazon_patchcore_runtime()
+
+    assert producer_backends.os.environ["KMP_DUPLICATE_LIB_OK"] == "FALSE"
+
+
+def test_amazon_patchcore_runtime_guard_is_macos_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-macOS environments should not receive the FAISS/torch OpenMP workaround."""
+    monkeypatch.setattr(producer_backends.sys, "platform", "linux")
+    monkeypatch.delenv("KMP_DUPLICATE_LIB_OK", raising=False)
+
+    _prepare_amazon_patchcore_runtime()
+
+    assert "KMP_DUPLICATE_LIB_OK" not in producer_backends.os.environ
 
 
 def test_first_engine_prediction_returns_first_item() -> None:
@@ -601,6 +650,42 @@ def test_producers_preserve_zero_numeric_model_outputs(tmp_path: Path) -> None:
     wm811k_records = build_wm811k_records(table_path, ZeroWM811KClassifier())
     assert wm811k_records[0]["classification_confidence"] == 0.0
     assert wm811k_records[0]["classifier"]["confidence"] == 0.0
+
+
+def test_mvtec_producer_clamps_unbounded_score_fallback_confidence(tmp_path: Path) -> None:
+    """Unbounded anomaly scores should remain raw scores while confidence stays unit-scale."""
+
+    class UnboundedScoreMVTecPredictor:
+        def predict(self, image_path: Path) -> MVTecPrediction:
+            return {"score": 12.5, "mask": [[1, 1], [0, 0]]}
+
+    mvtec_root = tmp_path / "mvtec"
+    _touch(mvtec_root / "bottle" / "test" / "crack" / "000.png")
+
+    records = build_mvtec_records(mvtec_root, UnboundedScoreMVTecPredictor())
+
+    assert records[0]["score"] == 12.5
+    assert records[0]["confidence"] == 1.0
+    assert records[0]["detector"]["pred_score"] == 12.5
+    assert records[0]["detector"]["confidence"] == 1.0
+
+
+def test_mvtec_producer_clamps_explicit_confidence_to_unit_scale(tmp_path: Path) -> None:
+    """Producer records should not pass invalid confidence values to Evidence adapters."""
+
+    class UnboundedConfidenceMVTecPredictor:
+        def predict(self, image_path: Path) -> MVTecPrediction:
+            return {"score": 12.5, "confidence": 5.0, "mask": [[1, 1], [0, 0]]}
+
+    mvtec_root = tmp_path / "mvtec"
+    _touch(mvtec_root / "bottle" / "test" / "crack" / "000.png")
+
+    records = build_mvtec_records(mvtec_root, UnboundedConfidenceMVTecPredictor())
+
+    assert records[0]["score"] == 12.5
+    assert records[0]["confidence"] == 1.0
+    assert records[0]["detector"]["confidence"] == 1.0
+    assert evidence_from_records(records, dataset="mvtec")[0].confidence == 1.0
 
 
 def test_wm811k_rejects_one_dimensional_wafer_maps(tmp_path: Path) -> None:

@@ -128,9 +128,9 @@ def _record_from_sample(
         mask_stats = mask_stats_from_array(predicted_mask)
 
     score = _float_or_none(_first_present(prediction, ("score", "pred_score")))
-    confidence = _float_or_none(prediction.get("confidence"))
+    confidence = _unit_confidence_or_none(_float_or_none(prediction.get("confidence")))
     if confidence is None:
-        confidence = score
+        confidence = _unit_confidence_or_none(score)
     prediction_metadata = (
         prediction.get("metadata") if isinstance(prediction.get("metadata"), Mapping) else None
     )
@@ -282,6 +282,12 @@ def _float_or_none(value: Any) -> float | None:
     if value is None or value == "":
         return None
     return float(value)
+
+
+def _unit_confidence_or_none(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return min(max(float(value), 0.0), 1.0)
 
 
 def _first_present(data: Mapping[str, Any], keys: Sequence[str]) -> Any:

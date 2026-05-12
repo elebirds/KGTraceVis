@@ -70,7 +70,7 @@ class Evidence(BaseModel):
     location: str | None = None
     morphology: str | None = None
     severity: float | None = None
-    confidence: float | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     timestamp: str | None = None
     raw_evidence: RawEvidence = Field(default_factory=RawEvidence)
     observations: list[EvidenceObservation] = Field(default_factory=list)

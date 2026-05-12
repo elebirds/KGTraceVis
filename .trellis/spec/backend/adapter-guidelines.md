@@ -84,6 +84,10 @@ MVTec contract:
   detectors/localizers. They provide score, normal-vs-anomalous label when
   available, anomaly map, mask, and geometry; they do not inherently infer
   semantic defect classes such as `crack` or `scratch`.
+- Preserve detector `score` as the raw model value. Some detectors, including
+  official Amazon PatchCore, emit unbounded distance scores; producer-level
+  `confidence` must remain unit-scale in `[0, 1]` before records enter the
+  Evidence adapter.
 - Treat MVTec folder labels, DS-MVTec captions, web-upload `defect_type`, or
   operator-supplied labels as native/source labels or human priors with explicit
   provenance. Do not present them as model-inferred defect types.

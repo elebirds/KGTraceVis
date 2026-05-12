@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from kgtracevis.schema.evidence_schema import Evidence
 from kgtracevis.schema.validators import (
@@ -87,6 +88,21 @@ def test_legacy_evidence_without_observations_or_adapter_still_validates() -> No
         "deprecated legacy reasoning fields are compatibility-only; "
         "add canonical observations for: anomaly_type, object"
     ]
+
+
+def test_evidence_confidence_is_unit_scale() -> None:
+    """Evidence confidence should reject raw unbounded detector scores."""
+    with pytest.raises(ValidationError, match="less than or equal to 1"):
+        Evidence.model_validate(
+            {
+                "case_id": "schema_confidence_1",
+                "dataset": "mvtec",
+                "source": "image",
+                "object": "bottle",
+                "anomaly_type": "visual_anomaly",
+                "confidence": 3556.79,
+            }
+        )
 
 
 def test_canonical_observation_validation_can_reject_legacy_payloads(tmp_path: Path) -> None:

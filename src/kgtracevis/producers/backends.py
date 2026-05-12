@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import pickle
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -76,6 +78,7 @@ class AmazonPatchCoreBackend:
         )
 
     def _load_model(self) -> Any:
+        _prepare_amazon_patchcore_runtime()
         try:
             import patchcore.common as patchcore_common
             import patchcore.patchcore as patchcore_module
@@ -272,7 +275,7 @@ def amazon_patchcore_prediction_to_mvtec_prediction(
     normalized: MVTecPrediction = {"metadata": metadata}
     if score is not None:
         normalized["score"] = score
-        normalized["confidence"] = score
+        normalized["confidence"] = _unit_confidence(score)
     if label is not None:
         normalized["label"] = label
     if anomaly_map is not None:
@@ -332,6 +335,11 @@ def is_amazon_patchcore_artifact_dir(path: str | Path | None) -> bool:
     except (FileNotFoundError, ValueError):
         return False
     return True
+
+
+def _prepare_amazon_patchcore_runtime() -> None:
+    if sys.platform == "darwin":
+        os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 
 def discover_amazon_patchcore_prepend(checkpoint: str | Path | None) -> str:
@@ -882,6 +890,10 @@ def _float_or_none(value: Any) -> float | None:
             return _float_or_none(value[0])
         raise ValueError("numeric prediction value must be scalar")
     return float(value)
+
+
+def _unit_confidence(value: float) -> float:
+    return min(max(float(value), 0.0), 1.0)
 
 
 def _text_or_none(value: Any) -> str | None:
