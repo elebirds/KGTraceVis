@@ -333,13 +333,37 @@ button {
 .compact-run-list .ant-list-items {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .compact-run-list .ant-list-item {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px !important;
+}
+
+.run-list .ant-list-item-meta {
+  min-width: 0;
+  width: 100%;
+}
+
+.run-list .ant-list-item-meta-content {
+  min-width: 0;
+}
+
+.run-list-title,
+.run-list-line {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-list-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .history-toolbar .ant-input-search {

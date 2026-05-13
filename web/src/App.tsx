@@ -1049,14 +1049,16 @@ function RunList({
           onClick={() => onOpenRun(run.run_id)}
         >
           <List.Item.Meta
-            title={run.label}
+            title={<span className="run-list-title">{run.label}</span>}
             description={
-              <Space direction="vertical" size={2}>
-                <Text type="secondary">
+              <div className="run-list-meta">
+                <Text type="secondary" className="run-list-line">
                   {run.mode} · {run.dataset ?? "auto"} · {run.case_count} cases
                 </Text>
-                <Text type="secondary">{new Date(run.created_at).toLocaleString()}</Text>
-              </Space>
+                <Text type="secondary" className="run-list-line">
+                  {new Date(run.created_at).toLocaleString()}
+                </Text>
+              </div>
             }
           />
         </List.Item>
