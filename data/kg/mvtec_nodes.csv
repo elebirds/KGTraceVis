@@ -1,1 +1,66 @@
 id,name,label,scenario,aliases,description
+AdhesiveOrResidue,Adhesive or residue,RootCause,mvtec,adhesive residue|glue residue|residue,"Low-confidence candidate for glue, residue, or surface deposit evidence"
+BentDefect,Bent defect,AnomalyType,mvtec,bent|bent defect,MVTec source-label visual defect covered by candidate KG generation
+BentLeadDefect,Bent lead defect,AnomalyType,mvtec,bent_lead|bent lead|bent lead defect|bent|lead,MVTec source-label visual defect covered by candidate KG generation
+BottleBreakage,Bottle breakage,RootCause,mvtec,bottle breakage|bottle fracture,Object-specific candidate for large or small broken bottle evidence
+BrokenDefect,Broken defect,AnomalyType,mvtec,broken|broken defect,MVTec source-label visual defect covered by candidate KG generation
+BrokenLargeDefect,Broken large defect,AnomalyType,mvtec,broken_large|broken large|broken large defect|broken|large,MVTec source-label visual defect covered by candidate KG generation
+BrokenSmallDefect,Broken small defect,AnomalyType,mvtec,broken_small|broken small|broken small defect|broken|small,MVTec source-label visual defect covered by candidate KG generation
+BrokenTeethDefect,Broken teeth defect,AnomalyType,mvtec,broken_teeth|broken teeth|broken teeth defect|broken|teeth,MVTec source-label visual defect covered by candidate KG generation
+CableAssemblyOmission,Cable assembly omission,RootCause,mvtec,cable assembly omission|missing wire assembly,Object-specific candidate for missing cable or missing wire evidence
+CableInsulationDamage,Cable insulation damage,RootCause,mvtec,cable insulation damage|wire insulation issue,"Object-specific candidate for cable insulation cuts, pokes, or exposed wires"
+CableSwapDefect,Cable swap defect,AnomalyType,mvtec,cable_swap|cable swap|cable swap defect|cable|swap,MVTec source-label visual defect covered by candidate KG generation
+CapsuleShellDamage,Capsule shell damage,RootCause,mvtec,capsule shell damage|capsule deformation,"Object-specific candidate for capsule crack, poke, scratch, or squeeze evidence"
+CarpetObject,Carpet,Object,mvtec,carpet|carpet,MVTec object covered by candidate KG generation
+CombinedDefect,Combined defect,AnomalyType,mvtec,combined|combined defect,MVTec source-label visual defect covered by candidate KG generation
+ComponentDamage,Component damage,RootCause,mvtec,component damage|damaged part,Low-confidence candidate for damaged component evidence
+CutInnerInsulationDefect,Cut inner insulation defect,AnomalyType,mvtec,cut_inner_insulation|cut inner insulation|cut inner insulation defect|inner|insulation,MVTec source-label visual defect covered by candidate KG generation
+CutLeadDefect,Cut lead defect,AnomalyType,mvtec,cut_lead|cut lead|cut lead defect|lead,MVTec source-label visual defect covered by candidate KG generation
+CutOuterInsulationDefect,Cut outer insulation defect,AnomalyType,mvtec,cut_outer_insulation|cut outer insulation|cut outer insulation defect|outer|insulation,MVTec source-label visual defect covered by candidate KG generation
+DamagedCaseDefect,Damaged case defect,AnomalyType,mvtec,damaged_case|damaged case|damaged case defect|damaged|case,MVTec source-label visual defect covered by candidate KG generation
+DefectiveDefect,Defective defect,AnomalyType,mvtec,defective|defective defect,MVTec source-label visual defect covered by candidate KG generation
+EdgeLocation,Edge location,Location,mvtec,edge|border,Visual anomaly location
+FabricBorderDefect,Fabric border defect,AnomalyType,mvtec,fabric_border|fabric border|fabric border defect|fabric|border,MVTec source-label visual defect covered by candidate KG generation
+FabricInteriorDefect,Fabric interior defect,AnomalyType,mvtec,fabric_interior|fabric interior|fabric interior defect|fabric|interior,MVTec source-label visual defect covered by candidate KG generation
+FaultyImprintDefect,Faulty imprint defect,AnomalyType,mvtec,faulty_imprint|faulty imprint|faulty imprint defect|faulty|imprint,MVTec source-label visual defect covered by candidate KG generation
+FoldDefect,Fold defect,AnomalyType,mvtec,fold|fold defect,MVTec source-label visual defect covered by candidate KG generation
+GenericVisualDefectMechanism,Generic visual defect mechanism,CauseCategory,mvtec,generic visual mechanism|visual defect mechanism,Low-confidence fallback candidate for broad visual anomaly labels
+GlueDefect,Glue defect,AnomalyType,mvtec,glue|glue defect,MVTec source-label visual defect covered by candidate KG generation
+GlueStripDefect,Glue strip defect,AnomalyType,mvtec,glue_strip|glue strip|glue strip defect|glue|strip,MVTec source-label visual defect covered by candidate KG generation
+GrayStrokeDefect,Gray stroke defect,AnomalyType,mvtec,gray_stroke|gray stroke|gray stroke defect|gray|stroke,MVTec source-label visual defect covered by candidate KG generation
+GridObject,Grid,Object,mvtec,grid|grid,MVTec object covered by candidate KG generation
+HazelnutObject,Hazelnut,Object,mvtec,hazelnut|hazelnut,MVTec object covered by candidate KG generation
+HoleDefect,Hole defect,AnomalyType,mvtec,hole|hole defect,MVTec source-label visual defect covered by candidate KG generation
+LeatherObject,Leather,Object,mvtec,leather|leather,MVTec object covered by candidate KG generation
+LiquidDefect,Liquid defect,AnomalyType,mvtec,liquid|liquid defect,MVTec source-label visual defect covered by candidate KG generation
+ManipulatedFrontDefect,Manipulated front defect,AnomalyType,mvtec,manipulated_front|manipulated front|manipulated front defect|manipulated|front,MVTec source-label visual defect covered by candidate KG generation
+MetalContaminationDefect,Metal contamination defect,AnomalyType,mvtec,metal_contamination|metal contamination|metal contamination defect|metal|contamination,MVTec source-label visual defect covered by candidate KG generation
+MetalNutSurfaceHandling,Metal nut surface handling,RootCause,mvtec,metal nut surface handling|metal nut surface issue,"Object-specific candidate for metal-nut surface scratch, color, or bent evidence"
+MisplacedDefect,Misplaced defect,AnomalyType,mvtec,misplaced|misplaced defect,MVTec source-label visual defect covered by candidate KG generation
+MissingCableDefect,Missing cable defect,AnomalyType,mvtec,missing_cable|missing cable|missing cable defect|missing|cable,MVTec source-label visual defect covered by candidate KG generation
+OilDefect,Oil defect,AnomalyType,mvtec,oil|oil defect,MVTec source-label visual defect covered by candidate KG generation
+PillCoatingOrHandling,Pill coating or handling,RootCause,mvtec,pill coating issue|pill handling damage,"Object-specific candidate for pill contamination, color, crack, or scratch evidence"
+PokeDefect,Poke defect,AnomalyType,mvtec,poke|poke defect,MVTec source-label visual defect covered by candidate KG generation
+PokeInsulationDefect,Poke insulation defect,AnomalyType,mvtec,poke_insulation|poke insulation|poke insulation defect|poke|insulation,MVTec source-label visual defect covered by candidate KG generation
+PrintDefect,Print defect,AnomalyType,mvtec,print|print defect,MVTec source-label visual defect covered by candidate KG generation
+RoughDefect,Rough defect,AnomalyType,mvtec,rough|rough defect,MVTec source-label visual defect covered by candidate KG generation
+ScatteredMorphology,Scattered morphology,Morphology,mvtec,scattered|diffuse,Visual morphology
+ScratchHeadDefect,Scratch head defect,AnomalyType,mvtec,scratch_head|scratch head|scratch head defect|scratch|head,MVTec source-label visual defect covered by candidate KG generation
+ScratchNeckDefect,Scratch neck defect,AnomalyType,mvtec,scratch_neck|scratch neck|scratch neck defect|scratch|neck,MVTec source-label visual defect covered by candidate KG generation
+ScrewThreadOrHeadDamage,Screw thread or head damage,RootCause,mvtec,screw thread damage|screw head damage,"Object-specific candidate for screw thread, neck, or head evidence"
+SplitTeethDefect,Split teeth defect,AnomalyType,mvtec,split_teeth|split teeth|split teeth defect|split|teeth,MVTec source-label visual defect covered by candidate KG generation
+SpotMorphology,Spot morphology,Morphology,mvtec,spot|localized spot,Visual morphology
+SqueezedTeethDefect,Squeezed teeth defect,AnomalyType,mvtec,squeezed_teeth|squeezed teeth|squeezed teeth defect|squeezed|teeth,MVTec source-label visual defect covered by candidate KG generation
+TextureIrregularity,Texture irregularity,RootCause,mvtec,texture irregularity|thread irregularity,Low-confidence candidate for texture/thread-like visual irregularities
+TextureSurfaceContamination,Texture surface contamination,RootCause,mvtec,texture surface contamination|surface residue,"Object-specific candidate for texture surface color, glue, oil, or contamination evidence"
+ThreadDefect,Thread defect,AnomalyType,mvtec,thread|thread defect,MVTec source-label visual defect covered by candidate KG generation
+ThreadSideDefect,Thread side defect,AnomalyType,mvtec,thread_side|thread side|thread side defect|thread|side,MVTec source-label visual defect covered by candidate KG generation
+ThreadTopDefect,Thread top defect,AnomalyType,mvtec,thread_top|thread top|thread top defect|thread,MVTec source-label visual defect covered by candidate KG generation
+TileObject,Tile,Object,mvtec,tile|tile,MVTec object covered by candidate KG generation
+ToothbrushObject,Toothbrush,Object,mvtec,toothbrush|toothbrush,MVTec object covered by candidate KG generation
+TransistorLeadAssembly,Transistor lead assembly,RootCause,mvtec,transistor lead assembly|transistor placement issue,"Object-specific candidate for bent, cut, misplaced, or damaged transistor parts"
+TransistorObject,Transistor,Object,mvtec,transistor|transistor,MVTec object covered by candidate KG generation
+VisualInspectionReviewNeeded,Visual inspection review needed,CauseCategory,mvtec,review needed|visual review,Review bucket for weak or ambiguous visual anomaly evidence
+WoodObject,Wood,Object,mvtec,wood|wood,MVTec object covered by candidate KG generation
+ZipperObject,Zipper,Object,mvtec,zipper|zipper,MVTec object covered by candidate KG generation
+ZipperTeethAssembly,Zipper teeth assembly,RootCause,mvtec,zipper teeth assembly|zipper teeth defect,"Object-specific candidate for broken, split, or squeezed zipper teeth evidence"

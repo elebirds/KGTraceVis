@@ -129,6 +129,35 @@ def test_run_adapter_pipeline_uses_candidate_kg_overlay_for_wm811k_loc(
     assert case["top_k_paths"][0]["target_entity_id"] != "GlueRemovalInsufficient"
 
 
+def test_run_adapter_pipeline_default_kg_handles_wm811k_loc(tmp_path: Path) -> None:
+    """Default web/script KG should not require an overlay for WM811K Loc."""
+    records_path = tmp_path / "wm811k_loc.jsonl"
+    records_path.write_text(
+        (
+            '{"dataset":"wafer","adapter":"wm811k","case_id":"wm811k_loc_default",'
+            '"wafer_id":"WLOC-DEFAULT","predicted_pattern":"Loc",'
+            '"failure_pattern":"Loc","classification_confidence":0.67,'
+            '"wafer_map":[[0,0,0],[0,2,0],[0,0,0]],'
+            '"annotation_type":"native_ground_truth"}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    output = run_adapter_pipeline(records_path, tmp_path / "default", dataset="wafer")
+
+    case = output.summary["cases"][0]
+    selected = {
+        link["field"]: link["selected_entity_id"]
+        for link in case["linked_entities"]
+        if link.get("selected_entity_id")
+    }
+    assert selected["anomaly_type"] == "LocDefect"
+    assert selected["location"] == "WaferLocalLocation"
+    assert selected["morphology"] == "WaferClusteredMorphology"
+    assert case["top_k_paths"]
+    assert case["top_k_paths"][0]["target_entity_id"] != "GlueRemovalInsufficient"
+
+
 def test_run_adapter_pipeline_protects_existing_summary(tmp_path: Path) -> None:
     """Existing summaries should not be replaced unless overwrite is explicit."""
     output_dir = tmp_path / "existing"

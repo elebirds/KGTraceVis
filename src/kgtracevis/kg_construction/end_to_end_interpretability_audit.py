@@ -196,6 +196,8 @@ def _dataset_provenance(
     output = overlay_summary.get("output", {})
     evidence_paths = output.get("evidence_paths", [])
     cases = overlay_summary.get("cases", [])
+    overlay_kg_node_paths = pipeline.get("kg_node_paths", []) or [str(candidate_nodes_path)]
+    overlay_kg_edge_paths = pipeline.get("kg_edge_paths", []) or [str(candidate_edges_path)]
     return {
         "label": label,
         "dataset": dataset,
@@ -211,8 +213,8 @@ def _dataset_provenance(
         "overlay_reasoning_path": str(overlay_summary_path),
         "overlay_table_path": str(overlay_dir / "adapter_pipeline_table.csv"),
         "overlay_case_count": len(cases) if isinstance(cases, list) else 0,
-        "overlay_kg_node_paths": pipeline.get("kg_node_paths", []),
-        "overlay_kg_edge_paths": pipeline.get("kg_edge_paths", []),
+        "overlay_kg_node_paths": overlay_kg_node_paths,
+        "overlay_kg_edge_paths": overlay_kg_edge_paths,
         "candidate_kg_overlay": {
             "nodes_path": str(candidate_nodes_path),
             "edges_path": str(candidate_edges_path),

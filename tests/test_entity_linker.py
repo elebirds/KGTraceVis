@@ -96,3 +96,25 @@ def test_linker_prefers_field_compatible_candidate_labels() -> None:
     assert selected["anomaly_type"] == "LocDefect"
     assert selected["location"] == "WaferLocalLocation"
     assert selected["morphology"] == "WaferClusteredMorphology"
+
+
+def test_default_graph_links_wm811k_loc_to_hardened_wafer_entities() -> None:
+    """Default KG loading should include hardened wafer classes for web analysis."""
+    evidence = evidence_from_wm811k_record(
+        {
+            "dataset": "wafer",
+            "adapter": "wm811k",
+            "case_id": "wm811k_loc_default",
+            "predicted_pattern": "Loc",
+            "failure_pattern": "Loc",
+            "classification_confidence": 0.67,
+            "wafer_map": [[0, 0, 0], [0, 2, 0], [0, 0, 0]],
+        }
+    )
+    graph = KnowledgeGraph.from_default_paths()
+
+    selected = selected_entities_by_field(link_evidence_entities(evidence, graph))
+
+    assert selected["anomaly_type"] == "LocDefect"
+    assert selected["location"] == "WaferLocalLocation"
+    assert selected["morphology"] == "WaferClusteredMorphology"

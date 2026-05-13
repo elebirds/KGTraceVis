@@ -11,13 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from kgtracevis.core.pipeline import KGTracePipeline
 from kgtracevis.experiments.adapter_pipeline import (
     AdapterPipelineOutput,
     run_adapter_pipeline,
 )
 from kgtracevis.kg.graph import (
-    DEFAULT_EDGE_PATHS,
-    DEFAULT_NODE_PATHS,
     KGEdge,
     KGNode,
     KnowledgeGraph,
@@ -89,6 +88,11 @@ EDGE_REVIEW_COLUMNS = (
     "suggested_action",
     "evidence",
     "claim_boundary",
+)
+CANDIDATE_BASE_NODE_PATHS = (Path("data/kg/nodes.csv"),)
+CANDIDATE_BASE_EDGE_PATHS = (
+    Path("data/kg/edges.csv"),
+    Path("data/kg/mvtec_rca_reference.csv"),
 )
 
 
@@ -696,8 +700,8 @@ def build_candidate_kg(
     mvtec_records_path: str | Path | None = None,
     mvtec_adapter_table_path: str | Path | None = None,
     wm811k_record_paths: Sequence[str | Path] = (),
-    existing_node_paths: Sequence[str | Path] = DEFAULT_NODE_PATHS,
-    existing_edge_paths: Sequence[str | Path] = DEFAULT_EDGE_PATHS,
+    existing_node_paths: Sequence[str | Path] = CANDIDATE_BASE_NODE_PATHS,
+    existing_edge_paths: Sequence[str | Path] = CANDIDATE_BASE_EDGE_PATHS,
 ) -> tuple[list[KGNode], list[KGEdge], dict[str, object]]:
     """Generate coverage-first candidate KG rows for MVTec and WM811K."""
     existing_graph = KnowledgeGraph.from_paths(
@@ -805,8 +809,8 @@ def write_candidate_kg_artifacts(
     write_edge_review_queue(edges, review_queue_path)
 
     validation = run_kg_qa(
-        [*DEFAULT_NODE_PATHS, nodes_path],
-        [*DEFAULT_EDGE_PATHS, edges_path],
+        [*CANDIDATE_BASE_NODE_PATHS, nodes_path],
+        [*CANDIDATE_BASE_EDGE_PATHS, edges_path],
     )
     validation_payload = validation.model_dump()
     validation_path.write_text(json.dumps(validation_payload, indent=2), encoding="utf-8")
@@ -878,12 +882,23 @@ def run_before_after_comparison(
 ) -> list[dict[str, object]]:
     """Compare base KG reasoning with candidate overlay KG reasoning."""
     destination = Path(output_dir)
+    base_graph = KnowledgeGraph.from_paths(
+        CANDIDATE_BASE_NODE_PATHS,
+        CANDIDATE_BASE_EDGE_PATHS,
+        skip_missing=True,
+    )
+    overlay_graph = KnowledgeGraph.from_paths(
+        [*CANDIDATE_BASE_NODE_PATHS, candidate_nodes_path],
+        [*CANDIDATE_BASE_EDGE_PATHS, candidate_edges_path],
+        skip_missing=True,
+    )
     base = run_adapter_pipeline(
         input_path,
         destination / "base",
         dataset=dataset,
         top_k=top_k,
         overwrite=overwrite,
+        pipeline=KGTracePipeline(graph=base_graph),
     )
     overlay = run_adapter_pipeline(
         input_path,
@@ -891,8 +906,7 @@ def run_before_after_comparison(
         dataset=dataset,
         top_k=top_k,
         overwrite=overwrite,
-        kg_node_paths=[candidate_nodes_path],
-        kg_edge_paths=[candidate_edges_path],
+        pipeline=KGTracePipeline(graph=overlay_graph),
     )
     return _compare_pipeline_outputs(base, overlay)
 

@@ -1,0 +1,10 @@
+{"type":"note","text":"Fix default KG paths so web Analysis loads hardened MVTec/Wafer KG layers."}
+{"type":"file","path":"src/kgtracevis/kg/graph.py","reason":"Default KG path constants."}
+{"type":"file","path":"src/kgtracevis/kg_construction/case_kg_hardening.py","reason":"Keep candidate KG generation reproducible after default KG promotion."}
+{"type":"file","path":"src/kgtracevis/kg_construction/end_to_end_interpretability_audit.py","reason":"Record explicit overlay paths when before/after uses injected pipeline instances."}
+{"type":"file","path":"data/kg/mvtec_nodes.csv","reason":"Tracked hardened MVTec KG layer."}
+{"type":"file","path":"data/kg/mvtec_edges.csv","reason":"Tracked hardened MVTec KG layer."}
+{"type":"file","path":"data/kg/wafer_nodes.csv","reason":"Tracked hardened wafer KG layer."}
+{"type":"file","path":"data/kg/wafer_edges.csv","reason":"Tracked hardened wafer KG layer."}
+{"type":"file","path":"tests/test_entity_linker.py","reason":"Regression coverage for WM811K Loc default linking."}
+{"type":"file","path":"tests/test_adapter_pipeline.py","reason":"Existing regression for Loc overlay behavior."}

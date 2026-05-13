@@ -1,0 +1,8 @@
+{"type":"command","cmd":"uv run --extra dev pytest tests/test_entity_linker.py tests/test_adapter_pipeline.py"}
+{"type":"command","cmd":"uv run --extra dev pytest tests/test_kg_construction.py"}
+{"type":"command","cmd":"uv run --extra dev pytest"}
+{"type":"command","cmd":"uv run --extra dev ruff check ."}
+{"type":"command","cmd":"uv run --extra dev mypy src tests scripts"}
+{"type":"command","cmd":"uv run python scripts/run_examples.py"}
+{"type":"command","cmd":"uv run python scripts/smoke_rootlens_dashboard.py"}
+{"type":"manual","text":"Uploaded real MVTec and WM811K JSONL records through the web UI and checked detail-stage links/paths."}
