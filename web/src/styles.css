@@ -389,6 +389,10 @@ button {
   margin: 0 0 4px;
 }
 
+.case-selector {
+  min-width: 240px;
+}
+
 .analysis-timeline-card {
   position: sticky;
   top: 88px;

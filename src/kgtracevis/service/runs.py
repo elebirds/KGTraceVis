@@ -487,10 +487,11 @@ def _run_records_upload(
     )
     summary = output.summary
     records = _load_visual_records(input_path)
-    summary_cases = summary.get("cases", [])
+    summary_cases = _list_of_dicts(summary.get("cases"))
+    case_rows = _enriched_case_rows(summary_cases)
     inferred_dataset = None
-    if isinstance(summary_cases, list) and summary_cases:
-        first_case = summary_cases[0]
+    if case_rows:
+        first_case = case_rows[0]
         if isinstance(first_case, dict):
             inferred_dataset = first_case.get("dataset")
     dataset_name = str(
@@ -552,10 +553,8 @@ def _run_records_upload(
             "candidate/plausible explanation only; not a verified root-cause label"
         )),
         summary=summary,
-        cases=list(summary.get("cases", [])) if isinstance(summary.get("cases"), list) else [],
-        **_dashboard_fields_from_cases(
-            list(summary.get("cases", [])) if isinstance(summary.get("cases"), list) else []
-        ),
+        cases=case_rows,
+        **_dashboard_fields_from_cases(case_rows),
         artifacts={
             "input_path": str(input_path),
             "output_dir": str(output_dir),
@@ -796,6 +795,25 @@ def _load_visual_records(input_path: Path) -> list[dict[str, Any]]:
         return [dict(record) for record in load_adapter_records(input_path)]
     except (OSError, ValueError, json.JSONDecodeError):
         return []
+
+
+def _enriched_case_rows(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for case in cases:
+        row = dict(case)
+        top_k_paths = _list_of_dicts(row.get("top_k_paths"))
+        linked_entities = _list_of_dicts(row.get("linked_entities"))
+        correction_candidates = _list_of_dicts(row.get("correction_candidates"))
+        source_edges = _list_of_dicts(row.get("source_edge_provenance"))
+        row["path_graph"] = _path_graph_from_paths(top_k_paths)
+        row["review_targets"] = _review_targets(
+            linked_entities=linked_entities,
+            correction_candidates=correction_candidates,
+            top_k_paths=top_k_paths,
+            source_edges=source_edges,
+        )
+        enriched.append(row)
+    return enriched
 
 
 def _dashboard_fields_from_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:

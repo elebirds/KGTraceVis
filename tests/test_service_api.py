@@ -82,6 +82,9 @@ def test_upload_run_route_persists_a_run_manifest(tmp_path: Path, monkeypatch) -
     assert payload["run"]["case_count"] == 2
     assert payload["workflow_steps"]
     assert payload["summary"]["case_count"] == 2
+    assert len(payload["cases"]) == 2
+    assert all("path_graph" in case for case in payload["cases"])
+    assert all("review_targets" in case for case in payload["cases"])
 
     run_id = payload["run"]["run_id"]
     manifest_path = tmp_path / "web_sessions" / run_id / "manifest.json"

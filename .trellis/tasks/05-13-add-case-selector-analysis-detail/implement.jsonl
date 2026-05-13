@@ -1,0 +1,5 @@
+{"type":"note","text":"Add case-level selection to Analysis detail for multi-case runs."}
+{"type":"file","path":"src/kgtracevis/service/runs.py","reason":"Add per-case path graph and review targets to run detail payloads."}
+{"type":"file","path":"web/src/App.tsx","reason":"Add case selector and selected-case scoped Analysis detail panels."}
+{"type":"file","path":"web/src/styles.css","reason":"Style case selector width."}
+{"type":"file","path":"tests/test_service_api.py","reason":"Assert per-case path graph/review targets in upload payloads."}

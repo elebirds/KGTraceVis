@@ -75,6 +75,7 @@ import type {
   KGSourceDraftResponse,
   RunDetail,
   RunSummary,
+  PathGraph,
   PathGraphEdge,
   PathGraphPath,
   UploadMode,
@@ -1754,9 +1755,28 @@ interface RunDetailProps {
   onSubmitReview: (action: ReviewAction) => void;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asRecordList(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value) ? value.map(asRecord).filter((item) => item !== null) : [];
+}
+
+function asReviewTargets(value: unknown): ReviewTarget[] {
+  return Array.isArray(value) ? (value as ReviewTarget[]) : [];
+}
+
+function asPathGraph(value: unknown): PathGraph | null {
+  const record = asRecord(value);
+  if (!record || !Array.isArray(record.paths)) return null;
+  return record as unknown as PathGraph;
+}
+
 function RunDetailView({
   run,
-  selectedTarget,
   selectedTargetKey,
   reviewNote,
   reviewStatus,
@@ -1765,13 +1785,36 @@ function RunDetailView({
   onSubmitReview
 }: RunDetailProps) {
   const [activeStep, setActiveStep] = useState(0);
-  const evidence = run.evidence_summary ?? {};
-  const pathGraph = run.path_graph ?? {
+  const caseRows = run.cases ?? [];
+  const [selectedCaseId, setSelectedCaseId] = useState("");
+  useEffect(() => {
+    setSelectedCaseId(caseRows.length > 0 ? valueText(caseRows[0].case_id) : "");
+  }, [run.run.run_id, caseRows.length]);
+  const selectedCase =
+    caseRows.find((caseRow) => valueText(caseRow.case_id) === selectedCaseId) ?? caseRows[0];
+  const selectedCaseKey = selectedCase ? valueText(selectedCase.case_id) : "";
+  const evidence = asRecord(selectedCase?.generated_evidence) ?? run.evidence_summary ?? {};
+  const linkedEntities = selectedCase
+    ? asRecordList(selectedCase.linked_entities)
+    : run.linked_entities;
+  const correctionCandidates = selectedCase
+    ? asRecordList(selectedCase.correction_candidates)
+    : run.correction_candidates;
+  const pathGraph = asPathGraph(selectedCase?.path_graph) ?? run.path_graph ?? {
     paths: [],
     path_count: 0,
     node_count: 0,
     edge_count: 0
   };
+  const selectedCaseReviewTargets = asReviewTargets(selectedCase?.review_targets);
+  const reviewTargets =
+    selectedCaseReviewTargets.length > 0 ? selectedCaseReviewTargets : run.review_targets;
+  const activeSelectedTarget = reviewTargets.find(
+    (target) => target.target_key === selectedTargetKey
+  );
+  const visualEvidence = selectedCaseKey
+    ? (run.visual_evidence ?? []).filter((item) => item.case_id === selectedCaseKey)
+    : (run.visual_evidence ?? []);
   const stages: Array<{ title: string; description: string; content: ReactNode }> = [
     {
       title: "Input",
@@ -1812,7 +1855,7 @@ function RunDetailView({
       content: (
         <div className="analysis-stage-grid visual-evidence-layout">
           <Card className="visual-evidence-card" title="Visual Evidence">
-            <VisualEvidencePanel items={run.visual_evidence ?? []} />
+            <VisualEvidencePanel items={visualEvidence} />
           </Card>
           <Card title="Evidence Summary">
             <Descriptions size="small" column={2} bordered>
@@ -1868,7 +1911,7 @@ function RunDetailView({
         <div className="analysis-stage-grid single">
           <Card title="Linked Entities">
             <CompactList
-              items={run.linked_entities}
+              items={linkedEntities}
               idField="link_id"
               labelField="selected_entity_id"
             />
@@ -1883,13 +1926,13 @@ function RunDetailView({
         <div className="analysis-stage-grid">
           <Card title="Correction Candidates">
             <CompactList
-              items={run.correction_candidates}
+              items={correctionCandidates}
               idField="candidate_id"
               labelField="suggested_value"
             />
           </Card>
           <Card title="Analysis Summary">
-            <JsonBlock value={run.analysis ?? run.summary} />
+            <JsonBlock value={selectedCase ?? run.analysis ?? run.summary} />
           </Card>
         </div>
       )
@@ -1900,7 +1943,7 @@ function RunDetailView({
       content: (
         <ReasoningWorkspace
           paths={pathGraph.paths}
-          selectedTarget={selectedTarget}
+          selectedTarget={activeSelectedTarget}
           onTargetSelected={onTargetSelected}
         />
       )
@@ -1917,7 +1960,7 @@ function RunDetailView({
             showIcon
           />
           <ReviewQueue
-            targets={run.review_targets}
+            targets={reviewTargets}
             selectedTargetKey={selectedTargetKey}
             onTargetSelected={onTargetSelected}
           />
@@ -1926,10 +1969,10 @@ function RunDetailView({
               className="review-target-select"
               value={selectedTargetKey}
               onChange={(value) => onTargetSelected(value)}
-              disabled={!run.review_targets.length}
+              disabled={!reviewTargets.length}
               options={
-                run.review_targets.length > 0
-                  ? run.review_targets.map((target) => ({
+                reviewTargets.length > 0
+                  ? reviewTargets.map((target) => ({
                       value: target.target_key,
                       label: `${target.target_type} · ${shortId(target.label)}`
                     }))
@@ -1941,22 +1984,22 @@ function RunDetailView({
               value={reviewNote}
               onChange={(event) => onReviewNoteChanged(event.target.value)}
               placeholder="optional review note"
-              disabled={!selectedTarget}
+              disabled={!activeSelectedTarget}
             />
-            <Button onClick={() => onSubmitReview("accept")} disabled={!selectedTarget}>
+            <Button onClick={() => onSubmitReview("accept")} disabled={!activeSelectedTarget}>
               <CheckOutlined />
               Accept
             </Button>
-            <Button onClick={() => onSubmitReview("reject")} disabled={!selectedTarget}>
+            <Button onClick={() => onSubmitReview("reject")} disabled={!activeSelectedTarget}>
               <CloseOutlined />
               Reject
             </Button>
-            <Button onClick={() => onSubmitReview("needs_review")} disabled={!selectedTarget}>
+            <Button onClick={() => onSubmitReview("needs_review")} disabled={!activeSelectedTarget}>
               Needs review
             </Button>
           </div>
-          {selectedTarget ? (
-            <p className="muted">Stable target key: {selectedTarget.target_key}</p>
+          {activeSelectedTarget ? (
+            <p className="muted">Stable target key: {activeSelectedTarget.target_key}</p>
           ) : (
             <p className="muted">No feedback target is available for this run.</p>
           )}
@@ -1981,8 +2024,19 @@ function RunDetailView({
         </div>
         <Space wrap>
           <Tag color="blue">{pathGraph.path_count} paths</Tag>
-          <Tag color="processing">{run.linked_entities.length} linked entities</Tag>
-          <Tag color="warning">{run.correction_candidates.length} corrections</Tag>
+          <Tag color="processing">{linkedEntities.length} linked entities</Tag>
+          <Tag color="warning">{correctionCandidates.length} corrections</Tag>
+          {caseRows.length > 1 && (
+            <Select
+              className="case-selector"
+              value={selectedCaseKey}
+              onChange={setSelectedCaseId}
+              options={caseRows.map((caseRow) => ({
+                value: valueText(caseRow.case_id),
+                label: valueText(caseRow.case_id)
+              }))}
+            />
+          )}
         </Space>
       </Card>
       <Card className="analysis-timeline-card">

@@ -1,0 +1,7 @@
+{"type":"command","cmd":"uv run --extra dev pytest"}
+{"type":"command","cmd":"uv run --extra dev ruff check ."}
+{"type":"command","cmd":"uv run --extra dev mypy src tests scripts"}
+{"type":"command","cmd":"uv run python scripts/run_examples.py"}
+{"type":"command","cmd":"uv run python scripts/smoke_rootlens_dashboard.py"}
+{"type":"command","cmd":"npm run build","cwd":"web"}
+{"type":"manual","text":"Uploaded data/examples/records/mvtec_records.jsonl and verified the Analysis detail case selector switches to mvtec_fixture_mask_fallback."}
