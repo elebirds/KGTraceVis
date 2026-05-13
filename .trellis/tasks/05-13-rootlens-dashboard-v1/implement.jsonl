@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Project backend conventions and API/service boundaries for dashboard integration."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Expected repo layout after recreating a clean web dashboard directory."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate expectations for backend and frontend-adjacent changes."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Dashboard work spans API contracts, frontend, scripts, docs, and tests."}

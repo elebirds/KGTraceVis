@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
 from kgtracevis.producers.model_assets import MODEL_ASSET_CHOICES, ModelAsset
+from kgtracevis.service.dashboard import dashboard_bootstrap
 from kgtracevis.service.handlers import (
     AnalyzeRequest,
     FeedbackRequest,
@@ -62,6 +63,10 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/api/dashboard/bootstrap")
+    def dashboard_bootstrap_route() -> dict[str, object]:
+        return dashboard_bootstrap().model_dump(mode="json")
 
     @app.get("/api/cases")
     def cases() -> list[dict[str, object]]:

@@ -39,7 +39,9 @@ from kgtracevis.producers.mvtec_models import (
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
 from kgtracevis.schema.validators import load_evidence_json
 
-DEFAULT_RUNS_DIR = Path("runs/web_sessions")
+ROOTLENS_RUNS_DIR = Path("runs/rootlens_sessions")
+LEGACY_WEB_RUNS_DIR = Path("runs/web_sessions")
+DEFAULT_RUNS_DIR = ROOTLENS_RUNS_DIR
 DEFAULT_MVTEC_UPLOAD_CHECKPOINT = DEFAULT_MVTEC_STFPM_CHECKPOINT
 UploadMode = Literal["evidence", "records", "image"]
 RunStatus = Literal["completed", "failed"]
@@ -86,41 +88,53 @@ class RunDetail(BaseModel):
     workflow_steps: list[WorkflowStep] = Field(default_factory=list)
     claim_boundary: str
     evidence: dict[str, Any] | None = None
+    evidence_summary: dict[str, Any] | None = None
     evidence_with_analysis: dict[str, Any] | None = None
     analysis: dict[str, Any] | None = None
     summary: dict[str, Any] | None = None
     cases: list[dict[str, Any]] = Field(default_factory=list)
+    linked_entities: list[dict[str, Any]] = Field(default_factory=list)
+    correction_candidates: list[dict[str, Any]] = Field(default_factory=list)
+    top_k_paths: list[dict[str, Any]] = Field(default_factory=list)
+    source_edge_provenance: list[dict[str, Any]] = Field(default_factory=list)
+    review_targets: list[dict[str, Any]] = Field(default_factory=list)
     artifacts: dict[str, str] = Field(default_factory=dict)
 
 
 def list_runs(
-    runs_dir: str | Path = DEFAULT_RUNS_DIR,
+    runs_dir: str | Path | None = None,
 ) -> list[RunSummary]:
     """Return persisted uploaded-sample runs, newest first."""
-    base = Path(runs_dir)
-    if not base.exists():
-        return []
-
     runs: list[RunSummary] = []
-    for manifest_path in sorted(base.glob("*/manifest.json")):
-        try:
-            detail = RunDetail.model_validate_json(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
+    seen: set[str] = set()
+    for base in _run_store_dirs(runs_dir):
+        if not base.exists():
             continue
-        runs.append(detail.run)
+        for manifest_path in sorted(base.glob("*/manifest.json")):
+            try:
+                detail = RunDetail.model_validate_json(
+                    manifest_path.read_text(encoding="utf-8")
+                )
+            except Exception:
+                continue
+            if detail.run.run_id in seen:
+                continue
+            seen.add(detail.run.run_id)
+            runs.append(detail.run)
     return sorted(runs, key=lambda item: item.created_at, reverse=True)
 
 
 def get_run_detail(
     run_id: str,
     *,
-    runs_dir: str | Path = DEFAULT_RUNS_DIR,
+    runs_dir: str | Path | None = None,
 ) -> RunDetail:
     """Load one persisted run detail by ID."""
-    manifest_path = Path(runs_dir) / run_id / "manifest.json"
-    if not manifest_path.is_file():
-        raise ValueError(f"unknown run session: {run_id}")
-    return RunDetail.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    for base in _run_store_dirs(runs_dir):
+        manifest_path = base / run_id / "manifest.json"
+        if manifest_path.is_file():
+            return RunDetail.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+    raise ValueError(f"unknown run session: {run_id}")
 
 
 def create_run_from_upload(
@@ -133,14 +147,14 @@ def create_run_from_upload(
     object_name: str | None = None,
     defect_type: str | None = None,
     model_preset: str | None = None,
-    runs_dir: str | Path = DEFAULT_RUNS_DIR,
+    runs_dir: str | Path | None = None,
     pipeline: KGTracePipeline | None = None,
 ) -> RunDetail:
     """Persist one uploaded sample and run the applicable pipeline path."""
     if top_k < 1:
         raise ValueError("top_k must be >= 1")
 
-    base_dir = Path(runs_dir)
+    base_dir = Path(runs_dir or DEFAULT_RUNS_DIR)
     run_id = _build_run_id(filename)
     run_dir = base_dir / run_id
     input_dir = run_dir / "input"
@@ -414,6 +428,7 @@ def _run_evidence_upload(
             "candidate/plausible explanation only; not a verified root-cause label"
         ),
         evidence=evidence.model_dump(mode="json"),
+        **_dashboard_fields_from_analysis(evidence, analysis),
         evidence_with_analysis=_evidence_with_analysis(evidence, analysis),
         analysis=analysis.model_dump(mode="json"),
         artifacts={
@@ -509,6 +524,9 @@ def _run_records_upload(
         )),
         summary=summary,
         cases=list(summary.get("cases", [])) if isinstance(summary.get("cases"), list) else [],
+        **_dashboard_fields_from_cases(
+            list(summary.get("cases", [])) if isinstance(summary.get("cases"), list) else []
+        ),
         artifacts={
             "input_path": str(input_path),
             "output_dir": str(output_dir),
@@ -618,6 +636,7 @@ def _run_mvtec_image_upload(
             "candidate/plausible explanation only; not a verified root-cause label"
         )),
         evidence=evidence.model_dump(mode="json"),
+        **_dashboard_fields_from_analysis(evidence, analysis),
         evidence_with_analysis=_evidence_with_analysis(evidence, analysis),
         analysis=analysis.model_dump(mode="json"),
         summary=summary,
@@ -677,6 +696,162 @@ def _evidence_with_analysis(evidence: Evidence, analysis: AnalysisResult) -> dic
         "top_k_paths": analysis.top_k_paths,
     }
     return payload
+
+
+def _dashboard_fields_from_analysis(
+    evidence: Evidence,
+    analysis: AnalysisResult,
+) -> dict[str, Any]:
+    top_k_paths = list(analysis.top_k_paths)
+    source_edges = _unique_source_edges(top_k_paths)
+    correction_candidates = list(analysis.correction_candidates)
+    linked_entities = list(analysis.linked_entities)
+    return {
+        "evidence_summary": _compact_evidence_summary(evidence),
+        "linked_entities": linked_entities,
+        "correction_candidates": correction_candidates,
+        "top_k_paths": top_k_paths,
+        "source_edge_provenance": source_edges,
+        "review_targets": _review_targets(
+            linked_entities=linked_entities,
+            correction_candidates=correction_candidates,
+            top_k_paths=top_k_paths,
+            source_edges=source_edges,
+        ),
+    }
+
+
+def _dashboard_fields_from_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    linked_entities: list[dict[str, Any]] = []
+    correction_candidates: list[dict[str, Any]] = []
+    top_k_paths: list[dict[str, Any]] = []
+    source_edges_by_id: dict[str, dict[str, Any]] = {}
+    evidence_summary: dict[str, Any] | None = None
+
+    for case in cases:
+        if evidence_summary is None and isinstance(case.get("generated_evidence"), dict):
+            evidence_summary = dict(case["generated_evidence"])
+        linked_entities.extend(_list_of_dicts(case.get("linked_entities")))
+        correction_candidates.extend(_list_of_dicts(case.get("correction_candidates")))
+        top_k_paths.extend(_list_of_dicts(case.get("top_k_paths")))
+        for edge in _list_of_dicts(case.get("source_edge_provenance")):
+            edge_id = str(edge.get("edge_id", ""))
+            if edge_id:
+                source_edges_by_id.setdefault(edge_id, edge)
+
+    source_edges = [source_edges_by_id[edge_id] for edge_id in sorted(source_edges_by_id)]
+    return {
+        "evidence_summary": evidence_summary,
+        "linked_entities": linked_entities,
+        "correction_candidates": correction_candidates,
+        "top_k_paths": top_k_paths,
+        "source_edge_provenance": source_edges,
+        "review_targets": _review_targets(
+            linked_entities=linked_entities,
+            correction_candidates=correction_candidates,
+            top_k_paths=top_k_paths,
+            source_edges=source_edges,
+        ),
+    }
+
+
+def _compact_evidence_summary(evidence: Evidence) -> dict[str, Any]:
+    return {
+        "case_id": evidence.case_id,
+        "dataset": evidence.dataset,
+        "source": evidence.source,
+        "object": evidence.object,
+        "anomaly_type": evidence.anomaly_type,
+        "location": evidence.location,
+        "morphology": evidence.morphology,
+        "severity": evidence.severity,
+        "confidence": evidence.confidence,
+        "observation_count": len(evidence.observations),
+    }
+
+
+def _unique_source_edges(top_k_paths: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    edges_by_id: dict[str, dict[str, Any]] = {}
+    for path in top_k_paths:
+        for edge in _list_of_dicts(path.get("source_edges")):
+            edge_id = str(edge.get("edge_id", ""))
+            if edge_id:
+                edges_by_id.setdefault(edge_id, edge)
+    return [edges_by_id[edge_id] for edge_id in sorted(edges_by_id)]
+
+
+def _review_targets(
+    *,
+    linked_entities: list[dict[str, Any]],
+    correction_candidates: list[dict[str, Any]],
+    top_k_paths: list[dict[str, Any]],
+    source_edges: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    targets: list[dict[str, Any]] = []
+    for path in top_k_paths:
+        path_id = path.get("path_id")
+        if path_id:
+            targets.append(
+                {
+                    "target_type": "path",
+                    "target_id": str(path_id),
+                    "target_key": _review_target_key("path", path_id),
+                    "label": str(path.get("target_entity_id") or path_id),
+                }
+            )
+    for edge in source_edges:
+        edge_id = edge.get("edge_id")
+        if edge_id:
+            targets.append(
+                {
+                    "target_type": "edge",
+                    "target_id": str(edge_id),
+                    "target_key": _review_target_key("edge", edge_id),
+                    "label": str(edge.get("relation") or edge_id),
+                }
+            )
+    for link in linked_entities:
+        link_id = link.get("link_id") or link.get("field")
+        if link_id:
+            targets.append(
+                {
+                    "target_type": "entity_link",
+                    "target_id": str(link_id),
+                    "target_key": _review_target_key("entity_link", link_id),
+                    "label": str(link.get("selected_entity_id") or link_id),
+                }
+            )
+    for candidate in correction_candidates:
+        candidate_id = candidate.get("candidate_id")
+        if candidate_id:
+            targets.append(
+                {
+                    "target_type": "correction",
+                    "target_id": str(candidate_id),
+                    "target_key": _review_target_key("correction", candidate_id),
+                    "label": str(candidate.get("suggested_value") or candidate_id),
+                }
+            )
+    return targets
+
+
+def _review_target_key(target_type: str, target_id: object) -> str:
+    return f"{target_type}:{target_id}"
+
+
+def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def _run_store_dirs(runs_dir: str | Path | None) -> list[Path]:
+    if runs_dir is None:
+        return [DEFAULT_RUNS_DIR, LEGACY_WEB_RUNS_DIR]
+    primary = Path(runs_dir)
+    if primary != DEFAULT_RUNS_DIR:
+        return [primary]
+    return [DEFAULT_RUNS_DIR, LEGACY_WEB_RUNS_DIR]
 
 
 def _build_run_id(filename: str) -> str:

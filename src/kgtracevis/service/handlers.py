@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from kgtracevis.core import KGTracePipeline
 from kgtracevis.core.result import AnalysisResult
@@ -23,7 +23,8 @@ DEFAULT_EVIDENCE_DIRS = (
 )
 DEFAULT_FEEDBACK_PATH = Path("runs/web_feedback/feedback.jsonl")
 
-FeedbackTargetType = Literal["case", "link", "correction", "path"]
+FeedbackTargetType = Literal["path", "edge", "entity_link", "correction", "case", "link"]
+FeedbackAction = Literal["accept", "reject", "needs_review"]
 FeedbackDecision = Literal["accept", "reject", "comment"]
 
 
@@ -73,12 +74,39 @@ class FeedbackRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    case_id: str
+    case_id: str | None = None
+    run_id: str | None = None
     target_type: FeedbackTargetType
-    decision: FeedbackDecision
+    action: FeedbackAction | None = None
+    decision: FeedbackDecision | None = None
     target_id: str | None = None
+    note: str | None = None
     comment: str | None = None
+    reviewer: str | None = None
+    source: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _has_context_and_action(self) -> FeedbackRequest:
+        if self.case_id is None and self.run_id is None:
+            raise ValueError("feedback requires case_id or run_id")
+        if self.action is None and self.decision is None:
+            raise ValueError("feedback requires action")
+        return self
+
+    def review_action(self) -> FeedbackAction:
+        """Return the v1 review action, adapting legacy decisions when needed."""
+        if self.action is not None:
+            return self.action
+        if self.decision == "accept":
+            return "accept"
+        if self.decision == "reject":
+            return "reject"
+        return "needs_review"
+
+    def review_note(self) -> str | None:
+        """Return the v1 review note, adapting legacy comments when needed."""
+        return self.note if self.note is not None else self.comment
 
 
 def list_cases(
@@ -155,10 +183,14 @@ def record_feedback(
     """Append one lightweight feedback record to JSONL and return a receipt."""
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    action = request.review_action()
+    note = request.review_note()
     record = {
         "feedback_id": _feedback_id(request),
         "created_at": datetime.now(timezone.utc).isoformat(),
         **request.model_dump(mode="json"),
+        "action": action,
+        "note": note,
     }
     with destination.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -306,5 +338,6 @@ def _clean_list(values: Sequence[str]) -> list[str]:
 
 def _feedback_id(request: FeedbackRequest) -> str:
     target = request.target_id or request.target_type
-    raw = f"{request.case_id}_{request.target_type}_{target}_{request.decision}"
+    context = request.case_id or request.run_id or "unknown"
+    raw = f"{context}_{request.target_type}_{target}_{request.review_action()}"
     return "fb_" + "_".join("".join(ch.lower() if ch.isalnum() else " " for ch in raw).split())

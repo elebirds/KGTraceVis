@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Review backend API usage and script/service separation."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Confirm new dashboard layout stays compatible with repo conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify tests, lint, type-check, and examples for changed surfaces."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review cross-layer consistency across API, frontend, docs, and tests."}

@@ -58,12 +58,12 @@ KGTraceVis supports two usage modes:
    metric evaluation.
 2. Interactive visual analytics mode:
    evidence inspection, correction review, path comparison, and human feedback
-   through the maintained FastAPI backend. A new RootLens dashboard can be
-   rebuilt cleanly on top of this API later.
+   through the maintained FastAPI backend and the foundation-first RootLens
+   dashboard under `web/`.
 
-The legacy Streamlit demo and old React/Vite frontend have been removed. Do
-not add new dashboard code in this repository until the RootLens UI scope is
-defined.
+The legacy Streamlit demo and old React/Vite frontend were removed. RootLens v1
+is a clean React + TypeScript + Vite client that consumes the FastAPI contracts
+without owning reusable analysis logic.
 
 ## Repository Layout
 
@@ -448,9 +448,24 @@ or:
 uv run python scripts/run_web_api.py
 ```
 
-This starts the FastAPI service on `http://127.0.0.1:8000`. The legacy
-Streamlit demo and old React/Vite frontend were removed; the future RootLens
-dashboard should be rebuilt against this API.
+This starts the FastAPI service on `http://127.0.0.1:8000`.
+
+Start the RootLens dashboard client:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+The Vite dev server starts on `http://127.0.0.1:5173` and proxies `/api` to the
+local FastAPI service. To type-check and build the dashboard:
+
+```bash
+cd web
+npm run typecheck
+npm run build
+```
 
 On a Windows CUDA workstation, install `uv` and GNU Make, then run:
 
@@ -467,9 +482,11 @@ If Make is not available, use the PowerShell helper instead:
 
 The FastAPI upload workflow currently accepts evidence JSON, producer-record
 bundles (`.json`, `.jsonl`, or `.csv`), or a raw MVTec-style image, and writes
-run artifacts under `runs/web_sessions/`. Image mode uses a selectable MVTec
-anomaly-detection/localization preset. `auto` prefers EfficientAD, then
-PatchCore, then the checked-in STFPM OpenVINO checkpoint. Configure replacement
+new dashboard run artifacts under `runs/rootlens_sessions/`. Run history still
+reads legacy `runs/web_sessions/` manifests for compatibility. Image mode uses
+a selectable MVTec anomaly-detection/localization preset. `auto` prefers
+EfficientAD, then PatchCore, then the checked-in STFPM OpenVINO checkpoint.
+Configure replacement
 weights with `KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT` or
 `KGTRACEVIS_MVTEC_PATCHCORE_CHECKPOINT`; the PatchCore value may be either one
 checkpoint/artifact directory or a full Amazon PatchCore root containing
@@ -483,6 +500,12 @@ When a MVTec preset checkpoint is missing, API clients can request its download
 through the backend and then refresh the preset availability. STFPM and
 PatchCore have default trusted sources; EfficientAD requires a configured
 trusted source.
+
+The RootLens dashboard initializes through `GET /api/dashboard/bootstrap`,
+uploads through `POST /api/runs/upload`, reloads history through `GET /api/runs`
+and `GET /api/runs/{run_id}`, and records review feedback with `POST
+/api/feedback`. Review feedback is persisted as history under
+`runs/web_feedback/feedback.jsonl`; it does not mutate base KG CSV files.
 
 ## Unified Evidence Schema
 

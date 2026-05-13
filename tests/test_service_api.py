@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from kgtracevis.producers.backends import AMAZON_PATCHCORE_BACKEND, ANOMALIB_ENGINE_BACKEND
 from kgtracevis.service import api as service_api
+from kgtracevis.service import dashboard as service_dashboard
 from kgtracevis.service import runs as service_runs
 from kgtracevis.service.api import app
 from kgtracevis.service.handlers import (
@@ -92,6 +93,49 @@ def test_upload_run_route_persists_a_run_manifest(tmp_path: Path, monkeypatch) -
     assert any(item["run_id"] == run_id for item in runs.json())
     assert run_detail.status_code == 200
     assert run_detail.json()["run"]["run_id"] == run_id
+    assert payload["evidence_summary"]
+    assert payload["top_k_paths"]
+    assert payload["source_edge_provenance"]
+    assert any(target["target_type"] == "path" for target in payload["review_targets"])
+    assert all("target_key" in target for target in payload["review_targets"])
+
+
+def test_default_run_store_prefers_rootlens_and_reads_legacy(
+    tmp_path: Path,
+) -> None:
+    """Dashboard run discovery should use RootLens sessions while reading legacy runs."""
+    rootlens_detail = service_runs.create_run_from_upload(
+        "mvtec_records.jsonl",
+        Path("data/examples/records/mvtec_records.jsonl").read_bytes(),
+        mode="records",
+        top_k=2,
+        runs_dir=tmp_path / "rootlens_sessions",
+    )
+    legacy_detail = service_runs.create_run_from_upload(
+        "wafer_record.jsonl",
+        Path("data/examples/records/wm811k_records.jsonl").read_bytes(),
+        mode="records",
+        top_k=2,
+        runs_dir=tmp_path / "web_sessions",
+    )
+
+    monkeypatch_dirs = (tmp_path / "rootlens_sessions", tmp_path / "web_sessions")
+    original_default = service_runs.DEFAULT_RUNS_DIR
+    original_legacy = service_runs.LEGACY_WEB_RUNS_DIR
+    try:
+        service_runs.DEFAULT_RUNS_DIR = monkeypatch_dirs[0]
+        service_runs.LEGACY_WEB_RUNS_DIR = monkeypatch_dirs[1]
+        runs = service_runs.list_runs()
+        assert {run.run_id for run in runs} == {
+            rootlens_detail.run.run_id,
+            legacy_detail.run.run_id,
+        }
+        assert service_runs.get_run_detail(legacy_detail.run.run_id).run.run_id == (
+            legacy_detail.run.run_id
+        )
+    finally:
+        service_runs.DEFAULT_RUNS_DIR = original_default
+        service_runs.LEGACY_WEB_RUNS_DIR = original_legacy
 
 
 def test_image_upload_mode_defaults_to_unknown_label_when_unspecified(
@@ -147,6 +191,31 @@ def test_mvtec_model_preset_route_reports_available_default(
     presets = {item["preset"]: item for item in payload["presets"]}
     assert presets["auto"]["resolved_preset"] == "efficientad"
     assert presets["efficientad"]["available"] is True
+
+
+def test_dashboard_bootstrap_route_exposes_contract(monkeypatch) -> None:
+    """RootLens clients should get stable initialization metadata from one endpoint."""
+    monkeypatch.setattr(service_dashboard, "list_runs", lambda *args, **kwargs: [])
+    client = TestClient(app)
+
+    response = client.get("/api/dashboard/bootstrap")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["claim_boundary"].startswith("candidate/plausible explanation")
+    assert {item["mode"] for item in payload["upload_modes"]} == {
+        "evidence",
+        "records",
+        "image",
+    }
+    assert payload["supported_feedback_targets"] == [
+        "path",
+        "edge",
+        "entity_link",
+        "correction",
+    ]
+    assert "presets" in payload["mvtec_model_presets"]
 
 
 def test_mvtec_model_preset_route_detects_makefile_patchcore_asset(
@@ -447,6 +516,32 @@ def test_feedback_record_is_appended_to_jsonl(tmp_path: Path) -> None:
     saved = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
     assert saved[0]["case_id"] == "mvtec_0001"
     assert saved[0]["target_id"] == "path_123"
+    assert saved[0]["action"] == "accept"
+
+
+def test_review_feedback_contract_accepts_dashboard_actions(tmp_path: Path) -> None:
+    """Dashboard review actions should persist without mutating the base KG."""
+    output_path = tmp_path / "feedback.jsonl"
+    receipt = record_feedback(
+        FeedbackRequest(
+            run_id="run_123",
+            case_id="mvtec_0001",
+            target_type="edge",
+            target_id="ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+            action="needs_review",
+            note="expert wants source checked",
+            reviewer="analyst",
+            source="rootlens-dashboard",
+        ),
+        output_path=output_path,
+    )
+
+    assert receipt["status"] == "recorded"
+    saved = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+    assert saved[0]["target_type"] == "edge"
+    assert saved[0]["action"] == "needs_review"
+    assert saved[0]["note"] == "expert wants source checked"
+    assert saved[0]["source"] == "rootlens-dashboard"
 
 
 def test_fastapi_routes_are_wired() -> None:
@@ -454,6 +549,7 @@ def test_fastapi_routes_are_wired() -> None:
     client = TestClient(app)
 
     health = client.get("/api/health")
+    bootstrap = client.get("/api/dashboard/bootstrap")
     cases = client.get("/api/cases")
     case = client.get("/api/cases/mvtec_0001")
     analysis = client.post(
@@ -471,6 +567,8 @@ def test_fastapi_routes_are_wired() -> None:
 
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
+    assert bootstrap.status_code == 200
+    assert bootstrap.json()["status"] == "ok"
     assert cases.status_code == 200
     assert any(item["case_id"] == "mvtec_0001" for item in cases.json())
     assert case.status_code == 200
