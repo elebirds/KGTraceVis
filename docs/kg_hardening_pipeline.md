@@ -26,7 +26,20 @@ source-attached, confidence-scored, and reviewable.
    - `runs/paper_case_kg_audit/top_cases.md`
    - `runs/paper_case_kg_audit/wm811k_case_ranking.csv`
 
-2. Build candidate KG and before/after reasoning artifacts:
+2. Download MVTec provenance sources for local review:
+
+   ```bash
+   uv run python scripts/download_mvtec_sources.py --overwrite
+   ```
+
+   Outputs:
+   - `docs/sources/mvtec_source_bundle/manifest.json`
+   - `docs/sources/mvtec_source_bundle/README.md`
+   - source HTML pages under `docs/sources/mvtec_source_bundle/`
+   - optional raw PDFs under ignored `docs/sources/mvtec_source_bundle/raw/`
+     when rerun with `--include-binary`
+
+3. Build candidate KG and before/after reasoning artifacts:
 
    ```bash
    uv run python scripts/build_case_kg.py --overwrite
@@ -42,7 +55,7 @@ source-attached, confidence-scored, and reviewable.
    - `runs/paper_case_kg/selected_case_reasoning_before_after.csv`
    - `runs/paper_case_kg/top_case_explanations.md`
 
-3. Optionally rerun an adapter pipeline with candidate KG overlay:
+4. Optionally rerun an adapter pipeline with candidate KG overlay:
 
    ```bash
    uv run python scripts/run_adapter_pipeline.py \
@@ -72,6 +85,9 @@ source-attached, confidence-scored, and reviewable.
   confidence and default to `review_status=auto`.
 - Reviewed edges may raise confidence, but paper wording still uses
   candidate/plausible explanation unless an external RCA reference exists.
+- MVTec object-specific mechanism edges improve path specificity, but remain
+  `auto` candidate investigation targets when no formal human review is
+  available.
 
 ## Promotion Rule
 

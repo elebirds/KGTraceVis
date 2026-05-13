@@ -1,0 +1,57 @@
+{
+  "artifact_type": "mvtec_source_bundle_v0",
+  "artifact_scope": "source_provenance_for_candidate_kg",
+  "generated_at": "2026-05-13T01:35:36.162755+00:00",
+  "output_dir": "docs/sources/mvtec_source_bundle",
+  "sources": [
+    {
+      "source_id": "mvtec_ad_official_page",
+      "title": "MVTec AD official dataset page",
+      "type": "official_dataset_page",
+      "url": "https://www.mvtec.com/research-teaching/datasets/mvtec-ad",
+      "path": "docs/sources/mvtec_source_bundle/mvtec_ad_official_page.html",
+      "used_for": "Dataset scope, categories, defect-free train/test defect split, annotations",
+      "binary": false,
+      "status": "downloaded",
+      "bytes": 70849,
+      "error": ""
+    },
+    {
+      "source_id": "mvtec_ad_paper_pdf",
+      "title": "MVTec AD comprehensive dataset paper PDF",
+      "type": "official_dataset_paper",
+      "url": "https://www.mvtec.com/fileadmin/Redaktion/mvtec.com/05_research_teaching/datasets/mvtec_ad.pdf",
+      "path": "docs/sources/mvtec_source_bundle/raw/mvtec_ad.pdf",
+      "used_for": "MVTec AD benchmark and industrial inspection context",
+      "binary": true,
+      "status": "skipped_binary",
+      "bytes": 0,
+      "error": ""
+    },
+    {
+      "source_id": "patchcore_arxiv_abs",
+      "title": "PatchCore arXiv abstract page",
+      "type": "method_paper_page",
+      "url": "https://arxiv.org/abs/2106.08265",
+      "path": "docs/sources/mvtec_source_bundle/patchcore_arxiv_abs.html",
+      "used_for": "PatchCore anomaly detection and localization evidence boundary",
+      "binary": false,
+      "status": "downloaded",
+      "bytes": 47209,
+      "error": ""
+    },
+    {
+      "source_id": "patchcore_arxiv_pdf",
+      "title": "PatchCore paper PDF",
+      "type": "method_paper",
+      "url": "https://arxiv.org/pdf/2106.08265",
+      "path": "docs/sources/mvtec_source_bundle/raw/patchcore_2106_08265.pdf",
+      "used_for": "PatchCore anomaly detection and localization evidence boundary",
+      "binary": true,
+      "status": "skipped_binary",
+      "bytes": 0,
+      "error": ""
+    }
+  ],
+  "note": "HTML sources are downloaded by default. Raw PDFs are optional local provenance files; pass include_binary/--include-binary to download them. KG edges should cite source IDs and concise evidence summaries."
+}

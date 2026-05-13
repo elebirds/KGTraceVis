@@ -28,6 +28,10 @@ from kgtracevis.kg_construction import (
 )
 from kgtracevis.kg_construction.case_kg_hardening import WAFER_PATTERNS
 from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS, NODE_COLUMNS
+from kgtracevis.kg_construction.mvtec_source_bundle import (
+    DownloadableSource,
+    download_mvtec_source_bundle,
+)
 from kgtracevis.kg_construction.source_loader import SourceRecord
 
 
@@ -384,6 +388,65 @@ def test_coverage_first_candidate_kg_covers_wm811k_patterns_and_claims() -> None
     assert summary["wm811k_pattern_coverage"] == [spec.pattern for spec in WAFER_PATTERNS]
 
 
+def test_candidate_kg_adds_object_specific_mvtec_mechanisms(tmp_path: Path) -> None:
+    """MVTec candidate KG should include object-specific explanation targets."""
+    records_path = tmp_path / "mvtec_records.jsonl"
+    records_path.write_text(
+        "\n".join(
+            [
+                (
+                    '{"case_id":"mvtec_cable_test_cut_outer_insulation_000",'
+                    '"object":"cable","source_label":"cut_outer_insulation",'
+                    '"defect_type":"cut_outer_insulation"}'
+                ),
+                (
+                    '{"case_id":"mvtec_zipper_test_broken_teeth_000",'
+                    '"object":"zipper","source_label":"broken_teeth",'
+                    '"defect_type":"broken_teeth"}'
+                ),
+                (
+                    '{"case_id":"mvtec_capsule_test_poke_000",'
+                    '"object":"capsule","source_label":"poke",'
+                    '"defect_type":"poke"}'
+                ),
+                (
+                    '{"case_id":"mvtec_leather_test_poke_000",'
+                    '"object":"leather","source_label":"poke",'
+                    '"defect_type":"poke"}'
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    nodes, edges, _summary = build_candidate_kg(mvtec_records_path=records_path)
+    node_ids = {node.id for node in nodes}
+    edge_by_id = {edge.edge_id: edge for edge in edges}
+
+    assert "CableInsulationDamageCandidate" in node_ids
+    assert "ZipperTeethAssemblyCandidate" in node_ids
+    cable_edge = edge_by_id[
+        "CableObject|SUGGESTS_PLAUSIBLE_MECHANISM|"
+        "CableInsulationDamageCandidate|mvtec"
+    ]
+    zipper_edge = edge_by_id[
+        "ZipperObject|SUGGESTS_PLAUSIBLE_MECHANISM|ZipperTeethAssemblyCandidate|mvtec"
+    ]
+    assert cable_edge.source == "mvtec_object_specific_visual_rule"
+    assert zipper_edge.source == "mvtec_object_specific_visual_rule"
+    assert "object-specific candidate investigation target" in cable_edge.evidence
+    assert (
+        "CutOuterInsulationDefect|HAS_PLAUSIBLE_CAUSE|"
+        "CableInsulationDamageCandidate|mvtec"
+        in edge_by_id
+    )
+    assert (
+        "PokeDefect|HAS_PLAUSIBLE_CAUSE|CapsuleShellDamageCandidate|mvtec"
+        not in edge_by_id
+    )
+    assert cable_edge.review_status == "auto"
+
+
 def test_candidate_kg_overlay_loads_and_keeps_loc_separate(tmp_path: Path) -> None:
     """Overlay KG should link WM811K Loc to LocDefect, not NearfullDefect."""
     nodes, edges, _summary = build_candidate_kg()
@@ -421,3 +484,46 @@ def test_candidate_kg_artifacts_include_review_queue_and_coverage_report(
     assert coverage["edge_counts_by_layer"]["candidate_mechanism"] > 0
     assert coverage["review_status_counts"]["auto"] > 0
     assert coverage["wm811k_pattern_coverage"] == [spec.pattern for spec in WAFER_PATTERNS]
+
+
+def test_mvtec_source_bundle_downloads_local_sources(tmp_path: Path) -> None:
+    """Source bundle downloader should write files, manifest, and raw gitignore."""
+    source_file = tmp_path / "source.html"
+    source_file.write_text("<html>MVTec source</html>", encoding="utf-8")
+    manifest = download_mvtec_source_bundle(
+        tmp_path / "bundle",
+        sources=[
+            DownloadableSource(
+                source_id="local_mvtec_source",
+                title="Local MVTec source",
+                url=source_file.as_uri(),
+                filename="local.html",
+                source_type="test_source",
+                used_for="unit test",
+            ),
+            DownloadableSource(
+                source_id="local_mvtec_binary_source",
+                title="Local MVTec binary source",
+                url=source_file.as_uri(),
+                filename="raw/local.pdf",
+                source_type="test_binary_source",
+                used_for="unit test optional binary",
+                binary=True,
+            ),
+        ],
+    )
+
+    output_dir = Path(str(manifest["output_dir"]))
+    assert (output_dir / "local.html").read_text(encoding="utf-8") == (
+        "<html>MVTec source</html>"
+    )
+    assert (output_dir / "manifest.json").is_file()
+    source_records = manifest["sources"]
+    assert isinstance(source_records, list)
+    assert source_records[0]["status"] == "downloaded"
+    assert source_records[1]["status"] == "skipped_binary"
+    assert not (output_dir / "raw" / "local.pdf").exists()
+    assert (output_dir / "README.md").is_file()
+    assert (output_dir / "raw" / ".gitignore").read_text(encoding="utf-8") == (
+        "*\n!.gitignore\n"
+    )

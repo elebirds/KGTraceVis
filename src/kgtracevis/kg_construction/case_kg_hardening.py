@@ -314,6 +314,66 @@ MECHANISM_NODES: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
         "Low-confidence patterned process/tooling investigation candidate",
         ("tooling pattern", "mask pattern"),
     ),
+    "CableInsulationDamageCandidate": (
+        "Cable insulation damage candidate",
+        "RootCause",
+        "Object-specific candidate for cable insulation cuts, pokes, or exposed wires",
+        ("cable insulation damage", "wire insulation issue"),
+    ),
+    "CableAssemblyOmissionCandidate": (
+        "Cable assembly omission candidate",
+        "RootCause",
+        "Object-specific candidate for missing cable or missing wire evidence",
+        ("cable assembly omission", "missing wire assembly"),
+    ),
+    "ZipperTeethAssemblyCandidate": (
+        "Zipper teeth assembly candidate",
+        "RootCause",
+        "Object-specific candidate for broken, split, or squeezed zipper teeth evidence",
+        ("zipper teeth assembly", "zipper teeth defect"),
+    ),
+    "BottleBreakageCandidate": (
+        "Bottle breakage candidate",
+        "RootCause",
+        "Object-specific candidate for large or small broken bottle evidence",
+        ("bottle breakage", "bottle fracture"),
+    ),
+    "CapsuleShellDamageCandidate": (
+        "Capsule shell damage candidate",
+        "RootCause",
+        "Object-specific candidate for capsule crack, poke, scratch, or squeeze evidence",
+        ("capsule shell damage", "capsule deformation"),
+    ),
+    "MetalNutSurfaceHandlingCandidate": (
+        "Metal nut surface handling candidate",
+        "RootCause",
+        "Object-specific candidate for metal-nut surface scratch, color, or bent evidence",
+        ("metal nut surface handling", "metal nut surface issue"),
+    ),
+    "ScrewThreadOrHeadDamageCandidate": (
+        "Screw thread or head damage candidate",
+        "RootCause",
+        "Object-specific candidate for screw thread, neck, or head evidence",
+        ("screw thread damage", "screw head damage"),
+    ),
+    "PillCoatingOrHandlingCandidate": (
+        "Pill coating or handling candidate",
+        "RootCause",
+        "Object-specific candidate for pill contamination, color, crack, or scratch evidence",
+        ("pill coating issue", "pill handling damage"),
+    ),
+    "TextureSurfaceContaminationCandidate": (
+        "Texture surface contamination candidate",
+        "RootCause",
+        "Object-specific candidate for texture surface color, glue, oil, or contamination evidence",
+        ("texture surface contamination", "surface residue"),
+    ),
+    "TransistorLeadAssemblyCandidate": (
+        "Transistor lead assembly candidate",
+        "RootCause",
+        "Object-specific candidate for bent, cut, misplaced, or damaged transistor parts",
+        ("transistor lead assembly", "transistor placement issue"),
+    ),
 }
 
 WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
@@ -414,6 +474,18 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         ("ParticleContaminationCandidate",),
     ),
 )
+OBJECT_SPECIFIC_MVTEC_MECHANISMS = {
+    "CableInsulationDamageCandidate",
+    "CableAssemblyOmissionCandidate",
+    "ZipperTeethAssemblyCandidate",
+    "BottleBreakageCandidate",
+    "CapsuleShellDamageCandidate",
+    "MetalNutSurfaceHandlingCandidate",
+    "ScrewThreadOrHeadDamageCandidate",
+    "PillCoatingOrHandlingCandidate",
+    "TextureSurfaceContaminationCandidate",
+    "TransistorLeadAssemblyCandidate",
+}
 
 
 def audit_mvtec_cases(
@@ -910,7 +982,9 @@ def _add_mvtec_candidate_rows(
 ) -> None:
     rows_by_case = {str(row.get("case_id", "")): row for row in adapter_rows}
     observations_by_defect: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    objects_by_defect: dict[str, set[str]] = defaultdict(set)
     object_defects: set[tuple[str, str]] = set()
+    object_specific_labels: dict[tuple[str, str], set[str]] = defaultdict(set)
     for record in records:
         label = _canonical_defect_label(record.get("source_label") or record.get("defect_type"))
         if not label or label == "good":
@@ -919,6 +993,9 @@ def _add_mvtec_candidate_rows(
         object_id = f"{_pascal(object_name)}Object"
         defect_id = f"{_pascal(label)}Defect"
         object_defects.add((object_id, defect_id))
+        objects_by_defect[defect_id].add(object_id)
+        for mechanism_id in _mvtec_object_mechanisms(object_id, label):
+            object_specific_labels[(object_id, mechanism_id)].add(label)
         _add_node(
             nodes,
             existing_node_ids,
@@ -957,7 +1034,11 @@ def _add_mvtec_candidate_rows(
             defect_id,
             "mvtec",
             "mvtec_calibrated_source_label",
-            f"MVTec calibrated records include {defect_id} evidence for {object_id}.",
+            (
+                "Local calibrated MVTec producer records preserve the source object "
+                f"folder and defect label; {object_id} is observed with {defect_id} "
+                "evidence in the sampled paper pipeline records."
+            ),
             0.82,
         )
     for defect_id, observations in observations_by_defect.items():
@@ -975,7 +1056,11 @@ def _add_mvtec_candidate_rows(
                 morphology_node.id,
                 "mvtec",
                 "mvtec_mask_geometry",
-                f"Adapter/mask geometry maps {label} evidence to {morphology} morphology.",
+                (
+                    "The MVTec adapter converts source labels and mask geometry into "
+                    f"normalized evidence; sampled '{label}' cases are represented "
+                    f"with '{morphology}' morphology in the adapter pipeline table."
+                ),
                 0.78,
             )
             _add_edge(
@@ -986,11 +1071,17 @@ def _add_mvtec_candidate_rows(
                 location_node.id,
                 "mvtec",
                 "mvtec_mask_geometry",
-                f"Adapter/mask geometry maps {label} evidence to {location} location.",
+                (
+                    "The MVTec adapter converts source labels and mask geometry into "
+                    f"normalized evidence; sampled '{label}' cases are represented "
+                    f"at '{location}' location in the adapter pipeline table."
+                ),
                 0.74,
             )
-        for mechanism_id in _mvtec_mechanisms(label):
+        mechanism_ids = set(_mvtec_mechanisms(label))
+        for mechanism_id in sorted(mechanism_ids):
             _add_mechanism_node(nodes, existing_node_ids, mechanism_id, scenario="mvtec")
+            confidence = _mvtec_mechanism_confidence(mechanism_id)
             _add_edge(
                 edges,
                 existing_edge_ids,
@@ -999,17 +1090,50 @@ def _add_mvtec_candidate_rows(
                 mechanism_id,
                 "mvtec",
                 "mvtec_plausible_visual_mechanism",
-                (
-                    f"{label} is mapped to {MECHANISM_NODES[mechanism_id][0]} as a "
-                    "candidate visual investigation path, not verified MVTec factory RCA."
+                _mvtec_mechanism_evidence(
+                    label,
+                    mechanism_id,
+                    object_id=sorted(objects_by_defect.get(defect_id, ("MVTecObject",)))[0],
                 ),
-                (
-                    0.58
-                    if mechanism_id
-                    in {"GenericVisualDefectMechanism", "VisualInspectionReviewNeeded"}
-                    else 0.66
-                ),
+                confidence,
             )
+        defect_objects = sorted(objects_by_defect.get(defect_id, ()))
+        if len(defect_objects) == 1:
+            object_id = defect_objects[0]
+            for mechanism_id in _mvtec_object_mechanisms(object_id, label):
+                _add_mechanism_node(nodes, existing_node_ids, mechanism_id, scenario="mvtec")
+                _add_edge(
+                    edges,
+                    existing_edge_ids,
+                    defect_id,
+                    "HAS_PLAUSIBLE_CAUSE",
+                    mechanism_id,
+                    "mvtec",
+                    "mvtec_object_specific_visual_rule",
+                    _mvtec_mechanism_evidence(
+                        label,
+                        mechanism_id,
+                        object_id=object_id,
+                    ),
+                    _mvtec_mechanism_confidence(mechanism_id),
+                )
+    for (object_id, mechanism_id), labels in sorted(object_specific_labels.items()):
+        _add_mechanism_node(nodes, existing_node_ids, mechanism_id, scenario="mvtec")
+        _add_edge(
+            edges,
+            existing_edge_ids,
+            object_id,
+            "SUGGESTS_PLAUSIBLE_MECHANISM",
+            mechanism_id,
+            "mvtec",
+            "mvtec_object_specific_visual_rule",
+            _mvtec_mechanism_evidence(
+                ", ".join(sorted(labels)),
+                mechanism_id,
+                object_id=object_id,
+            ),
+            _mvtec_mechanism_confidence(mechanism_id),
+        )
 
 
 def _add_wafer_candidate_rows(
@@ -1239,6 +1363,76 @@ def _mvtec_mechanisms(label: str) -> tuple[str, ...]:
     if "hole" in token:
         return ("MechanicalContact", "MaterialDefect")
     return ("GenericVisualDefectMechanism", "VisualInspectionReviewNeeded")
+
+
+def _mvtec_object_mechanisms(object_id: str, label: str) -> tuple[str, ...]:
+    object_token = _alias_token(object_id.removesuffix("Object"))
+    label_token = _alias_token(label)
+    if object_token == "cable":
+        if "missing" in label_token:
+            return ("CableAssemblyOmissionCandidate",)
+        if any(part in label_token for part in ("cut", "poke", "bent")):
+            return ("CableInsulationDamageCandidate",)
+    if object_token == "zipper" and any(
+        part in label_token for part in ("teeth", "squeeze", "broken", "split")
+    ):
+        return ("ZipperTeethAssemblyCandidate",)
+    if object_token == "bottle" and "broken" in label_token:
+        return ("BottleBreakageCandidate",)
+    if object_token == "capsule" and any(
+        part in label_token for part in ("crack", "poke", "scratch", "squeeze")
+    ):
+        return ("CapsuleShellDamageCandidate",)
+    if object_token == "metalnut" and any(
+        part in label_token for part in ("scratch", "color", "bent")
+    ):
+        return ("MetalNutSurfaceHandlingCandidate",)
+    if object_token == "screw" and any(
+        part in label_token for part in ("thread", "scratch", "manipulated")
+    ):
+        return ("ScrewThreadOrHeadDamageCandidate",)
+    if object_token == "pill" and any(
+        part in label_token for part in ("contamination", "color", "crack", "scratch")
+    ):
+        return ("PillCoatingOrHandlingCandidate",)
+    if object_token in {"carpet", "grid", "leather", "tile", "wood"} and any(
+        part in label_token
+        for part in ("color", "glue", "oil", "contamination", "thread", "rough", "liquid")
+    ):
+        return ("TextureSurfaceContaminationCandidate",)
+    if object_token == "transistor" and any(
+        part in label_token for part in ("lead", "misplaced", "damaged")
+    ):
+        return ("TransistorLeadAssemblyCandidate",)
+    return ()
+
+
+def _mvtec_mechanism_confidence(mechanism_id: str) -> float:
+    if mechanism_id in {"GenericVisualDefectMechanism", "VisualInspectionReviewNeeded"}:
+        return 0.58
+    if mechanism_id in OBJECT_SPECIFIC_MVTEC_MECHANISMS:
+        return 0.68
+    return 0.66
+
+
+def _mvtec_mechanism_evidence(label: str, mechanism_id: str, *, object_id: str) -> str:
+    object_name = _humanize(object_id.removesuffix("Object"))
+    label_text = label.replace("_", " ")
+    mechanism_name = MECHANISM_NODES[mechanism_id][0]
+    if mechanism_id in OBJECT_SPECIFIC_MVTEC_MECHANISMS:
+        return (
+            f"MVTec AD provides object-level defect test images and pixel anomaly masks; "
+            f"for the {object_name} object, source label '{label_text}' is mapped to "
+            f"{mechanism_name} as an object-specific candidate investigation target. "
+            "This is a low-confidence KG constraint for explanation coverage, not "
+            "a confirmed root-cause label."
+        )
+    return (
+        f"MVTec AD is an industrial anomaly detection/localization benchmark with "
+        f"defect test images and pixel-level anomaly annotations; source label "
+        f"'{label_text}' is mapped to {mechanism_name} as a candidate visual "
+        "investigation path for KGTraceVis, not a confirmed root-cause label."
+    )
 
 
 def _infer_mvtec_morphology(label: str) -> str:

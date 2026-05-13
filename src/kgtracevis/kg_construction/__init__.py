@@ -30,6 +30,12 @@ from kgtracevis.kg_construction.export_kg_csv import (
     validate_kg_csv_contract,
     validate_nodes,
 )
+from kgtracevis.kg_construction.mvtec_source_bundle import (
+    DEFAULT_MVTEC_SOURCE_DIR,
+    DEFAULT_MVTEC_SOURCES,
+    DownloadableSource,
+    download_mvtec_source_bundle,
+)
 from kgtracevis.kg_construction.qa import KGQAFinding, KGQAReport, run_kg_qa
 from kgtracevis.kg_construction.source_loader import (
     SourceRecord,
@@ -47,6 +53,9 @@ __all__ = [
     "CandidateKGOutput",
     "CandidateTriple",
     "CaseAuditRow",
+    "DEFAULT_MVTEC_SOURCES",
+    "DEFAULT_MVTEC_SOURCE_DIR",
+    "DownloadableSource",
     "KGQAFinding",
     "KGQAReport",
     "SourceRecord",
@@ -57,6 +66,7 @@ __all__ = [
     "build_coverage_report",
     "clean_candidate_nodes",
     "clean_candidate_triples",
+    "download_mvtec_source_bundle",
     "edge_weight",
     "export_edges_csv",
     "export_kg_csv",

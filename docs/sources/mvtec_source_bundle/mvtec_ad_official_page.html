@@ -1,0 +1,1744 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+
+<!-- 
+	created by BippesBrandão GmbH (https://www.bippesbrandao.de  - kontakt@bippesbrandao.de)
+	    ===
+
+	This website is powered by TYPO3 - inspiring people to share!
+	TYPO3 is a free open source Content Management Framework initially created by Kasper Skaarhoj and licensed under GNU/GPL.
+	TYPO3 is copyright 1998-2026 of Kasper Skaarhoj. Extensions are copyright of their respective owners.
+	Information and contribution at https://typo3.org/
+-->
+
+
+
+<meta http-equiv="x-ua-compatible" content="IE=edge,chrome=1">
+<meta name="generator" content="TYPO3 CMS">
+<meta name="description" content="Download MVTec datasets to support machine vision research. Find details, references, and dataset information provided by MVTec.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="index, follow">
+<meta name="author" content="MVTec Software">
+<meta property="og:site_name" content="MVTec Software">
+<meta property="og:description" content="MVTec is a leading international manufacturer of software for machine vision, using technologies like 3D vision, matching, deep learning, etc.">
+<meta property="og:locale" content="en_GB">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:title" content="Machine Vision Datasets for Research | MVTec - MVTec Software">
+<meta property="og:image" content="https://www.mvtec.com/fileadmin/Redaktion/mvtec.com/news/mvtec-default.png">
+<meta property="og:url" content="https://www.mvtec.com/research-teaching/datasets/mvtec-ad">
+<meta property="og:type" content="website">
+<meta name="twitter:description" content="MVTec is a leading international manufacturer of software for machine vision, using technologies like 3D vision, matching, deep learning, etc.">
+<meta name="twitter:title" content="Machine Vision Datasets for Research | MVTec - MVTec Software">
+<meta name="twitter:image" content="https://www.mvtec.com/fileadmin/Redaktion/mvtec.com/news/mvtec-default.png">
+<meta name="apple-mobile-web-app-capable" content="no">
+<meta name="google" content="notranslate">
+<meta name="rating" content="general">
+<meta name="revisit-after" content="7 days">
+
+
+<link rel="stylesheet" href="/typo3temp/assets/compressed/merged-33c7fffcb5178dd43467db4f016c59d7.css?1778493784" media="all">
+<style>
+/*InlineDefaultCss*/
+/* default styles for extension "tx_frontend" */
+    .ce-align-left { text-align: left; }
+    .ce-align-center { text-align: center; }
+    .ce-align-right { text-align: right; }
+
+    .ce-table td, .ce-table th { vertical-align: top; }
+
+    .ce-textpic, .ce-image, .ce-nowrap .ce-bodytext, .ce-gallery, .ce-row, .ce-uploads li, .ce-uploads div { overflow: hidden; }
+
+    .ce-left .ce-gallery, .ce-column { float: left; }
+    .ce-center .ce-outer { position: relative; float: right; right: 50%; }
+    .ce-center .ce-inner { position: relative; float: right; right: -50%; }
+    .ce-right .ce-gallery { float: right; }
+
+    .ce-gallery figure { display: table; margin: 0; }
+    .ce-gallery figcaption { display: table-caption; caption-side: bottom; }
+    .ce-gallery img { display: block; }
+    .ce-gallery iframe { border-width: 0; }
+    .ce-border img,
+    .ce-border iframe {
+        border: 2px solid #000000;
+        padding: 0px;
+    }
+
+    .ce-intext.ce-right .ce-gallery, .ce-intext.ce-left .ce-gallery, .ce-above .ce-gallery {
+        margin-bottom: 10px;
+    }
+    .ce-image .ce-gallery { margin-bottom: 0; }
+    .ce-intext.ce-right .ce-gallery { margin-left: 10px; }
+    .ce-intext.ce-left .ce-gallery { margin-right: 10px; }
+    .ce-below .ce-gallery { margin-top: 10px; }
+
+    .ce-column { margin-right: 10px; }
+    .ce-column:last-child { margin-right: 0; }
+
+    .ce-row { margin-bottom: 10px; }
+    .ce-row:last-child { margin-bottom: 0; }
+
+    .ce-above .ce-bodytext { clear: both; }
+
+    .ce-intext.ce-left ol, .ce-intext.ce-left ul { padding-left: 40px; overflow: auto; }
+
+    /* Headline */
+    .ce-headline-left { text-align: left; }
+    .ce-headline-center { text-align: center; }
+    .ce-headline-right { text-align: right; }
+
+    /* Uploads */
+    .ce-uploads { margin: 0; padding: 0; }
+    .ce-uploads li { list-style: none outside none; margin: 1em 0; }
+    .ce-uploads img { float: left; padding-right: 1em; vertical-align: top; }
+    .ce-uploads span { display: block; }
+
+    /* Table */
+    .ce-table { width: 100%; max-width: 100%; }
+    .ce-table th, .ce-table td { padding: 0.5em 0.75em; vertical-align: top; }
+    .ce-table thead th { border-bottom: 2px solid #dadada; }
+    .ce-table th, .ce-table td { border-top: 1px solid #dadada; }
+    .ce-table-striped tbody tr:nth-of-type(odd) { background-color: rgba(0,0,0,.05); }
+    .ce-table-bordered th, .ce-table-bordered td { border: 1px solid #dadada; }
+
+    /* Space */
+    .frame-space-before-extra-small { margin-top: 1em; }
+    .frame-space-before-small { margin-top: 2em; }
+    .frame-space-before-medium { margin-top: 3em; }
+    .frame-space-before-large { margin-top: 4em; }
+    .frame-space-before-extra-large { margin-top: 5em; }
+    .frame-space-after-extra-small { margin-bottom: 1em; }
+    .frame-space-after-small { margin-bottom: 2em; }
+    .frame-space-after-medium { margin-bottom: 3em; }
+    .frame-space-after-large { margin-bottom: 4em; }
+    .frame-space-after-extra-large { margin-bottom: 5em; }
+
+    /* Frame */
+    .frame-ruler-before:before { content: ''; display: block; border-top: 1px solid rgba(0,0,0,0.25); margin-bottom: 2em; }
+    .frame-ruler-after:after { content: ''; display: block; border-bottom: 1px solid rgba(0,0,0,0.25); margin-top: 2em; }
+    .frame-indent { margin-left: 15%; margin-right: 15%; }
+    .frame-indent-left { margin-left: 33%; }
+    .frame-indent-right { margin-right: 33%; }
+
+
+</style>
+
+
+
+
+
+<title> Machine Vision Datasets for Research | MVTec </title>
+
+<link rel="shortcut icon" href="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Icons/Favicons/favicon.ico?1778493440">
+<link rel="apple-touch-icon" sizes="180x180" href="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Icons/Favicons/apple-touch-icon.png?1778493440">
+<link rel="icon" type="image/png" sizes="32x32" href="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Icons/Favicons/favicon-32x32.png?1778493440">
+<link rel="icon" type="image/png" sizes="16x16" href="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Icons/Favicons/favicon-16x16.png?1778493440">
+<link rel="manifest" href="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Icons/Favicons/site.webmanifest?1778493440">
+
+
+<!-- Matomo Tag Manager --><script type="text/plain" data-cookieconsent="statistics">var _mtm = _mtm || [];_mtm.push({'mtm.startTime': (new Date().getTime()), 'event': 'mtm.Start'});var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];g.type='text/javascript'; g.async=true; g.defer=true; g.src='https://matomo.mvtec.com/js/container_bLBegivv.js'; s.parentNode.insertBefore(g,s);</script><!-- End Matomo Tag Manager -->
+<link rel="dns-prefetch" href="https://downloads.mvtec.com">
+<link rel="canonical" href="https://www.mvtec.com/research-teaching/datasets/mvtec-ad">
+
+<!-- This site is optimized with the Yoast SEO for TYPO3 plugin - https://yoast.com/typo3-extensions-seo/ -->
+<script type="application/ld+json">[{"@context":"https:\/\/www.schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"item":{"@id":"https:\/\/www.mvtec.com\/","name":"MVTec Software - Experts for Machine Vision"}},{"@type":"ListItem","position":2,"item":{"@id":"https:\/\/www.mvtec.com\/research-teaching","name":"Research & Teaching"}},{"@type":"ListItem","position":3,"item":{"@id":"https:\/\/www.mvtec.com\/research-teaching\/datasets","name":"Datasets"}},{"@type":"ListItem","position":4,"item":{"@id":"https:\/\/www.mvtec.com\/research-teaching\/datasets\/mvtec-ad","name":"MVTec AD"}}]}]</script>
+
+</head>
+<body id="p439" class="page-439 plevel-4 lang-0 bl-default layout-0 no-js ">
+
+
+
+
+
+    <script
+        id="Cookiebot"
+        data-culture="en"
+        src="https://consent.cookiebot.com/uc.js"
+        data-cbid="2db8954b-dd8c-4b0f-b14b-124f436122ef"
+        type="text/javascript"
+        async
+    ></script>
+
+
+
+
+
+
+
+
+
+
+<script type="application/javascript">
+    var bbConfig = {
+        publicPath: "/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/",
+        documentRoot: "/",
+        lang: "en_US",
+        channelType: "",
+    };
+</script>
+
+
+
+
+	
+	
+
+
+    
+<header id="header" class="bb-header ">
+	<div class="meta-bar container-fluid  has-meta-menu has-language-switch has-additional-meta-menu">
+		<div class="container">
+			<div class="meta-bar__content-container">
+				<div class="meta-bar__content">
+																		<div class="meta-bar__meta-menu">
+																	<a href="https://www.mvtec.com/about-us">
+										<span>About Us</span>
+									</a>
+																	<a href="https://www.mvtec.com/career">
+										<span>Career</span>
+									</a>
+																	<a href="https://www.mvtec.com/press">
+										<span>Press</span>
+									</a>
+																	<a href="https://www.mvtec.com/contact">
+										<span>Contact</span>
+									</a>
+															</div>
+																																																																																																						<div class="meta-bar__language-switch desktop-switch no-dropdown">
+								<button class="bb-not-styled">
+									
+	
+<i class="bb-icon bb-icon--globe  "
+	 aria-hidden="true"></i>									EN
+									
+	
+<i class="bb-icon bb-icon--chevron-down  "
+	 aria-hidden="true"></i>								</button>
+								<ul class="bb-not-styled">
+									
+								</ul>
+							</div>
+																			<div class="meta-bar__additional-meta-menu">
+																											<a href="https://www.mvtec.com/login">
+	
+<i class="bb-icon bb-icon--user  "
+	 aria-hidden="true"></i><span>Login</span>
+										</a>
+																																</div>
+															</div>
+			</div>
+		</div>
+	</div>
+	<div class="container-fluid">
+		<div class="container">
+			<div class="header__content ">
+				<div class="header__logo">
+					<a href="https://www.mvtec.com/" title="MVTec Software" class="bb-not-styled">
+						<img src="https://www.mvtec.com/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Images/Assets/mvtec_logo.svg" alt="MVTec Software" width="135" height="46">
+											</a>
+				</div>
+				<div id="navbar" class="main-navigation">
+					<div class="top-meta-mobile">
+																																																																																																<div class="meta-bar__language-switch mobile-switch no-dropdown">
+								<button class="bb-not-styled">
+									
+	
+<i class="bb-icon bb-icon--globe  "
+	 aria-hidden="true"></i>									EN
+									
+	
+<i class="bb-icon bb-icon--chevron-down  "
+	 aria-hidden="true"></i>								</button>
+							</div>
+																																	<a href="https://www.mvtec.com/login">
+	
+<i class="bb-icon bb-icon--user  "
+	 aria-hidden="true"></i><span>Login</span>
+								</a>
+																		</div>
+					<div class=" meta-bar__language-switch-list-mobile">
+						<ul class="bb-not-styled">
+							
+						</ul>
+					</div>
+					<nav class="main-nav">
+						<ul class="bb-not-styled main-nav-list main-nav-list--lvl-1">
+				
+		<li class="main-nav-list__item main-nav-list__item--has-sub ">
+			<a href="https://www.mvtec.com/products" class=" prevent-on-mobile"><span>Products</span></a>
+			<div>
+				<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-2">
+					<li class="overview-link main-nav-list__item">
+						<a href="https://www.mvtec.com/products">
+							<span>To overview</span>
+							
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>						</a>
+					</li>
+																		<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/products/halcon" class="prevent-on-mobile"><span>HALCON</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/products/halcon">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item main-nav-list__item--has-sub ">
+												<a href="https://www.mvtec.com/products/halcon/features-tools" >Features &amp; Tools</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/products/halcon/documentation" >Documentation</a>
+											</li>
+																					<li class="main-nav-list__item main-nav-list__item--has-sub ">
+												<a href="https://www.mvtec.com/products/halcon/editions-licensing" >Editions &amp; Licensing</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/products/merlic" class="prevent-on-mobile"><span>MERLIC</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/products/merlic">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item main-nav-list__item--has-sub ">
+												<a href="https://www.mvtec.com/products/merlic/features-tools" >Features &amp; Tools</a>
+											</li>
+																					<li class="main-nav-list__item main-nav-list__item--has-sub ">
+												<a href="https://www.mvtec.com/products/merlic/documentation" >Documentation</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/products/merlic/licensing" >Licensing</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/products/deep-learning-tool" class="prevent-on-mobile"><span>Deep Learning Tool</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/products/deep-learning-tool">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/products/deep-learning-tool/features-workflows" >Features &amp; Workflows</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/products/deep-learning-tool/editions-licensing" >Editions &amp; Licensing</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/products/deep-learning-tool/release-notes" >Release Notes</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/products/embedded-vision" class="prevent-on-mobile"><span>Embedded Vision</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/products/embedded-vision">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/products/embedded-vision/porting-service" >Porting Service</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/products/campus-editions" class="prevent-on-mobile"><span>Campus Editions</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/products/campus-editions">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/products/campus-editions/student" >Student</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/products/campus-editions/lecturer" >Lecturer</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/products/campus-editions/university" >University</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/products/mvtec-interfaces" class=""><span>Interfaces</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/products/mvtec-interfaces">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/products/calibration-plates" class=""><span>Calibration Plates</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/products/calibration-plates">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+															</ul>
+			</div>
+		</li>
+			
+		<li class="main-nav-list__item main-nav-list__item--has-sub ">
+			<a href="https://www.mvtec.com/services-support" class=" prevent-on-mobile"><span>Services &amp; Support</span></a>
+			<div>
+				<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-2">
+					<li class="overview-link main-nav-list__item">
+						<a href="https://www.mvtec.com/services-support">
+							<span>To overview</span>
+							
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>						</a>
+					</li>
+																		<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/services-support/individual-solutions" class="prevent-on-mobile"><span>Individual Solutions</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/services-support/individual-solutions">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/services-support/individual-solutions/free-application-evaluation" >Free Application Evaluation</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/services-support/individual-solutions/feasibility-study" >Feasibility Study</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/services-support/individual-solutions/your-project" >Your Project</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/services-support/training-learning" class="prevent-on-mobile"><span>Training &amp; Learning</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/services-support/training-learning">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/services-support/training-learning/mvtec-academy" >MVTec Academy</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/customer-specific-workshop" >Customer Specific Workshop</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/services-support/training-learning/worldwide-trainings" >Worldwide Trainings</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/services-support/partner-network" class="prevent-on-mobile"><span>Partner Network</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/services-support/partner-network">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/services-support/partner-network/halcon-sales-partners" >HALCON Sales Partners</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/services-support/partner-network/merlic-sales-partners" >MERLIC Sales Partners</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/services-support/partner-network/certified-integration-partners" >Certified Integration Partners</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/services-support/partner-network/technology-partners" >Technology Partners</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/services-support/technical-support" class=""><span>Technical Support</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/services-support/technical-support">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+															</ul>
+			</div>
+		</li>
+			
+		<li class="main-nav-list__item main-nav-list__item--has-sub ">
+			<a href="https://www.mvtec.com/application-areas" class=" prevent-on-mobile"><span>Application Areas</span></a>
+			<div>
+				<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-2">
+					<li class="overview-link main-nav-list__item">
+						<a href="https://www.mvtec.com/application-areas">
+							<span>To overview</span>
+							
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>						</a>
+					</li>
+																		<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/application-areas/applications" class="prevent-on-mobile"><span>Applications</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/application-areas/applications">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/applications/quality-inspection" >Quality Inspection</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/applications/object-recognition" >Object Recognition</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/applications/measuring" >Measuring</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/applications/identification" >Identification</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/applications/3d-matching" >3D Matching</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/application-areas/industries" class="prevent-on-mobile"><span>Industries</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/application-areas/industries">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/agriculture" >Agriculture</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/automotive-robotics" >Automotive &amp; Robotics</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/battery-production" >Battery Production</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/education-research-science" >Education, Research &amp; Science</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/electric-components-solar" >Electric Components &amp; Solar</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/food-beverage" >Food &amp; Beverage</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/glass-metal-paper-foil-printing" >Glass, Metal, Paper, Foil &amp; Printing</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/industrial-internet-of-things" >Industrial Internet of Things</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/intralogistics-automated-warehouses" >Intralogistics and Automated Warehouses</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/machinery" >Machinery</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/medical-supplies-pharmaceuticals" >Medical Supplies &amp; Pharmaceuticals</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/application-areas/industries/semiconductors" >Semiconductors</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/application-areas/success-stories" class=""><span>Success Stories</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/application-areas/success-stories">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/application-areas/white-paper" class=""><span>White Papers</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/application-areas/white-paper">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+															</ul>
+			</div>
+		</li>
+			
+		<li class="main-nav-list__item main-nav-list__item--has-sub ">
+			<a href="https://www.mvtec.com/knowledge-base" class=" prevent-on-mobile"><span>Knowledge Base</span></a>
+			<div>
+				<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-2">
+					<li class="overview-link main-nav-list__item">
+						<a href="https://www.mvtec.com/knowledge-base">
+							<span>To overview</span>
+							
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>						</a>
+					</li>
+																		<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/knowledge-base/product-documentation" class=""><span>Product Documentation</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/knowledge-base/product-documentation">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/knowledge-base/videos-tutorials" class=""><span>Videos &amp; Tutorials</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/knowledge-base/videos-tutorials">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item main-nav-list__item--has-sub ">
+								<a href="https://www.mvtec.com/knowledge-base/technologies" class="prevent-on-mobile"><span>Technologies</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/knowledge-base/technologies">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item main-nav-list__item--has-sub ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/3d-vision" >3D Vision</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/bar-code-2d-code-reading" >Bar Code &amp; 2D Code Reading</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/blob-analysis" >Blob Analysis</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/classification" >Classification</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/computational-imaging" >Computational Imaging</a>
+											</li>
+																					<li class="main-nav-list__item main-nav-list__item--has-sub ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/deep-learning" >Deep Learning</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/filtering" >Filtering</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/inspection" >Inspection</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/matching" >Matching</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/measuring" >Measuring</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/morphology" >Morphology</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/ocr" >OCR</a>
+											</li>
+																					<li class="main-nav-list__item  ">
+												<a href="https://www.mvtec.com/knowledge-base/technologies/subpixel" >Subpixel</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/knowledge-base/news" class=""><span>News</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/knowledge-base/news">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/knowledge-base/events" class=""><span>Events</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/knowledge-base/events">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/knowledge-base/machine-vision-insights" class=""><span>Machine Vision Insights</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/knowledge-base/machine-vision-insights">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/knowledge-base/developers-corner" class=""><span>Developers Corner</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/knowledge-base/developers-corner">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+															</ul>
+			</div>
+		</li>
+			
+		<li class="main-nav-list__item main-nav-list__item--has-sub active-element">
+			<a href="https://www.mvtec.com/research-teaching" class=" prevent-on-mobile"><span>Research &amp; Teaching</span></a>
+			<div>
+				<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-2">
+					<li class="overview-link main-nav-list__item">
+						<a href="https://www.mvtec.com/research-teaching">
+							<span>To overview</span>
+							
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>						</a>
+					</li>
+																		<li class="main-nav-list__item main-nav-list__item--has-sub active-element">
+								<a href="https://www.mvtec.com/research-teaching/datasets" class="prevent-on-mobile"><span>Datasets</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/research-teaching/datasets">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																															<li class="main-nav-list__item  active-element">
+												<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-ad" >MVTec AD</a>
+											</li>
+																					<li class="main-nav-list__item  active-element">
+												<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-ad-2" >MVTec AD2</a>
+											</li>
+																					<li class="main-nav-list__item  active-element">
+												<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-3d-ad" >MVTec 3D-AD</a>
+											</li>
+																					<li class="main-nav-list__item  active-element">
+												<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-loco-ad" >MVTec LOCO AD</a>
+											</li>
+																					<li class="main-nav-list__item  active-element">
+												<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-d2s" >MVTec D2S</a>
+											</li>
+																					<li class="main-nav-list__item  active-element">
+												<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-itodd" >MVTec ITODD</a>
+											</li>
+																					<li class="main-nav-list__item  active-element">
+												<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-mv-ball" >MVTec MV-BALL</a>
+											</li>
+																					<li class="main-nav-list__item  active-element">
+												<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-screws" >MVTec Screws</a>
+											</li>
+																					<li class="main-nav-list__item  active-element">
+												<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-tracker-evaluation" >MVTec tracker evaluation</a>
+											</li>
+																													</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  active-element">
+								<a href="https://www.mvtec.com/research-teaching/publications" class=""><span>Publications</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/research-teaching/publications">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  active-element">
+								<a href="https://www.mvtec.com/products/campus-editions" class=""><span>MVTec on Campus</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/products/campus-editions">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+															</ul>
+			</div>
+		</li>
+			
+		<li class="main-nav-list__item main-nav-list__item--has-sub ">
+			<a href="https://www.mvtec.com/downloads" class="btn-blue prevent-on-mobile"><span>Downloads</span></a>
+			<div>
+				<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-2">
+					<li class="overview-link main-nav-list__item">
+						<a href="https://www.mvtec.com/downloads">
+							<span>To overview</span>
+							
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>						</a>
+					</li>
+																		<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/downloads/software-manager" class=""><span>Software Manager</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/downloads/software-manager">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/downloads/halcon" class=""><span>HALCON</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/downloads/halcon">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/downloads/merlic" class=""><span>MERLIC</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/downloads/merlic">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/downloads/deep-learning-tool" class=""><span>Deep Learning Tool</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/downloads/deep-learning-tool">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+													<li class="main-nav-list__item  ">
+								<a href="https://www.mvtec.com/downloads/interfaces" class=""><span>Interfaces</span></a>
+								<div>
+									<ul class="bb-not-styled main-nav-list main-nav-list__item--lvl-3">
+										<li class="overview-link main-nav-list__item">
+											<a href="https://www.mvtec.com/downloads/interfaces">
+												<span>To overview</span>
+												
+	
+<i class="bb-icon bb-icon--arrow-right  "
+	 aria-hidden="true"></i>											</a>
+										</li>
+																			</ul>
+								</div>
+							</li>
+															</ul>
+			</div>
+		</li>
+	</ul>					</nav>
+					<div class="meta-bar-mobile">
+													<div class="meta-bar__meta-menu">
+																	<a href="https://www.mvtec.com/about-us">
+										<span>About Us</span>
+									</a>
+																	<a href="https://www.mvtec.com/career">
+										<span>Career</span>
+									</a>
+																	<a href="https://www.mvtec.com/press">
+										<span>Press</span>
+									</a>
+																	<a href="https://www.mvtec.com/contact">
+										<span>Contact</span>
+									</a>
+															</div>
+											</div>
+				</div>
+									
+
+
+
+
+				
+	
+
+<button
+class="bb-button bb-toggle-search bb-button--has-only-icon bb-button--icon-position-right"
+
+
+	
+	
+	
+	
+	>	<i class="bb-icon bb-icon--magnifying-glass  "
+	 aria-hidden="true"></i><span ></span></button>
+								
+<button class="bb-hamburger bb-not-styled"
+		aria-label=""
+		aria-label-open=""
+		aria-label-close=""
+		aria-controls=""
+		aria-expanded="false"
+		aria-haspopup="true"
+>
+	<span class="bb-hamburger__box ">
+		<span class="bb-hamburger__inner"></span>
+	</span>
+	
+</button>
+			</div>
+		</div>
+	</div>
+
+</header>
+
+
+
+
+
+	<div class="full-height-container  bg-grey-ultra-light">
+		<main>
+            
+
+
+	
+		
+	
+	<div class="bb-breadcrumb mb-54">
+		
+
+
+	
+
+
+
+
+
+<section class="container-fluid  mb-0">
+	<div class="container  ">
+		
+		
+				
+
+
+	<div class="row no-row-col-margins ">
+								<div class="col col-12 col-xs-12      ">
+						<nav class="bb-breadcrumb__container d-flex align-items-center" aria-label="Breadcrumb">
+																	<a class="home" href="https://www.mvtec.com/">
+						
+	
+<i class="bb-icon bb-icon--home  bb-icon--size-16"
+	 aria-hidden="true"></i>						<span class="visually-hidden">MVTec Software - Experts for Machine Vision</span>
+					</a>
+																												
+			<div class="bb-breadcrumb__link-container" id="bb-breadcrumb__link-container">
+				<div>
+					<div class="d-flex flex-nowrap justify-content-end align-items-center" role="list">
+																																		<div class="bb-breadcrumb__seperator">
+									
+	
+<i class="bb-icon bb-icon--chevron-right  bb-icon--size-12"
+	 aria-hidden="true"></i>								</div>
+								<div class="bb-breadcrumb__link-item" role="listitem">
+									<a href="https://www.mvtec.com/research-teaching"
+																					id="bb-breadcrumb__title-2"
+											data-bs-toggle="collapse"
+											data-bs-target="#bb-breadcrumb__submenu-2"
+											aria-controls="bb-breadcrumb__submenu-2"
+											aria-expanded="false"
+											aria-haspopup="true"
+											role="button"
+																													>Research & Teaching</a>
+
+																			<div class="bb-breadcrumb__submenu collapse"
+											 id="bb-breadcrumb__submenu-2"
+											 data-bs-parent="#bb-breadcrumb__link-container"
+											 aria-labelledby="bb-breadcrumb__title-2"
+											 aria-hidden="true"
+										>
+											<div class="bb-breadcrumb__submenu-shadow-container">
+												<div class="arrow"></div>
+												<ul class="bb-not-styled">
+													<li class="bb-breadcrumb__touch-overview">
+														
+<a href="https://www.mvtec.com/research-teaching"
+			class="bb-breadcrumb__submenu-link"
+	
+	>To overview</a>
+													</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/datasets"
+			class="bb-breadcrumb__submenu-link"
+	
+	>Datasets</a>
+														</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/publications"
+			class="bb-breadcrumb__submenu-link"
+	
+	>Publications</a>
+														</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/products/campus-editions"
+			class="bb-breadcrumb__submenu-link"
+	
+	>MVTec on Campus</a>
+														</li>
+																									</ul>
+											</div>
+										</div>
+																	</div>
+																												<div class="bb-breadcrumb__seperator">
+									
+	
+<i class="bb-icon bb-icon--chevron-right  bb-icon--size-12"
+	 aria-hidden="true"></i>								</div>
+								<div class="bb-breadcrumb__link-item" role="listitem">
+									<a href="https://www.mvtec.com/research-teaching/datasets"
+																					id="bb-breadcrumb__title-3"
+											data-bs-toggle="collapse"
+											data-bs-target="#bb-breadcrumb__submenu-3"
+											aria-controls="bb-breadcrumb__submenu-3"
+											aria-expanded="false"
+											aria-haspopup="true"
+											role="button"
+																													>Datasets</a>
+
+																			<div class="bb-breadcrumb__submenu collapse"
+											 id="bb-breadcrumb__submenu-3"
+											 data-bs-parent="#bb-breadcrumb__link-container"
+											 aria-labelledby="bb-breadcrumb__title-3"
+											 aria-hidden="true"
+										>
+											<div class="bb-breadcrumb__submenu-shadow-container">
+												<div class="arrow"></div>
+												<ul class="bb-not-styled">
+													<li class="bb-breadcrumb__touch-overview">
+														
+<a href="https://www.mvtec.com/research-teaching/datasets"
+			class="bb-breadcrumb__submenu-link"
+	
+	>To overview</a>
+													</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-ad"
+			class="bb-breadcrumb__submenu-link"
+	
+	>MVTec AD</a>
+														</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-ad-2"
+			class="bb-breadcrumb__submenu-link"
+	
+	>MVTec AD2</a>
+														</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-3d-ad"
+			class="bb-breadcrumb__submenu-link"
+	
+	>MVTec 3D-AD</a>
+														</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-loco-ad"
+			class="bb-breadcrumb__submenu-link"
+	
+	>MVTec LOCO AD</a>
+														</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-d2s"
+			class="bb-breadcrumb__submenu-link"
+	
+	>MVTec D2S</a>
+														</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-itodd"
+			class="bb-breadcrumb__submenu-link"
+	
+	>MVTec ITODD</a>
+														</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-mv-ball"
+			class="bb-breadcrumb__submenu-link"
+	
+	>MVTec MV-BALL</a>
+														</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-screws"
+			class="bb-breadcrumb__submenu-link"
+	
+	>MVTec Screws</a>
+														</li>
+																											<li>
+															
+<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-tracker-evaluation"
+			class="bb-breadcrumb__submenu-link"
+	
+	>MVTec tracker evaluation</a>
+														</li>
+																									</ul>
+											</div>
+										</div>
+																	</div>
+																												<div class="bb-breadcrumb__seperator last">
+									
+	
+<i class="bb-icon bb-icon--chevron-right  bb-icon--size-12"
+	 aria-hidden="true"></i>								</div>
+								<div class="bb-breadcrumb__link-item last" role="listitem">
+									<a href="https://www.mvtec.com/research-teaching/datasets/mvtec-ad"
+																															aria-current="page"
+																			>MVTec AD</a>
+
+																	</div>
+																		</div>
+				</div>
+			</div>
+		</nav>
+	
+			</div>
+			</div>
+	</div>
+</section>	</div>
+
+
+
+
+
+
+            <!--TYPO3SEARCH_begin-->
+			
+			
+
+
+
+
+
+
+        
+    
+
+
+
+
+    
+
+
+
+
+				
+<div class="bb-header-teaser bb-header-teaser--default mb-96">
+	<div class="bb-header-teaser__max-image-width-container">
+		<div class="bb-header-teaser__inner">
+			
+			
+
+
+	
+
+
+
+
+
+<section class="container-fluid  mb-0">
+	<div class="container  ">
+		
+		
+				
+
+
+	<div class="row no-row-col-margins ">
+								<div class="col col-12 col-xs-12    col-xl-5 order-2 order-xl-1  ">
+					<div class="bb-header-teaser__content">
+					<div class="bb-header-teaser__subheadline mb-6"><span>MVTec AD </span></div>
+							<div class="bb-header-teaser__headline"><h1 class="mb-0">The MVTec <span>Anomaly Detection</span>  Dataset</h1></div>
+		
+		
+			</div>
+
+			</div>
+								<div class="col col-12 col-xs-12    col-xl-7 order-1 order-xl-2  ">
+					<div class="bb-header-teaser__image">
+		
+					</div>
+
+			</div>
+			</div>
+	</div>
+</section>		</div>
+	</div>
+
+	</div>
+
+
+
+
+			
+			
+
+<a id="c3389"></a><section class="container-fluid  mb-96"><div class="container  "><div class="row no-row-col-margins "><div class="col col-12 col-12 col-sm-12 col-md-12 col-lg-12 col-xl-12  "><a id="c3390"></a><div class="bb-teaser-tile bb-teaser-tile--content-right  bb-content-item"><div class="bb-teaser-tile__image-container"><div class="bb-image bb-teaser-tile__image" style="max-width: 928px;"><div class="bb-image__image-holder"><picture><source
+									srcset="https://www.mvtec.com/fileadmin/_processed_/0/4/csm_teaser_image_dataset_anomaly_detection_d24b9707cd.webp"
+									media="(min-width: 992px)"
+									width="710"
+									height="520"
+								/><source
+									srcset="https://www.mvtec.com/fileadmin/_processed_/0/4/csm_teaser_image_dataset_anomaly_detection_0d839f1cd0.webp"
+									media="(min-width: 600px)"
+									width="928"
+									height="680"
+								/><source
+									srcset="https://www.mvtec.com/fileadmin/_processed_/0/4/csm_teaser_image_dataset_anomaly_detection_6308ae803a.webp, https://www.mvtec.com/fileadmin/_processed_/0/4/csm_teaser_image_dataset_anomaly_detection_d238c167a1.webp 1.5x"
+									media="(min-width: 1px)"
+									width="568"
+									height="416"
+								/><img
+								src="https://www.mvtec.com/fileadmin/_processed_/0/4/csm_teaser_image_dataset_anomaly_detection_b7de33b91e.webp"
+								alt=""
+								title=""
+								width="928"
+								height="680"
+																									loading="lazy"
+																style="width: 928px;"							/></picture></div></div></div><div class="bb-teaser-tile__content-container bg-white"><div><div class="bb-teaser-tile__content-headline h2 mb-0">Abstract</div></div><div class="bb-teaser-tile__content-divider"></div><div class="bb-teaser-tile__copy"><div class="ce-bodytext"><div class="frame frame--type-textpic frame--medium-margin-bottom"><p><strong>MVTec AD</strong> is a dataset for benchmarking anomaly detection methods with a focus on industrial inspection. It contains over 5000 high-resolution images divided into fifteen different object and texture categories. Each category comprises a set of defect-free training images and a test set of images with various kinds of defects as well as images without defects.</p><p>Pixel-precise annotations of all anomalies are also provided. More information can be in our paper "<a href="/fileadmin/Redaktion/mvtec.com/05_research_teaching/datasets/mvtec_ad.pdf" target="_blank">MVTec AD – A Comprehensive Real-World Dataset for Unsupervised Anomaly Detection</a>" and its extended version "<a href="https://link.springer.com/content/pdf/10.1007/s11263-020-01400-4.pdf" target="_blank" rel="noreferrer">The MVTec Anomaly Detection Dataset: A Comprehensive Real-World Dataset for Unsupervised Anomaly Detection</a>".&nbsp;</p></div></div></div></div></div></div></div></div></section>
+
+
+
+<a id="c3391"></a><section class="container-fluid  mb-96 has-max-width bg-primary"><div class="container pt-96 pb-96 "><div class="row no-row-col-margins "><div class="col col-12 col-xs-12   col-lg-8 col-xl-8  "><div class="bb-grid-container__headline-container mb-36 "><h2 class="bb-grid-container__headline mb-0">Download Dataset</h2></div></div></div><div class="row no-row-col-margins "><div class="col col-12 col-12 col-sm-12 col-md-12 col-lg-8 col-xl-8  "><a id="c3392"></a><div class="bb-content-item frame frame-default frame-type-html 0"><script type="text/javascript">var aoAdBlockDetected = true;</script><script type="text/javascript" src="//software.mvtec.com/acton/content/aoAdDetect.js"></script><script type="text/javascript">window.addEventListener("load",function(){if(aoAdBlockDetected){var t=document.createElement("div"),o=document.createElement("div"),e=document.createElement("div"),n=document.createElement("div"),d=document.createElement("button"),i="<h1 style=\"text-align: center; line-height: 21px; color: #444444;\"><span style=\"font-family: 'helvetica neue', helvetica, arial, sans-serif;\"><strong style=\"font-weight: bold;\"><span style=\"white-space: pre-wrap; font-size: 18pt;\">It looks like you’re using an AdBlocker</span></strong></span></h1><p style=\"text-align: center; line-height: 20px; color: #444444;\"><span style=\"font-family: 'helvetica neue', helvetica, arial, sans-serif; color: #767676;\"><span style=\"white-space: pre-wrap; font-size: 18pt;\"><span style=\"white-space: pre-wrap;\"><span style=\"font-size: 14pt;\">Some of the forms and images on this page may not work correctly with this enabled. Please disable your ad blocker for this page.</span></span></span></span></p><p style=\"text-align: left; line-height: 20px; color: #444444;\"><span style=\"font-size: 14pt;\"><strong style=\"font-weight: 500;\"><span style=\"font-family: 'helvetica neue', helvetica, arial, sans-serif;\"><span style=\"white-space: pre-wrap;\"><span style=\"white-space: pre-wrap;\">Instructions</span></span></span></strong></span></p><p style=\"text-align: left; line-height: 20px; color: #444444;\"><span style=\"font-size: 14pt;\"><strong style=\"font-weight: 500;\"><span style=\"font-family: 'helvetica neue', helvetica, arial, sans-serif;\"><span style=\"white-space: pre-wrap;\"><span style=\"white-space: pre-wrap;\">1. Find the ad blocker icon installed on your browser.</span></span></span></strong></span></p><p style=\"text-align: left; line-height: 20px; color: #444444;\"><span style=\"font-size: 14pt;\"><span style=\"font-family: 'helvetica neue', helvetica, arial, sans-serif;\"><span style=\"white-space: pre-wrap;\"><span style=\"white-space: pre-wrap;\">This icon is usually located on the upper right side of your screen. You may have more than one ad blocker installed.</span></span></span></span></p><p style=\"text-align: left; line-height: 20px; color: #444444;\"><strong style=\"font-weight: 500;\"><span style=\"font-size: 14pt;\"><span style=\"font-family: 'helvetica neue', helvetica, arial, sans-serif;\"><span style=\"white-space: pre-wrap;\"><span style=\"white-space: pre-wrap;\">2. Click the icon and disable the ad blocker for this website.</span></span></span></span></strong></p><p style=\"text-align: left; line-height: 20px; color: #444444;\"><strong style=\"font-weight: 500;\"><span style=\"font-size: 14pt;\"><span style=\"font-family: 'helvetica neue', helvetica, arial, sans-serif;\"><span style=\"white-space: pre-wrap;\"><span style=\"white-space: pre-wrap;\">3. Refresh this website page, either by following prompts or clicking your browser’s “refresh” or “reload” button.</span></span></span></span></strong></p>";t.style.cssText="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1000;background:red;background: rgba(0,0,0,0.3);",o.style.cssText="position: fixed; top: 50%; left: 50%; width: 600px; max-width: 80vw; transform: translate(-50%, -50%) !important; background: #ffffff; border-width: 1px; border-radius: 4px; border-color: #444444; border-style: solid; max-height: 80vh; overflow: auto; padding: 24px 56px 0 56px;",o.innerHTML=i,n.style.cssText="margin-top: 36px; margin-bottom: 24px; text-align: center;",o.appendChild(n),d.innerHTML="Refresh Page",d.style.cssText="cursor: pointer; padding: 12px 24px; background: #FFFFFF; border-width: 1px; color: #444444; border-color: #444444; border-radius: 4px;",n.appendChild(d),d.addEventListener("click",function(){window.location.reload()}),e.style.cssText="position: absolute; right: 25px; top: 25px; cursor: pointer; font-size: 14px; line-height: 14px; color: #444444",e.innerHTML="&#10005;",e.addEventListener("click",function(){o.parentNode.removeChild(o),t.parentNode.removeChild(t)}),document.body.appendChild(t),t.appendChild(o),o.appendChild(e)}});</script><script type="text/javascript" id="aoform-script-c92559d1-5797-4de8-aa04-48d75107de76:d-0001">!function(o,t,e,a){o._aoForms=o._aoForms||[],o._aoForms.push(a);var n=function(){var o=t.createElement(e);o.src=("https:"==t.location.protocol?"https://":"http://")+"software.mvtec.com/acton/content/form_embed.js",o.async=!0;for(var a=t.getElementsByTagName(e)[0],n=a.parentNode,c=document.getElementsByTagName("script"),r=!1,s=0;s<c.length;s++){if(c[s].getAttribute("src")==o.getAttribute("src"))r=!0;}r?typeof(_aoFormLoader)!="undefined"?_aoFormLoader.load({id:"c92559d1-5797-4de8-aa04-48d75107de76:d-0001",accountId:"43208",domain:"software.mvtec.com",isTemp:false,noStyle:true,prefill:false}):"":n.insertBefore(o,a)};window.attachEvent?window.attachEvent("onload",n):window.addEventListener("load",n,!1),n()}(window,document,"script",{id:"c92559d1-5797-4de8-aa04-48d75107de76",accountId:"43208",domain:"software.mvtec.com",isTemp:false,noStyle:true,prefill:false});</script></div></div></div></div></section>
+
+
+
+<a id="c3394"></a><section class="container-fluid  mb-96 has-max-width"><div class="container  "><div class="row no-row-col-margins "><div class="col col-12 col-12 col-sm-12 col-md-12 col-lg-8 col-xl-8  "><a id="c3395"></a><div class="bb-content-item frame frame-default frame-type-text 0"><div class="frame frame--type-text frame--medium-margin-bottom"><h2>Evaluation Code</h2><p>In order to ensure a fair and consistent comparison of new and existing methods on our dataset, we provide python scripts that allow an easy evaluation. For details on how to use the script, please take a look at the included readme file. For details on the metrics used for the evaluation, we refer to our corresponding paper.</p><p><a href="https://www.mydrive.ch/shares/38536/3830184030e49fe74747669442f0f283/download/439517473-1665675012/mvtec_ad_evaluation.tar.xz" target="_blank" class="bb-button bb-button--primary-alt has-icon--download" rel="noreferrer"><span class="mvtec-blue">Download the evaluation code</span></a></p></div></div></div></div></div></section>
+
+
+
+<a id="c3504"></a><section class="container-fluid  mb-96"><div class="container  "><div class="row no-row-col-margins "><div class="col col-12 col-12 col-sm-12 col-md-12 col-lg-12 col-xl-12  "><a id="c3505"></a><div class="bb-teaser bb-teaser--type-info-card bg-primary  bb-content-item"><div class="bb-teaser__content-container"><div class="bb-teaser__headline ">License Terms</div><div class="bb-teaser__copy"><p>The data is released under the <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International</a> License (CC BY-NC-SA 4.0).<br>In particular, it is not allowed to use the dataset for commercial purposes. If you are unsure whether or not your application violates the non-commercial use clause of the license, please contact us.</p><p>If you have any questions or comments about the dataset, feel free to contact us via email.</p><p><a href="#" data-mailto-token="jxfiql7ob:obnrbpqXjsqbz+zlj" data-mailto-vector="-3" class="bb-button"><span class="mvtec-yellow">Write us now</span></a></p></div><div class="bb-teaser__links-container"></div></div></div></div></div></div></section>
+
+
+            <!--TYPO3SEARCH_end-->
+		</main>
+
+		
+		
+
+
+        
+            
+
+
+
+
+
+<footer id="bb-footer" class="bb-footer">
+	<div>
+		
+
+
+	
+
+
+
+	
+
+<section class="container-fluid  mb-0 bb-footer__main">
+	<div class="container  bb-footer__main">
+		
+		
+	
+
+
+	<div class="row bb-footer__main-row">
+								<div class="col col-12 col-xs-12 col-sm-6 col-xl-4    ">
+					<div class="box">
+		
+
+<a id="c12"></a><div class="bb-content-item frame frame-default frame-type-text 0"><h6 class="">
+                MVTec News – Stay up to date with our newsletter!
+            </h6><p>Stay informed with the latest updates, product releases and industry insights delivered straight to your inbox.</p><p><a href="/knowledge-base/news/newsletter" class="bb-button bb-button--primary-alt has-icon--send">Subscribe to MVTec News</a></p></div>
+
+
+	</div>
+
+			</div>
+								<div class="col col-12 col-xs-12 col-sm-6 col-xl-4    ">
+					<div class="box">
+		<p><strong>More from MVTec</strong></p>
+					
+
+
+
+
+
+			<a class="bb-link "
+			href="https://www.mvtec.com/services-support/partner-network"
+
+			
+							title="Get a license for HALCON or MERLIC"
+			
+			
+					>
+				<span >Get a license for HALCON or MERLIC</span>
+		</a>
+				<br />
+					
+
+
+
+
+
+			<a class="bb-link "
+			href="https://www.mvtec.com/services-support/partner-network/certified-integration-partners"
+
+			
+							title="Find an Integration Partner"
+			
+			
+					>
+				<span >Find an Integration Partner</span>
+		</a>
+				<br />
+					
+
+
+
+
+
+			<a class="bb-link "
+			href="https://www.mvtec.com/downloads"
+
+			
+							title="Download our software"
+			
+			
+					>
+				<span >Download our software</span>
+		</a>
+				<br />
+			</div>
+
+			</div>
+								<div class="col col-12 col-xs-12 col-sm-6 col-xl-4    ">
+					<div class="box">
+		
+
+<a id="c13"></a><div class="bb-content-item frame frame-default frame-type-text 0"><p><strong>Do you have questions or would like a consultation?</strong></p><p>Fill out our contact form, and our experts will get back to you as soon as possible.</p><p><a href="/contact" class="bb-button bb-button--primary-alt has-icon--headset">Get in touch</a></p></div>
+
+
+	</div>
+
+			</div>
+			</div>
+	</div>
+</section>	</div>
+
+	
+
+
+	
+
+
+
+	
+
+<section class="container-fluid  mb-0 bb-footer__meta">
+	<div class="container  bb-footer__meta">
+		
+		
+				
+
+
+	<div class="row no-row-col-margins ">
+								<div class="col col-12 col-xs-12 col-sm-5 col-md-7 col-xl-6     ">
+					<nav>
+					
+
+
+
+
+
+			<a class="bb-link "
+			href="https://www.mvtec.com/imprint"
+
+			
+			
+			
+					>
+				<span >Imprint</span>
+		</a>
+						
+
+
+
+
+
+			<a class="bb-link "
+			href="https://www.mvtec.com/terms-and-conditions"
+
+			
+			
+			
+					>
+				<span >Terms and Conditions</span>
+		</a>
+						
+
+
+
+
+
+			<a class="bb-link "
+			href="https://www.mvtec.com/privacy-policy"
+
+			
+			
+			
+					>
+				<span >Privacy Policy</span>
+		</a>
+						
+
+
+
+
+
+			<a class="bb-link "
+			href="https://www.mvtec.com/cybersecurity"
+
+			
+			
+			
+					>
+				<span >Cybersecurity</span>
+		</a>
+						
+
+
+
+
+
+			<a class="bb-link "
+			href="https://shop.mvtec.com/de"
+
+							target="_blank"
+			
+			
+			
+					>
+				<span >MVShop</span>
+		</a>
+						
+
+
+
+
+
+			<a class="bb-link "
+			href="javascript:Cookiebot.renew()"
+
+			
+			
+			
+					>
+				<span >Edit cookie settings</span>
+		</a>
+				</nav>
+
+			</div>
+								<div class="col col-12 col-xs-12 col-sm-7 col-md-5 col-xl-6 justify-content-end     ">
+					<div class="social">
+									<a href="https://www.youtube.com/mvtecsoftware" target="_blank" title="Youtube">
+					<img src="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Images/youtube.svg?1778493464" alt="Youtube">
+				</a>
+												<a href="https://www.linkedin.com/company/mvtec-software-gmbh" target="_blank" title="Linkedin">
+					<img src="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Images/linkedin.svg?1778493464" alt="Linkedin">
+				</a>
+												<a href="https://www.mvtec.com/cn/wechat/" target="_blank" title="Wechat">
+					<img src="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Images/wechat.svg?1778493464" alt="Wechat">
+				</a>
+												<a href="https://space.bilibili.com/1303332646" target="_blank" title="Bilibili">
+					<img src="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Images/bilibili.svg?1778493464" alt="Bilibili">
+				</a>
+												<a href="https://www.mvtec.com/rss" target="_blank" title="Rss">
+					<img src="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Images/rss.svg?1778493464" alt="Rss">
+				</a>
+						</div>
+
+			</div>
+			</div>
+	</div>
+</section></footer>
+
+        
+    
+
+
+
+	</div>
+
+    
+    
+        
+<button class="bb-not-styled bb-back-to-top-button">
+	
+	
+<i class="bb-icon bb-icon--chevron-down  "
+	 aria-hidden="true"></i></button>
+
+    
+
+	
+	
+		
+
+
+
+
+<div class="tx-solr-search-form">
+    
+
+    
+        
+<div class="bb-search-overlay ">
+	
+	
+
+
+	
+
+
+
+
+
+<section class="container-fluid  mb-0">
+	<div class="container  ">
+		
+		
+	
+
+
+	<div class="row ">
+								<div class="col col-12 col-xs-12      ">
+						<div class="bb-search-overlay__header-container">
+			<div><img src="https://www.mvtec.com/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/Images/Assets/mvtec_logo.svg" alt="MVTec Software"></div>
+			<button class="bb-search-overlay__close-button bb-not-styled">
+				
+	
+<i class="bb-icon bb-icon--xmark  "
+	 aria-hidden="true"></i>			</button>
+		</div>
+	
+			</div>
+								<div class="col col-12 col-xs-12      ">
+				
+        
+<div class="tx_solr container">
+	<div class="row">
+		<div class="col-md-12">
+			
+	
+	<div class="bb-search-overlay__search-form">
+		<form method="get" id="tx-solr-search-form-pi-results" action="/search" data-suggest="/search?type=7384" data-suggest-header="Top Results" accept-charset="utf-8">
+            
+            <div class="bb-inputfield-wrapper form-element-wrapper">
+                <div class="bb-inputfield">
+                    <label for="bb-search-overlay--input" class="bb-inputfield__label label-top">
+                        <span class="bb-inputfield__label-text">Search term</span>
+                    </label>
+                    <input type="text" name="tx_solr[q]" value="" maxlength="50" id="bb-search-overlay--input" />
+                </div>
+            </div>
+            <button class="bb-button bb-button--primary-alt bb-button--has-icon bb-button--icon-position-left" type="submit">
+                <i class="bb-icon bb-icon--magnifying-glass"></i>
+                Search
+            </button>
+		</form>
+	</div>
+
+
+		</div>
+	</div>
+</div>
+    
+			</div>
+			</div>
+	</div>
+</section></div>
+
+    
+</div>
+
+<script src="/typo3temp/assets/compressed/merged-17d8f94dfe085655d101c03605131ada.js?1778493784"></script>
+<script src="/typo3temp/assets/compressed/merged-04544517f6a19bbbdddae63a23f7c086.js?1778493784"></script>
+<script src="/_assets/fa5d75f93fd301e76fbd9a7276a24d9e/JavaScript/site.main.js?1778493464" async="async" defer="defer"></script>
+<script async="async" src="/_assets/2a58d7833cb34b2a67d37f5b750aa297/JavaScript/default_frontend.js?1773143943"></script>
+
+
+</body>
+</html>
