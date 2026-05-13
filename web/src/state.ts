@@ -18,6 +18,7 @@ export interface AppState {
   upload: UploadFormState;
   loading: boolean;
   error: string | null;
+  uploadStatus: string | null;
   reviewNote: string;
   reviewStatus: string | null;
 }
@@ -26,6 +27,8 @@ export type AppAction =
   | { type: "bootstrapLoaded"; bootstrap: DashboardBootstrap }
   | { type: "runsLoaded"; runs: RunSummary[] }
   | { type: "runLoaded"; run: RunDetail }
+  | { type: "uploadStarted" }
+  | { type: "uploadCompleted"; run: RunDetail }
   | { type: "uploadChanged"; patch: Partial<UploadFormState> }
   | { type: "targetSelected"; targetKey: string }
   | { type: "reviewNoteChanged"; note: string }
@@ -49,6 +52,7 @@ export const initialState: AppState = {
   },
   loading: false,
   error: null,
+  uploadStatus: null,
   reviewNote: "",
   reviewStatus: null
 };
@@ -72,8 +76,23 @@ export function reducer(state: AppState, action: AppAction): AppState {
         error: null,
         reviewStatus: null
       };
+    case "uploadStarted":
+      return { ...state, error: null, uploadStatus: null, reviewStatus: null };
+    case "uploadCompleted":
+      return {
+        ...state,
+        selectedRun: action.run,
+        selectedTargetKey: action.run.review_targets[0]?.target_key ?? "",
+        error: null,
+        reviewStatus: null,
+        uploadStatus: `Uploaded ${action.run.run.source_filename}; ${action.run.run.case_count} case(s) ready for review.`
+      };
     case "uploadChanged":
-      return { ...state, upload: { ...state.upload, ...action.patch } };
+      return {
+        ...state,
+        upload: { ...state.upload, ...action.patch },
+        uploadStatus: action.patch.file !== undefined ? null : state.uploadStatus
+      };
     case "targetSelected":
       return { ...state, selectedTargetKey: action.targetKey, reviewStatus: null };
     case "reviewNoteChanged":

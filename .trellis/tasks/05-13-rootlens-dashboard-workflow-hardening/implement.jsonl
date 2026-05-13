@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Service/frontend separation and backend contract constraints."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Allowed repo layout for web/dashboard additions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gates for Python and frontend verification."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Dashboard hardening spans frontend, service contract, docs, and smoke verification."}

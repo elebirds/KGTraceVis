@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Review API/service boundaries and frontend use of backend contracts."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Confirm dashboard changes stay in expected paths."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify backend/frontend checks and smoke coverage."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review cross-layer consistency for UI, docs, API, and tests."}

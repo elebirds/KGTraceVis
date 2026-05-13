@@ -2,9 +2,11 @@ import {
   AlertTriangle,
   Check,
   ChevronRight,
+  Circle,
   FileUp,
   GitBranch,
   History,
+  Info,
   RefreshCw,
   Send,
   X
@@ -13,7 +15,27 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useReducer } from "react";
 
 import { api } from "./api";
 import { initialState, reducer } from "./state";
-import type { ReviewAction, ReviewTarget, RunDetail, UploadMode } from "./types";
+import type {
+  ReviewAction,
+  ReviewTarget,
+  RunDetail,
+  UploadMode,
+  UploadModeInfo
+} from "./types";
+
+const EXAMPLE_UPLOADS: Record<UploadMode, Array<{ path: string; label: string }>> = {
+  records: [
+    { path: "data/examples/records/mvtec_records.jsonl", label: "MVTec producer records" },
+    { path: "data/examples/records/wm811k_records.jsonl", label: "WM811K producer records" }
+  ],
+  evidence: [
+    { path: "data/examples/mvtec_noisy_morphology_demo.json", label: "Single MVTec evidence" },
+    { path: "data/examples/tep_example.json", label: "Single TEP evidence" }
+  ],
+  image: [
+    { path: "data/external/mvtec/<object>/test/<defect>/<image>.png", label: "Local MVTec image" }
+  ]
+};
 
 function valueText(value: unknown): string {
   if (value === null || value === undefined || value === "") return "unknown";
@@ -29,6 +51,11 @@ function shortId(value: string): string {
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const uploadModes = state.bootstrap?.upload_modes ?? [];
+  const selectedUploadMode = useMemo(
+    () => uploadModes.find((mode) => mode.mode === state.upload.mode) ?? null,
+    [state.upload.mode, uploadModes]
+  );
   const selectedTarget = useMemo(
     () =>
       state.selectedRun?.review_targets.find(
@@ -83,6 +110,7 @@ export function App() {
       dispatch({ type: "error", error: "Choose a file before uploading." });
       return;
     }
+    dispatch({ type: "uploadStarted" });
     dispatch({ type: "loading", value: true });
     try {
       const run = await api.uploadRun({
@@ -94,7 +122,7 @@ export function App() {
         model_preset: state.upload.modelPreset || undefined,
         top_k: state.upload.topK
       });
-      dispatch({ type: "runLoaded", run });
+      dispatch({ type: "uploadCompleted", run });
       await loadRuns();
     } catch (error) {
       dispatch({ type: "error", error: (error as Error).message });
@@ -120,9 +148,15 @@ export function App() {
         action,
         note: state.reviewNote || undefined,
         source: "rootlens-dashboard",
-        metadata: { run_label: state.selectedRun.run.label }
+        metadata: {
+          run_label: state.selectedRun.run.label,
+          target_key: selectedTarget.target_key
+        }
       });
-      dispatch({ type: "reviewRecorded", status: response.status });
+      dispatch({
+        type: "reviewRecorded",
+        status: `${response.status} for ${selectedTarget.target_key}`
+      });
     } catch (error) {
       dispatch({ type: "error", error: (error as Error).message });
     } finally {
@@ -131,6 +165,7 @@ export function App() {
   }
 
   const presets = state.bootstrap?.mvtec_model_presets.presets ?? [];
+  const apiConnected = state.bootstrap?.status === "ok";
 
   return (
     <main className="app-shell">
@@ -139,13 +174,26 @@ export function App() {
           <p className="eyebrow">RootLens</p>
           <h1>Evidence Analysis Workspace</h1>
         </div>
-        <button className="icon-button" onClick={() => void loadBootstrap()} title="Refresh">
-          <RefreshCw size={18} />
-        </button>
+        <div className="topbar-actions">
+          <span className={`connection-pill ${apiConnected ? "connected" : "disconnected"}`}>
+            <Circle size={10} fill="currentColor" />
+            {apiConnected ? `API ${state.bootstrap?.api_version}` : "API connecting"}
+          </span>
+          <button className="icon-button" onClick={() => void loadBootstrap()} title="Refresh">
+            <RefreshCw className={state.loading ? "spin" : ""} size={18} />
+          </button>
+        </div>
       </header>
 
+      {state.loading && (
+        <div className="status status-info" aria-live="polite">
+          <RefreshCw className="spin" size={16} />
+          <span>Working with the local RootLens API...</span>
+        </div>
+      )}
+
       {state.error && (
-        <div className="status status-error">
+        <div className="status status-error" aria-live="assertive">
           <AlertTriangle size={16} />
           <span>{state.error}</span>
         </div>
@@ -169,17 +217,20 @@ export function App() {
                   })
                 }
               >
-                {state.bootstrap?.upload_modes.map((mode) => (
+                {uploadModes.length === 0 && <option value={state.upload.mode}>Loading modes...</option>}
+                {uploadModes.map((mode) => (
                   <option key={mode.mode} value={mode.mode}>
                     {mode.label}
                   </option>
                 ))}
               </select>
             </label>
+            <UploadModeGuidance mode={selectedUploadMode} uploadMode={state.upload.mode} />
             <label>
               File
               <input
                 type="file"
+                accept={selectedUploadMode?.accepted_extensions.join(",")}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   dispatch({
                     type: "uploadChanged",
@@ -187,6 +238,11 @@ export function App() {
                   })
                 }
               />
+              <span className="field-hint">
+                {state.upload.file
+                  ? `${state.upload.file.name} selected`
+                  : "Choose a local example file from the paths above."}
+              </span>
             </label>
             <div className="inline-fields">
               <label>
@@ -272,8 +328,14 @@ export function App() {
             )}
             <button className="primary-button" disabled={state.loading}>
               <Send size={16} />
-              Analyze
+              {state.loading ? "Analyzing" : "Analyze"}
             </button>
+            {state.uploadStatus && (
+              <div className="inline-status status-success" aria-live="polite">
+                <Check size={16} />
+                <span>{state.uploadStatus}</span>
+              </div>
+            )}
           </form>
         </aside>
 
@@ -286,21 +348,28 @@ export function App() {
             </button>
           </div>
           <div className="run-list">
-            {state.runs.map((run) => (
-              <button
-                key={run.run_id}
-                className={`run-row ${
-                  state.selectedRun?.run.run_id === run.run_id ? "selected" : ""
-                }`}
-                onClick={() => void loadRun(run.run_id)}
-              >
-                <span className="run-title">{run.label}</span>
-                <span className="run-meta">
-                  {run.mode} · {run.dataset ?? "auto"} · {run.case_count} cases
-                </span>
-                <span className="run-meta">{new Date(run.created_at).toLocaleString()}</span>
-              </button>
-            ))}
+            {state.runs.length > 0 ? (
+              state.runs.map((run) => (
+                <button
+                  key={run.run_id}
+                  className={`run-row ${
+                    state.selectedRun?.run.run_id === run.run_id ? "selected" : ""
+                  }`}
+                  onClick={() => void loadRun(run.run_id)}
+                >
+                  <span className="run-title">{run.label}</span>
+                  <span className="run-meta">
+                    {run.mode} · {run.dataset ?? "auto"} · {run.case_count} cases
+                  </span>
+                  <span className="run-meta">{new Date(run.created_at).toLocaleString()}</span>
+                </button>
+              ))
+            ) : (
+              <EmptyMessage
+                title="No runs yet"
+                body="Upload producer records or evidence JSON to create a local review run."
+              />
+            )}
           </div>
         </aside>
 
@@ -323,7 +392,10 @@ export function App() {
           ) : (
             <div className="empty-state">
               <GitBranch size={28} />
-              <p>Select a run or upload records/evidence to inspect candidate paths.</p>
+              <div>
+                <strong>No run selected</strong>
+                <p>Select a history item or upload an example record file to inspect candidate paths, provenance, and review targets.</p>
+              </div>
             </div>
           )}
         </section>
@@ -406,15 +478,21 @@ function RunDetailView({
               </tr>
             </thead>
             <tbody>
-              {run.top_k_paths.map((path) => (
-                <tr key={String(path.path_id)}>
-                  <td>{shortId(String(path.path_id))}</td>
-                  <td>{valueText(path.target_entity_id)}</td>
-                  <td>{valueText(path.score)}</td>
-                  <td>{valueText(path.relations)}</td>
-                  <td>{valueText(path.source_edge_ids)}</td>
+              {run.top_k_paths.length > 0 ? (
+                run.top_k_paths.map((path) => (
+                  <tr key={String(path.path_id)}>
+                    <td>{shortId(String(path.path_id))}</td>
+                    <td>{valueText(path.target_entity_id)}</td>
+                    <td>{valueText(path.score)}</td>
+                    <td>{valueText(path.relations)}</td>
+                    <td>{valueText(path.source_edge_ids)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5}>No candidate paths were returned for this run.</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -442,17 +520,28 @@ function RunDetailView({
       <section className="panel wide review-panel">
         <h2>Review</h2>
         <div className="review-controls">
-          <select value={selectedTargetKey} onChange={(event) => onTargetSelected(event.target.value)}>
-            {run.review_targets.map((target) => (
-              <option key={target.target_key} value={target.target_key}>
-                {target.target_type} · {shortId(target.label)}
-              </option>
-            ))}
+          <select
+            className="review-target-select"
+            value={selectedTargetKey}
+            onChange={(event) => onTargetSelected(event.target.value)}
+            disabled={!run.review_targets.length}
+          >
+            {run.review_targets.length > 0 ? (
+              run.review_targets.map((target) => (
+                <option key={target.target_key} value={target.target_key}>
+                  {target.target_type} · {shortId(target.label)}
+                </option>
+              ))
+            ) : (
+              <option value="">No review targets</option>
+            )}
           </select>
           <input
+            className="review-note"
             value={reviewNote}
             onChange={(event) => onReviewNoteChanged(event.target.value)}
             placeholder="optional review note"
+            disabled={!selectedTarget}
           />
           <button onClick={() => onSubmitReview("accept")} disabled={!selectedTarget}>
             <Check size={16} />
@@ -466,8 +555,60 @@ function RunDetailView({
             Needs review
           </button>
         </div>
-        {reviewStatus && <p className="muted">Feedback {reviewStatus}.</p>}
+        {selectedTarget ? (
+          <p className="muted">Stable target key: {selectedTarget.target_key}</p>
+        ) : (
+          <p className="muted">No feedback target is available for this run.</p>
+        )}
+        {reviewStatus && (
+          <div className="inline-status status-success" aria-live="polite">
+            <Check size={16} />
+            <span>Feedback {reviewStatus}.</span>
+          </div>
+        )}
       </section>
+    </div>
+  );
+}
+
+function UploadModeGuidance({
+  mode,
+  uploadMode
+}: {
+  mode: UploadModeInfo | null;
+  uploadMode: UploadMode;
+}) {
+  const examples = EXAMPLE_UPLOADS[uploadMode];
+  return (
+    <div className="mode-guidance">
+      <div className="mode-guidance-heading">
+        <Info size={16} />
+        <strong>{mode?.label ?? "Upload mode"}</strong>
+      </div>
+      <p>{mode?.description ?? "Loading accepted file expectations from the API."}</p>
+      {mode && (
+        <p className="field-hint">
+          Accepted: {mode.accepted_extensions.join(", ")}
+          {mode.required_fields.length ? ` · Required fields: ${mode.required_fields.join(", ")}` : ""}
+        </p>
+      )}
+      <ul className="example-list" aria-label="Example upload files">
+        {examples.map((example) => (
+          <li key={example.path}>
+            <span>{example.label}</span>
+            <code>{example.path}</code>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function EmptyMessage({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="empty-message">
+      <strong>{title}</strong>
+      <span>{body}</span>
     </div>
   );
 }

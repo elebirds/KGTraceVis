@@ -222,6 +222,15 @@ This writes ignored review artifacts under `artifacts/paper_tables_v0/` with
 dataset/noise/reference-scope grouping and command provenance. It does not copy
 anything into `paper/`.
 
+Run the maintained RootLens dashboard smoke:
+
+```bash
+uv run python scripts/smoke_rootlens_dashboard.py
+```
+
+See [`docs/rootlens_dashboard.md`](docs/rootlens_dashboard.md) for local API,
+Vite, example upload, and review-feedback workflow details.
+
 Build local producer-output records before adapter ingestion:
 
 ```bash
