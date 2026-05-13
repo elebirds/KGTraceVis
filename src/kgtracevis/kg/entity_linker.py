@@ -16,6 +16,14 @@ LINKABLE_OBSERVATION_FACETS = {
     "variable",
     "log_event",
 }
+FIELD_ALLOWED_LABELS = {
+    "object": {"Object"},
+    "anomaly_type": {"AnomalyType", "DefectType", "FaultType"},
+    "location": {"Location", "ProcessUnit"},
+    "morphology": {"Morphology"},
+    "variable": {"Variable"},
+    "log_event": {"LogEvent"},
+}
 
 
 @dataclass(frozen=True)
@@ -51,11 +59,17 @@ def link_evidence_entities(
             mention_item.mention,
             occurrences[occurrence_key],
         )
-        candidates = graph.candidates(
+        raw_candidates = graph.candidates(
             mention_item.mention,
             scenario=evidence.dataset,
-            top_k=top_k,
+            top_k=max(top_k * 5, 10),
             min_score=min_score,
+        )
+        candidates = _field_aware_candidates(
+            mention_item.field,
+            raw_candidates,
+            graph,
+            top_k=top_k,
         )
         if not candidates:
             links.append(_link_payload(mention_item, link_id, candidates=[]))
@@ -84,6 +98,26 @@ def selected_entities_by_field(linked_entities: list[dict[str, Any]]) -> dict[st
         if isinstance(entity_id, str):
             selected[str(link["field"])] = entity_id
     return selected
+
+
+def _field_aware_candidates(
+    field: str,
+    candidates: list[Any],
+    graph: KnowledgeGraph,
+    *,
+    top_k: int,
+) -> list[Any]:
+    """Prefer candidates whose node labels match the evidence field."""
+    allowed_labels = FIELD_ALLOWED_LABELS.get(field)
+    if not allowed_labels:
+        return candidates[:top_k]
+    filtered = [
+        candidate
+        for candidate in candidates
+        if graph.nodes.get(candidate.entity_id) is not None
+        and graph.nodes[candidate.entity_id].label in allowed_labels
+    ]
+    return (filtered or candidates)[:top_k]
 
 
 def _link_payload(
