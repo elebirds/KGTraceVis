@@ -24,23 +24,29 @@ npm run dev
 
 The API runs on `http://127.0.0.1:8000`. Vite runs on
 `http://127.0.0.1:5173` and proxies `/api` to the API server. The dashboard
-uses Ant Design for stable application components and Tailwind CSS through the
-Vite plugin for layout utilities.
+uses Ant Design for stable application components, Tailwind CSS through the
+Vite plugin for layout utilities, and React Router for module-level navigation.
 
-On first load, the dashboard opens to an Overview page rather than a single
-mixed workspace. A persistent top navigation separates the demo into four
-focused pages:
+On first load, the dashboard opens to Home rather than a single mixed
+workspace. A persistent top navigation separates the system into product
+modules:
 
-- Overview: API/KG/run status and next actions.
-- Intake: upload modes, accepted file extensions, exact local example paths,
-  and run history.
-- Case Analysis: selected-run evidence, path graph, provenance, and review
-  queue.
+- Home: API/KG/run status, recent analysis context, and next actions.
+- Analysis: live upload, historical run lookup, and per-run detail.
 - KG Studio: source registry, source-to-KG drafts, candidate graph, edge
   provenance, and KG draft adjustments.
+- Experiments: paper case, coverage, before/after, and export workspace
+  placeholders.
 
-If no runs have been created, Intake and Case Analysis show empty states until
-a user uploads a file or selects an existing run.
+Analysis is route-backed:
+
+- `/analysis/live` runs a new upload and shows recent analysis context.
+- `/analysis/history` shows previous runs in a table for lookup.
+- `/analysis/:runId` opens a timeline-driven detail view for one run.
+
+The detail view uses a stepper so one investigation stage owns the main canvas
+at a time: input, model evidence, normalized evidence, entity linking,
+consistency/correction, candidate paths, and review/provenance.
 
 ## Example Uploads
 

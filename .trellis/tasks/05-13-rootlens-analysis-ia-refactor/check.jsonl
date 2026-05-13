@@ -1,0 +1,4 @@
+{"type":"note","text":"Verify route-backed IA, smoke compatibility, and no backend contract drift."}
+{"type":"command","cmd":"cd web && npm run typecheck"}
+{"type":"command","cmd":"cd web && npm run build"}
+{"type":"command","cmd":"uv run python scripts/smoke_rootlens_dashboard.py"}

@@ -239,6 +239,104 @@ button {
   line-height: 1.35;
 }
 
+.analysis-module,
+.analysis-detail-page,
+.experiments-page {
+  display: grid;
+  gap: 16px;
+}
+
+.analysis-subnav {
+  background: transparent !important;
+  border-bottom: 0 !important;
+  line-height: normal;
+}
+
+.analysis-subnav.ant-menu-horizontal {
+  display: flex;
+  gap: 4px;
+}
+
+.analysis-subnav .ant-menu-item {
+  border-radius: 8px;
+  height: 48px;
+  line-height: normal;
+  padding: 7px 13px !important;
+}
+
+.analysis-subnav .ant-menu-item-selected {
+  background: #ffffff !important;
+  box-shadow: var(--shadow-sm);
+}
+
+.analysis-subnav .ant-menu-item::after {
+  display: none;
+}
+
+.analysis-live-grid {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(420px, 0.72fr) minmax(320px, 0.28fr);
+}
+
+.analysis-primary,
+.analysis-side-panel {
+  min-width: 0;
+}
+
+.analysis-upload-panel .ant-card-body {
+  max-width: 760px;
+}
+
+.selected-table-row td {
+  background: var(--primary-soft) !important;
+}
+
+.analysis-case-header .ant-card-body {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.analysis-case-header h2 {
+  margin: 0 0 4px;
+}
+
+.analysis-timeline-card .ant-card-body {
+  overflow-x: auto;
+}
+
+.analysis-stage-canvas {
+  min-width: 0;
+}
+
+.analysis-stage-grid {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.analysis-stage-grid.single {
+  grid-template-columns: 1fr;
+}
+
+.json-block {
+  background: #0f1720;
+  border-radius: 8px;
+  color: #d8e6ed;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+  max-height: 560px;
+  overflow: auto;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+
 .app-alert {
   margin: 12px 24px 0;
 }
@@ -1316,6 +1414,11 @@ th {
   .kg-studio-grid {
     grid-template-columns: 1fr 1fr;
   }
+
+  .analysis-live-grid,
+  .analysis-stage-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 940px) {
@@ -1353,6 +1456,11 @@ th {
 
   .path-workspace-grid {
     grid-template-columns: 1fr;
+  }
+
+  .analysis-case-header .ant-card-body {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .review-controls {
@@ -1404,6 +1512,14 @@ th {
   }
 
   .dashboard-nav small {
+    display: none;
+  }
+
+  .analysis-subnav {
+    overflow-x: auto;
+  }
+
+  .analysis-subnav small {
     display: none;
   }
 

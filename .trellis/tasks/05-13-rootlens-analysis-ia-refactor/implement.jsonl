@@ -1,0 +1,6 @@
+{"type":"note","text":"Refactor RootLens dashboard IA into route-backed Home, Analysis, KG Studio, and Experiments modules. Keep existing FastAPI contracts and service logic unchanged."}
+{"type":"file","path":"web/src/App.tsx","reason":"Primary dashboard shell and page composition."}
+{"type":"file","path":"web/src/styles.css","reason":"Dashboard layout and timeline styling."}
+{"type":"file","path":"web/src/state.ts","reason":"Existing UI reducer; avoid backend logic changes."}
+{"type":"file","path":"web/src/types.ts","reason":"Existing API contract types."}
+{"type":"file","path":"docs/rootlens_dashboard.md","reason":"Update user-facing dashboard IA docs."}

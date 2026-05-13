@@ -17,12 +17,14 @@ import {
   Menu,
   Select,
   Space,
+  Steps,
   Statistic,
+  Table,
   Tag,
   Typography,
   Upload
 } from "antd";
-import type { MenuProps } from "antd";
+import type { MenuProps, TableColumnsType } from "antd";
 import {
   ApiOutlined,
   BranchesOutlined,
@@ -45,8 +47,17 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum
 } from "d3-force";
-import { useEffect, useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import type { ReactNode } from "react";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams
+} from "react-router-dom";
 
 import { api } from "./api";
 import { initialState, reducer } from "./state";
@@ -63,6 +74,7 @@ import type {
   KGStudioSourceDocument,
   KGSourceDraftResponse,
   RunDetail,
+  RunSummary,
   PathGraphEdge,
   PathGraphPath,
   UploadMode,
@@ -85,15 +97,35 @@ const EXAMPLE_UPLOADS: Record<UploadMode, Array<{ path: string; label: string }>
     { path: "data/external/mvtec/<object>/test/<defect>/<image>.png", label: "Local MVTec image" }
   ]
 };
-const DASHBOARD_PAGES: Array<{
-  page: AppState["activePage"];
+type AppRouteKey = "home" | "analysis" | "kg-studio" | "experiments";
+type AnalysisRouteKey = "live" | "history" | "detail";
+
+const TOP_LEVEL_MODULES: Array<{
+  key: AppRouteKey;
+  path: string;
   label: string;
   description: string;
 }> = [
-  { page: "overview", label: "Overview", description: "Status and next actions" },
-  { page: "intake", label: "Intake", description: "Upload and run history" },
-  { page: "analysis", label: "Case Analysis", description: "Paths and evidence review" },
-  { page: "kg", label: "KG Studio", description: "Sources, graph, and drafts" }
+  { key: "home", path: "/", label: "Home", description: "Status and next actions" },
+  {
+    key: "analysis",
+    path: "/analysis/live",
+    label: "Analysis",
+    description: "Live runs, history, and case detail"
+  },
+  { key: "kg-studio", path: "/kg-studio", label: "KG Studio", description: "Sources, graph, and drafts" },
+  { key: "experiments", path: "/experiments", label: "Experiments", description: "Paper cases and exports" }
+];
+
+const ANALYSIS_VIEWS: Array<{
+  key: AnalysisRouteKey;
+  path: string;
+  label: string;
+  description: string;
+}> = [
+  { key: "live", path: "/analysis/live", label: "Live Analysis", description: "Upload and run new evidence" },
+  { key: "history", path: "/analysis/history", label: "History", description: "Search previous runs" },
+  { key: "detail", path: "/analysis/detail", label: "Detail", description: "Timeline investigation" }
 ];
 
 function valueText(value: unknown): string {
@@ -109,7 +141,17 @@ function shortId(value: string): string {
 }
 
 export function App() {
+  return (
+    <BrowserRouter>
+      <RootLensApp />
+    </BrowserRouter>
+  );
+}
+
+function RootLensApp() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const location = useLocation();
+  const navigate = useNavigate();
   const uploadModes = state.bootstrap?.upload_modes ?? [];
   const selectedUploadMode = useMemo(
     () => uploadModes.find((mode) => mode.mode === state.upload.mode) ?? null,
@@ -180,6 +222,11 @@ export function App() {
     }
   }
 
+  async function openRun(runId: string) {
+    navigate(`/analysis/${runId}`);
+    await loadRun(runId);
+  }
+
   async function runUpload() {
     if (!state.upload.file) {
       dispatch({ type: "error", error: "Choose a file before uploading." });
@@ -199,6 +246,7 @@ export function App() {
       });
       dispatch({ type: "uploadCompleted", run });
       await loadRuns();
+      navigate(`/analysis/${run.run.run_id}`);
     } catch (error) {
       dispatch({ type: "error", error: (error as Error).message });
     } finally {
@@ -327,8 +375,8 @@ export function App() {
 
   const presets = state.bootstrap?.mvtec_model_presets.presets ?? [];
   const apiConnected = state.bootstrap?.status === "ok";
-  const activePageInfo =
-    DASHBOARD_PAGES.find((item) => item.page === state.activePage) ?? DASHBOARD_PAGES[0];
+  const pageInfo = pageInfoForPath(location.pathname);
+  const activeRoute = activeRouteForPath(location.pathname);
 
   return (
     <ConfigProvider
@@ -352,8 +400,8 @@ export function App() {
               </div>
             </div>
             <DashboardNav
-              activePage={state.activePage}
-              onPageSelected={(page) => dispatch({ type: "pageSelected", page })}
+              activeRoute={activeRoute}
+              onRouteSelected={(path) => navigate(path)}
             />
             <div className="topbar-actions">
               <Tag
@@ -389,286 +437,181 @@ export function App() {
         <section className="page-heading">
           <div>
             <p className="eyebrow">Workspace</p>
-            <h1>{activePageInfo.label}</h1>
-            <span className="page-description">{activePageInfo.description}</span>
+            <h1>{pageInfo.label}</h1>
+            <span className="page-description">{pageInfo.description}</span>
           </div>
         </section>
-        <section className={`workspace-grid page-${state.activePage}`}>
-        <section className="overview-region">
-          <OverviewPage
-            bootstrapStatus={state.bootstrap?.status ?? "connecting"}
-            apiVersion={state.bootstrap?.api_version ?? "unknown"}
-            recentRunCount={state.runs.length}
-            selectedRunLabel={state.selectedRun?.run.label ?? "No run selected"}
-            kgStatus={state.kgStudio?.status ?? "loading"}
-            kgEdgeCount={state.kgStudio?.edge_count ?? 0}
-            onPageSelected={(page) => dispatch({ type: "pageSelected", page })}
-          />
-        </section>
-
-        <Card
-          className="upload-panel"
-          title={
-            <Space>
-              <CloudUploadOutlined />
-              Upload
-            </Space>
-          }
-        >
-          <Form layout="vertical" onFinish={() => void runUpload()} className="stack">
-            <Form.Item label="Mode">
-              <Select
-                value={state.upload.mode}
-                onChange={(value) =>
-                  dispatch({
-                    type: "uploadChanged",
-                    patch: { mode: value as UploadMode }
-                  })
-                }
-                options={
-                  uploadModes.length
-                    ? uploadModes.map((mode) => ({ value: mode.mode, label: mode.label }))
-                    : [{ value: state.upload.mode, label: "Loading modes..." }]
-                }
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <HomePage
+                bootstrapStatus={state.bootstrap?.status ?? "connecting"}
+                apiVersion={state.bootstrap?.api_version ?? "unknown"}
+                recentRunCount={state.runs.length}
+                selectedRunLabel={state.selectedRun?.run.label ?? "No run selected"}
+                kgStatus={state.kgStudio?.status ?? "loading"}
+                kgEdgeCount={state.kgStudio?.edge_count ?? 0}
+                onNavigate={(path) => navigate(path)}
               />
-            </Form.Item>
-            <UploadModeGuidance mode={selectedUploadMode} uploadMode={state.upload.mode} />
-            <Form.Item label="File">
-              <Upload
-                accept={selectedUploadMode?.accepted_extensions.join(",")}
-                maxCount={1}
-                beforeUpload={(file) => {
-                  dispatch({
-                    type: "uploadChanged",
-                    patch: { file }
-                  });
-                  return false;
-                }}
-                onRemove={() => {
-                  dispatch({ type: "uploadChanged", patch: { file: null } });
-                }}
-              >
-                <Button icon={<CloudUploadOutlined />}>Choose file</Button>
-              </Upload>
-              <Text type="secondary" className="field-hint">
-                {state.upload.file
-                  ? `${state.upload.file.name} selected`
-                  : "Choose a local example file from the paths above."}
-              </Text>
-            </Form.Item>
-            <div className="inline-fields">
-              <Form.Item label="Dataset">
-                <Select
-                  value={state.upload.dataset}
-                  onChange={(value) =>
-                    dispatch({ type: "uploadChanged", patch: { dataset: value } })
-                  }
-                  options={[
-                    { value: "", label: "auto" },
-                    ...(state.bootstrap?.supported_datasets.map((dataset) => ({
-                      value: dataset,
-                      label: dataset
-                    })) ?? [])
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item label="Top K">
-                <InputNumber
-                  min={1}
-                  max={20}
-                  value={state.upload.topK}
-                  onChange={(value) =>
-                    dispatch({
-                      type: "uploadChanged",
-                      patch: { topK: Number(value ?? 1) }
-                    })
-                  }
-                />
-              </Form.Item>
-            </div>
-            {state.upload.mode === "image" && (
-              <>
-                <Form.Item label="Object">
-                  <Input
-                    value={state.upload.objectName}
-                    onChange={(event) =>
-                      dispatch({
-                        type: "uploadChanged",
-                        patch: { objectName: event.target.value }
-                      })
-                    }
-                  />
-                </Form.Item>
-                <div className="inline-fields">
-                  <Form.Item label="Preset">
-                    <Select
-                      value={state.upload.modelPreset}
-                      onChange={(value) =>
-                        dispatch({
-                          type: "uploadChanged",
-                          patch: { modelPreset: value }
-                        })
-                      }
-                      options={[
-                        { value: "auto", label: "auto" },
-                        ...presets.map((preset) => ({
-                          value: String(preset.preset),
-                          label: String(preset.preset)
-                        }))
-                      ]}
-                    />
-                  </Form.Item>
-                  <Form.Item label="Defect">
-                    <Input
-                      value={state.upload.defectType}
-                      onChange={(event) =>
-                        dispatch({
-                          type: "uploadChanged",
-                          patch: { defectType: event.target.value }
-                        })
-                      }
-                    />
-                  </Form.Item>
-                </div>
-              </>
-            )}
-            <Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={state.loading}>
-              {state.loading ? "Analyzing" : "Analyze"}
-            </Button>
-            {state.uploadStatus && (
-              <Alert message={state.uploadStatus} type="success" showIcon />
-            )}
-          </Form>
-        </Card>
-
-        <Card
-          className="history-panel"
-          title={
-            <Space>
-              <HistoryOutlined />
-              Run History
-            </Space>
-          }
-          extra={
-            <Button size="small" icon={<ReloadOutlined />} onClick={() => void loadRuns()}>
-              Refresh
-            </Button>
-          }
-        >
-          {state.runs.length > 0 ? (
-            <List
-              className="run-list"
-              dataSource={state.runs}
-              renderItem={(run) => (
-                <List.Item
-                  className={`run-row ${
-                    state.selectedRun?.run.run_id === run.run_id ? "selected" : ""
-                  }`}
-                  onClick={() => void loadRun(run.run_id)}
-                >
-                  <List.Item.Meta
-                    title={run.label}
-                    description={
-                      <Space direction="vertical" size={2}>
-                        <Text type="secondary">
-                          {run.mode} · {run.dataset ?? "auto"} · {run.case_count} cases
-                        </Text>
-                        <Text type="secondary">{new Date(run.created_at).toLocaleString()}</Text>
-                      </Space>
-                    }
-                  />
-                </List.Item>
-              )}
-            />
-          ) : (
-            <Empty description="Upload producer records or evidence JSON to create a run." />
-          )}
-        </Card>
-
-        <section className="detail-region">
-          {state.selectedRun ? (
-            <RunDetailView
-              run={state.selectedRun}
-              selectedTarget={selectedTarget}
-              selectedTargetKey={state.selectedTargetKey}
-              reviewNote={state.reviewNote}
-              reviewStatus={state.reviewStatus}
-              onTargetSelected={(targetKey) =>
-                dispatch({ type: "targetSelected", targetKey })
-              }
-              onReviewNoteChanged={(note) =>
-                dispatch({ type: "reviewNoteChanged", note })
-              }
-              onSubmitReview={(action) => void submitReview(action)}
-            />
-          ) : (
-            <Card className="empty-state">
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Select a history item or upload an example record file to inspect candidate paths, provenance, and review targets."
-              />
-            </Card>
-          )}
-        </section>
-
-        <section className="kg-studio-region">
-          <KGStudioPanel
-            payload={state.kgStudio}
-            selectedTarget={selectedKGTarget}
-            selectedTargetKey={state.selectedKGEdgeKey}
-            reviewNote={state.kgReviewNote}
-            reviewStatus={state.kgReviewStatus}
-            draftAction={state.kgDraftAction}
-            draftRelation={state.kgDraftRelation}
-            draftEvidence={state.kgDraftEvidence}
-            draftConfidence={state.kgDraftConfidence}
-            draftStatus={state.kgDraftStatus}
-            sourceDraftText={state.sourceDraftText}
-            sourceDraftSourceId={state.sourceDraftSourceId}
-            sourceDraftScenario={state.sourceDraftScenario}
-            sourceDraftConfidence={state.sourceDraftConfidence}
-            sourceDraftResult={state.sourceDraftResult}
-            onRefresh={() => void loadKGStudio()}
-            onTargetSelected={(targetKey) =>
-              dispatch({ type: "kgEdgeSelected", targetKey })
             }
-            onReviewNoteChanged={(note) =>
-              dispatch({ type: "kgReviewNoteChanged", note })
-            }
-            onSubmitReview={(action) => void submitKGReview(action)}
-            onDraftChanged={(patch) =>
-              dispatch({ type: "kgDraftChanged", patch })
-            }
-            onSubmitDraft={() => void submitKGDraft()}
-            onSourceDraftChanged={(patch) =>
-              dispatch({ type: "sourceDraftChanged", patch })
-            }
-            onGenerateSourceDraft={() => void generateSourceDraft()}
           />
-        </section>
-        </section>
+          <Route path="/analysis" element={<Navigate to="/analysis/live" replace />} />
+          <Route
+            path="/analysis/live"
+            element={
+              <AnalysisLivePage
+                uploadPanel={
+                  <UploadPanel
+                    state={state}
+                    uploadModes={uploadModes}
+                    selectedUploadMode={selectedUploadMode}
+                    presets={presets}
+                    onUploadChanged={(patch) =>
+                      dispatch({ type: "uploadChanged", patch })
+                    }
+                    onRunUpload={() => void runUpload()}
+                  />
+                }
+                recentRuns={state.runs}
+                selectedRunId={state.selectedRun?.run.run_id ?? ""}
+                onOpenRun={(runId) => void openRun(runId)}
+                onOpenHistory={() => navigate("/analysis/history")}
+              />
+            }
+          />
+          <Route
+            path="/analysis/history"
+            element={
+              <AnalysisHistoryPage
+                runs={state.runs}
+                selectedRunId={state.selectedRun?.run.run_id ?? ""}
+                onRefresh={() => void loadRuns()}
+                onOpenRun={(runId) => void openRun(runId)}
+              />
+            }
+          />
+          <Route
+            path="/analysis/:runId"
+            element={
+              <AnalysisDetailRoute
+                run={state.selectedRun}
+                loading={state.loading}
+                selectedTarget={selectedTarget}
+                selectedTargetKey={state.selectedTargetKey}
+                reviewNote={state.reviewNote}
+                reviewStatus={state.reviewStatus}
+                onLoadRun={(runId) => void loadRun(runId)}
+                onTargetSelected={(targetKey) =>
+                  dispatch({ type: "targetSelected", targetKey })
+                }
+                onReviewNoteChanged={(note) =>
+                  dispatch({ type: "reviewNoteChanged", note })
+                }
+                onSubmitReview={(action) => void submitReview(action)}
+                onOpenHistory={() => navigate("/analysis/history")}
+              />
+            }
+          />
+          <Route
+            path="/kg-studio"
+            element={
+              <KGStudioPanel
+                payload={state.kgStudio}
+                selectedTarget={selectedKGTarget}
+                selectedTargetKey={state.selectedKGEdgeKey}
+                reviewNote={state.kgReviewNote}
+                reviewStatus={state.kgReviewStatus}
+                draftAction={state.kgDraftAction}
+                draftRelation={state.kgDraftRelation}
+                draftEvidence={state.kgDraftEvidence}
+                draftConfidence={state.kgDraftConfidence}
+                draftStatus={state.kgDraftStatus}
+                sourceDraftText={state.sourceDraftText}
+                sourceDraftSourceId={state.sourceDraftSourceId}
+                sourceDraftScenario={state.sourceDraftScenario}
+                sourceDraftConfidence={state.sourceDraftConfidence}
+                sourceDraftResult={state.sourceDraftResult}
+                onRefresh={() => void loadKGStudio()}
+                onTargetSelected={(targetKey) =>
+                  dispatch({ type: "kgEdgeSelected", targetKey })
+                }
+                onReviewNoteChanged={(note) =>
+                  dispatch({ type: "kgReviewNoteChanged", note })
+                }
+                onSubmitReview={(action) => void submitKGReview(action)}
+                onDraftChanged={(patch) =>
+                  dispatch({ type: "kgDraftChanged", patch })
+                }
+                onSubmitDraft={() => void submitKGDraft()}
+                onSourceDraftChanged={(patch) =>
+                  dispatch({ type: "sourceDraftChanged", patch })
+                }
+                onGenerateSourceDraft={() => void generateSourceDraft()}
+              />
+            }
+          />
+          <Route
+            path="/experiments"
+            element={
+              <ExperimentsPage
+                runCount={state.runs.length}
+                kgEdgeCount={state.kgStudio?.edge_count ?? 0}
+                onOpenAnalysis={() => navigate("/analysis/history")}
+                onOpenKG={() => navigate("/kg-studio")}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
         </Content>
       </Layout>
     </ConfigProvider>
   );
 }
 
+function pageInfoForPath(pathname: string): { label: string; description: string } {
+  if (pathname.startsWith("/analysis")) {
+    if (pathname === "/analysis/history") {
+      return { label: "Analysis History", description: "Search previous runs and reopen cases" };
+    }
+    if (pathname !== "/analysis" && pathname !== "/analysis/live") {
+      return { label: "Analysis Detail", description: "Timeline-driven case investigation" };
+    }
+    return { label: "Live Analysis", description: "Upload evidence and run a new analysis" };
+  }
+  if (pathname.startsWith("/kg-studio")) {
+    return { label: "KG Studio", description: "Sources, candidate graph, and review drafts" };
+  }
+  if (pathname.startsWith("/experiments")) {
+    return { label: "Experiments", description: "Paper cases, coverage, and export preparation" };
+  }
+  return { label: "Home", description: "System status and next actions" };
+}
+
+function activeRouteForPath(pathname: string): AppRouteKey {
+  if (pathname.startsWith("/analysis")) return "analysis";
+  if (pathname.startsWith("/kg-studio")) return "kg-studio";
+  if (pathname.startsWith("/experiments")) return "experiments";
+  return "home";
+}
+
 function DashboardNav({
-  activePage,
-  onPageSelected
+  activeRoute,
+  onRouteSelected
 }: {
-  activePage: AppState["activePage"];
-  onPageSelected: (page: AppState["activePage"]) => void;
+  activeRoute: AppRouteKey;
+  onRouteSelected: (path: string) => void;
 }) {
-  const menuIcons: Record<AppState["activePage"], ReactNode> = {
-    overview: <HomeOutlined />,
-    intake: <CloudUploadOutlined />,
+  const menuIcons: Record<AppRouteKey, ReactNode> = {
+    home: <HomeOutlined />,
     analysis: <BranchesOutlined />,
-    kg: <DatabaseOutlined />
+    "kg-studio": <DatabaseOutlined />,
+    experiments: <BarChart3 size={15} />
   };
-  const items: MenuProps["items"] = DASHBOARD_PAGES.map((item) => ({
-    key: item.page,
-    icon: menuIcons[item.page],
+  const items: MenuProps["items"] = TOP_LEVEL_MODULES.map((item) => ({
+    key: item.key,
+    icon: menuIcons[item.key],
     label: (
       <div className="menu-label">
         <span>{item.label}</span>
@@ -681,21 +624,24 @@ function DashboardNav({
       className="dashboard-nav"
       mode="horizontal"
       theme="light"
-      selectedKeys={[activePage]}
+      selectedKeys={[activeRoute]}
       items={items}
-      onClick={({ key }) => onPageSelected(key as AppState["activePage"])}
+      onClick={({ key }) => {
+        const route = TOP_LEVEL_MODULES.find((item) => item.key === key);
+        if (route) onRouteSelected(route.path);
+      }}
     />
   );
 }
 
-function OverviewPage({
+function HomePage({
   bootstrapStatus,
   apiVersion,
   recentRunCount,
   selectedRunLabel,
   kgStatus,
   kgEdgeCount,
-  onPageSelected
+  onNavigate
 }: {
   bootstrapStatus: string;
   apiVersion: string;
@@ -703,7 +649,7 @@ function OverviewPage({
   selectedRunLabel: string;
   kgStatus: string;
   kgEdgeCount: number;
-  onPageSelected: (page: AppState["activePage"]) => void;
+  onNavigate: (path: string) => void;
 }) {
   return (
     <div className="overview-page">
@@ -717,13 +663,13 @@ function OverviewPage({
           </Paragraph>
         </div>
         <div className="overview-actions">
-          <Button type="primary" icon={<CloudUploadOutlined />} onClick={() => onPageSelected("intake")}>
+          <Button type="primary" icon={<CloudUploadOutlined />} onClick={() => onNavigate("/analysis/live")}>
             New analysis
           </Button>
-          <Button icon={<BranchesOutlined />} onClick={() => onPageSelected("analysis")}>
-            Review case paths
+          <Button icon={<HistoryOutlined />} onClick={() => onNavigate("/analysis/history")}>
+            Browse history
           </Button>
-          <Button icon={<DatabaseOutlined />} onClick={() => onPageSelected("kg")}>
+          <Button icon={<DatabaseOutlined />} onClick={() => onNavigate("/kg-studio")}>
             Open KG Studio
           </Button>
         </div>
@@ -748,18 +694,424 @@ function OverviewPage({
       </section>
 
       <section className="overview-flow">
-        {DASHBOARD_PAGES.filter((item) => item.page !== "overview").map((item, index) => (
+        {TOP_LEVEL_MODULES.filter((item) => item.key !== "home").map((item, index) => (
           <Card
-            key={item.page}
+            key={item.key}
             className="overview-flow-card"
             hoverable
-            onClick={() => onPageSelected(item.page)}
+            onClick={() => onNavigate(item.path)}
           >
             <span>{`0${index + 1}`}</span>
             <strong>{item.label}</strong>
             <small>{item.description}</small>
           </Card>
         ))}
+      </section>
+    </div>
+  );
+}
+
+function AnalysisSubnav({ activeView }: { activeView: AnalysisRouteKey }) {
+  const navigate = useNavigate();
+  return (
+    <Menu
+      className="analysis-subnav"
+      mode="horizontal"
+      selectedKeys={[activeView]}
+      items={ANALYSIS_VIEWS.filter((item) => item.key !== "detail").map((item) => ({
+        key: item.key,
+        label: (
+          <div className="menu-label">
+            <span>{item.label}</span>
+            <small>{item.description}</small>
+          </div>
+        )
+      }))}
+      onClick={({ key }) => {
+        const view = ANALYSIS_VIEWS.find((item) => item.key === key);
+        if (view) navigate(view.path);
+      }}
+    />
+  );
+}
+
+function AnalysisLivePage({
+  uploadPanel,
+  recentRuns,
+  selectedRunId,
+  onOpenRun,
+  onOpenHistory
+}: {
+  uploadPanel: ReactNode;
+  recentRuns: RunSummary[];
+  selectedRunId: string;
+  onOpenRun: (runId: string) => void;
+  onOpenHistory: () => void;
+}) {
+  return (
+    <div className="analysis-module">
+      <AnalysisSubnav activeView="live" />
+      <section className="analysis-live-grid">
+        <div className="analysis-primary">{uploadPanel}</div>
+        <Card
+          className="analysis-side-panel"
+          title={
+            <Space>
+              <HistoryOutlined />
+              Recent analyses
+            </Space>
+          }
+          extra={
+            <Button size="small" onClick={onOpenHistory}>
+              View all
+            </Button>
+          }
+        >
+          <RunList
+            runs={recentRuns.slice(0, 6)}
+            selectedRunId={selectedRunId}
+            onOpenRun={onOpenRun}
+            emptyDescription="No analysis runs yet. Upload evidence to create the first run."
+          />
+        </Card>
+      </section>
+    </div>
+  );
+}
+
+function UploadPanel({
+  state,
+  uploadModes,
+  selectedUploadMode,
+  presets,
+  onUploadChanged,
+  onRunUpload
+}: {
+  state: AppState;
+  uploadModes: UploadModeInfo[];
+  selectedUploadMode: UploadModeInfo | null;
+  presets: Array<Record<string, unknown>>;
+  onUploadChanged: (patch: Partial<AppState["upload"]>) => void;
+  onRunUpload: () => void;
+}) {
+  return (
+    <Card
+      className="upload-panel analysis-upload-panel"
+      title={
+        <Space>
+          <CloudUploadOutlined />
+          Live Analysis
+        </Space>
+      }
+    >
+      <Form layout="vertical" onFinish={onRunUpload} className="stack">
+        <Form.Item label="Mode">
+          <Select
+            value={state.upload.mode}
+            onChange={(value) => onUploadChanged({ mode: value as UploadMode })}
+            options={
+              uploadModes.length
+                ? uploadModes.map((mode) => ({ value: mode.mode, label: mode.label }))
+                : [{ value: state.upload.mode, label: "Loading modes..." }]
+            }
+          />
+        </Form.Item>
+        <UploadModeGuidance mode={selectedUploadMode} uploadMode={state.upload.mode} />
+        <Form.Item label="File">
+          <Upload
+            accept={selectedUploadMode?.accepted_extensions.join(",")}
+            maxCount={1}
+            beforeUpload={(file) => {
+              onUploadChanged({ file });
+              return false;
+            }}
+            onRemove={() => {
+              onUploadChanged({ file: null });
+            }}
+          >
+            <Button icon={<CloudUploadOutlined />}>Choose file</Button>
+          </Upload>
+          <Text type="secondary" className="field-hint">
+            {state.upload.file
+              ? `${state.upload.file.name} selected`
+              : "Choose a local example file from the paths above."}
+          </Text>
+        </Form.Item>
+        <div className="inline-fields">
+          <Form.Item label="Dataset">
+            <Select
+              value={state.upload.dataset}
+              onChange={(value) => onUploadChanged({ dataset: value })}
+              options={[
+                { value: "", label: "auto" },
+                ...(state.bootstrap?.supported_datasets.map((dataset) => ({
+                  value: dataset,
+                  label: dataset
+                })) ?? [])
+              ]}
+            />
+          </Form.Item>
+          <Form.Item label="Top K">
+            <InputNumber
+              min={1}
+              max={20}
+              value={state.upload.topK}
+              onChange={(value) => onUploadChanged({ topK: Number(value ?? 1) })}
+            />
+          </Form.Item>
+        </div>
+        {state.upload.mode === "image" && (
+          <>
+            <Form.Item label="Object">
+              <Input
+                value={state.upload.objectName}
+                onChange={(event) => onUploadChanged({ objectName: event.target.value })}
+              />
+            </Form.Item>
+            <div className="inline-fields">
+              <Form.Item label="Preset">
+                <Select
+                  value={state.upload.modelPreset}
+                  onChange={(value) => onUploadChanged({ modelPreset: value })}
+                  options={[
+                    { value: "auto", label: "auto" },
+                    ...presets.map((preset) => ({
+                      value: String(preset.preset),
+                      label: String(preset.preset)
+                    }))
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item label="Defect">
+                <Input
+                  value={state.upload.defectType}
+                  onChange={(event) => onUploadChanged({ defectType: event.target.value })}
+                />
+              </Form.Item>
+            </div>
+          </>
+        )}
+        <Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={state.loading}>
+          {state.loading ? "Analyzing" : "Analyze"}
+        </Button>
+        {state.uploadStatus && <Alert message={state.uploadStatus} type="success" showIcon />}
+      </Form>
+    </Card>
+  );
+}
+
+function AnalysisHistoryPage({
+  runs,
+  selectedRunId,
+  onRefresh,
+  onOpenRun
+}: {
+  runs: RunSummary[];
+  selectedRunId: string;
+  onRefresh: () => void;
+  onOpenRun: (runId: string) => void;
+}) {
+  const columns: TableColumnsType<RunSummary> = [
+    {
+      title: "Run",
+      dataIndex: "label",
+      key: "label",
+      render: (label: string, run) => (
+        <Button type="link" onClick={() => onOpenRun(run.run_id)}>
+          {label}
+        </Button>
+      )
+    },
+    { title: "Dataset", dataIndex: "dataset", key: "dataset", render: valueText },
+    { title: "Mode", dataIndex: "mode", key: "mode" },
+    { title: "Cases", dataIndex: "case_count", key: "case_count" },
+    { title: "Evidence", dataIndex: "evidence_count", key: "evidence_count" },
+    {
+      title: "Created",
+      dataIndex: "created_at",
+      key: "created_at",
+      render: (value: string) => new Date(value).toLocaleString()
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      render: (value: string) => <Tag color={value === "completed" ? "success" : "error"}>{value}</Tag>
+    }
+  ];
+  return (
+    <div className="analysis-module">
+      <AnalysisSubnav activeView="history" />
+      <Card
+        title={
+          <Space>
+            <HistoryOutlined />
+            Analysis History
+          </Space>
+        }
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={onRefresh}>
+            Refresh
+          </Button>
+        }
+      >
+        <Table
+          rowKey="run_id"
+          columns={columns}
+          dataSource={runs}
+          pagination={{ pageSize: 8 }}
+          rowClassName={(run) => (run.run_id === selectedRunId ? "selected-table-row" : "")}
+        />
+      </Card>
+    </div>
+  );
+}
+
+function RunList({
+  runs,
+  selectedRunId,
+  onOpenRun,
+  emptyDescription
+}: {
+  runs: RunSummary[];
+  selectedRunId: string;
+  onOpenRun: (runId: string) => void;
+  emptyDescription: string;
+}) {
+  if (!runs.length) return <Empty description={emptyDescription} />;
+  return (
+    <List
+      className="run-list"
+      dataSource={runs}
+      renderItem={(run) => (
+        <List.Item
+          className={`run-row ${selectedRunId === run.run_id ? "selected" : ""}`}
+          onClick={() => onOpenRun(run.run_id)}
+        >
+          <List.Item.Meta
+            title={run.label}
+            description={
+              <Space direction="vertical" size={2}>
+                <Text type="secondary">
+                  {run.mode} · {run.dataset ?? "auto"} · {run.case_count} cases
+                </Text>
+                <Text type="secondary">{new Date(run.created_at).toLocaleString()}</Text>
+              </Space>
+            }
+          />
+        </List.Item>
+      )}
+    />
+  );
+}
+
+function AnalysisDetailRoute({
+  run,
+  loading,
+  selectedTarget,
+  selectedTargetKey,
+  reviewNote,
+  reviewStatus,
+  onLoadRun,
+  onTargetSelected,
+  onReviewNoteChanged,
+  onSubmitReview,
+  onOpenHistory
+}: {
+  run: RunDetail | null;
+  selectedTarget: ReviewTarget | undefined;
+  selectedTargetKey: string;
+  reviewNote: string;
+  reviewStatus: string | null;
+  loading: boolean;
+  onLoadRun: (runId: string) => void;
+  onTargetSelected: (targetId: string) => void;
+  onReviewNoteChanged: (note: string) => void;
+  onSubmitReview: (action: ReviewAction) => void;
+  onOpenHistory: () => void;
+}) {
+  const { runId } = useParams();
+  useEffect(() => {
+    if (runId && run?.run.run_id !== runId) {
+      onLoadRun(runId);
+    }
+  }, [onLoadRun, run?.run.run_id, runId]);
+
+  if (!run && loading) {
+    return (
+      <Card className="empty-state">
+        <Empty description="Loading analysis detail..." />
+      </Card>
+    );
+  }
+  if (!run) {
+    return (
+      <Card className="empty-state">
+        <Empty
+          description="Select a history item or upload an example record file to inspect candidate paths."
+        />
+        <Button onClick={onOpenHistory}>Open history</Button>
+      </Card>
+    );
+  }
+  return (
+    <RunDetailView
+      run={run}
+      selectedTarget={selectedTarget}
+      selectedTargetKey={selectedTargetKey}
+      reviewNote={reviewNote}
+      reviewStatus={reviewStatus}
+      onTargetSelected={onTargetSelected}
+      onReviewNoteChanged={onReviewNoteChanged}
+      onSubmitReview={onSubmitReview}
+    />
+  );
+}
+
+function ExperimentsPage({
+  runCount,
+  kgEdgeCount,
+  onOpenAnalysis,
+  onOpenKG
+}: {
+  runCount: number;
+  kgEdgeCount: number;
+  onOpenAnalysis: () => void;
+  onOpenKG: () => void;
+}) {
+  return (
+    <div className="experiments-page">
+      <Card className="overview-hero">
+        <div>
+          <p className="eyebrow">Paper Mode</p>
+          <Title level={2}>Experiment and Case Study Workspace</Title>
+          <Paragraph>
+            This module is reserved for paper cases, coverage summaries,
+            before/after KG hardening tables, and export-ready artifacts.
+          </Paragraph>
+        </div>
+        <div className="overview-actions">
+          <Button type="primary" icon={<HistoryOutlined />} onClick={onOpenAnalysis}>
+            Open analysis history
+          </Button>
+          <Button icon={<DatabaseOutlined />} onClick={onOpenKG}>
+            Inspect KG coverage
+          </Button>
+        </div>
+      </Card>
+      <section className="overview-metrics">
+        <Card>
+          <Statistic title="analysis runs" value={runCount} />
+          <Text type="secondary">local RootLens sessions</Text>
+        </Card>
+        <Card>
+          <Statistic title="candidate KG edges" value={kgEdgeCount} />
+          <Text type="secondary">available to paper case reasoning</Text>
+        </Card>
+        <Card>
+          <Statistic title="exports" value="planned" />
+          <Text type="secondary">tables, markdown, and figures</Text>
+        </Card>
       </section>
     </div>
   );
@@ -1349,6 +1701,7 @@ function RunDetailView({
   onReviewNoteChanged,
   onSubmitReview
 }: RunDetailProps) {
+  const [activeStep, setActiveStep] = useState(0);
   const evidence = run.evidence_summary ?? {};
   const pathGraph = run.path_graph ?? {
     paths: [],
@@ -1356,100 +1709,228 @@ function RunDetailView({
     node_count: 0,
     edge_count: 0
   };
-  return (
-    <div className="detail-grid">
-      <Card title={run.run.label}>
-        <Alert className="claim-boundary" message={run.claim_boundary} type="warning" showIcon />
-        <Descriptions size="small" column={2} bordered>
-          {["case_id", "dataset", "object", "anomaly_type", "location", "morphology", "confidence"].map(
-            (key) => (
-              <Descriptions.Item key={key} label={key}>
-                {valueText(evidence[key])}
+  const stages: Array<{ title: string; description: string; content: ReactNode }> = [
+    {
+      title: "Input",
+      description: "Run metadata and workflow",
+      content: (
+        <div className="analysis-stage-grid">
+          <Card title="Run Summary">
+            <Descriptions size="small" column={2} bordered>
+              <Descriptions.Item label="run id">{run.run.run_id}</Descriptions.Item>
+              <Descriptions.Item label="source">{run.run.source_filename}</Descriptions.Item>
+              <Descriptions.Item label="dataset">{valueText(run.run.dataset)}</Descriptions.Item>
+              <Descriptions.Item label="mode">{run.run.mode}</Descriptions.Item>
+              <Descriptions.Item label="cases">{run.run.case_count}</Descriptions.Item>
+              <Descriptions.Item label="evidence">{run.run.evidence_count}</Descriptions.Item>
+              <Descriptions.Item label="created">
+                {new Date(run.run.created_at).toLocaleString()}
               </Descriptions.Item>
-            )
-          )}
-        </Descriptions>
-      </Card>
-
-      <Card title={<Space><CheckOutlined />Workflow</Space>}>
-        <List
-          size="small"
-          dataSource={run.workflow_steps}
-          renderItem={(step) => (
-            <List.Item>
-              <List.Item.Meta title={step.title} description={step.summary} />
-            </List.Item>
-          )}
-        />
-      </Card>
-
-      <ReasoningWorkspace
-        paths={pathGraph.paths}
-        selectedTarget={selectedTarget}
-        onTargetSelected={onTargetSelected}
-      />
-
-      <Card title="Linked Entities">
-        <CompactList items={run.linked_entities} idField="link_id" labelField="selected_entity_id" />
-      </Card>
-
-      <Card title="Correction Candidates">
-        <CompactList
-          items={run.correction_candidates}
-          idField="candidate_id"
-          labelField="suggested_value"
-        />
-      </Card>
-
-      <Card className="wide review-panel" title="Review">
-        <ReviewQueue
-          targets={run.review_targets}
-          selectedTargetKey={selectedTargetKey}
+              <Descriptions.Item label="status">{run.run.status}</Descriptions.Item>
+            </Descriptions>
+          </Card>
+          <Card title={<Space><CheckOutlined />Workflow</Space>}>
+            <List
+              size="small"
+              dataSource={run.workflow_steps}
+              renderItem={(step) => (
+                <List.Item>
+                  <List.Item.Meta title={step.title} description={step.summary} />
+                </List.Item>
+              )}
+            />
+          </Card>
+        </div>
+      )
+    },
+    {
+      title: "Model Evidence",
+      description: "Observed anomaly fields",
+      content: (
+        <div className="analysis-stage-grid">
+          <Card title="Evidence Summary">
+            <Descriptions size="small" column={2} bordered>
+              {[
+                "case_id",
+                "dataset",
+                "object",
+                "anomaly_type",
+                "location",
+                "morphology",
+                "severity",
+                "confidence"
+              ].map((key) => (
+                <Descriptions.Item key={key} label={key}>
+                  {valueText(evidence[key])}
+                </Descriptions.Item>
+              ))}
+            </Descriptions>
+          </Card>
+          <Card title="Artifacts">
+            {Object.keys(run.artifacts).length ? (
+              <List
+                size="small"
+                dataSource={Object.entries(run.artifacts)}
+                renderItem={([key, value]) => (
+                  <List.Item>
+                    <List.Item.Meta title={key} description={value} />
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <Empty description="No artifact paths were recorded for this run." />
+            )}
+          </Card>
+        </div>
+      )
+    },
+    {
+      title: "Normalized Evidence",
+      description: "Adapter output and schema payload",
+      content: (
+        <div className="analysis-stage-grid single">
+          <Card title="Evidence JSON">
+            <JsonBlock value={run.evidence_with_analysis ?? run.evidence ?? run.summary} />
+          </Card>
+        </div>
+      )
+    },
+    {
+      title: "Entity Linking",
+      description: "KG entity matches",
+      content: (
+        <div className="analysis-stage-grid single">
+          <Card title="Linked Entities">
+            <CompactList
+              items={run.linked_entities}
+              idField="link_id"
+              labelField="selected_entity_id"
+            />
+          </Card>
+        </div>
+      )
+    },
+    {
+      title: "Consistency",
+      description: "Corrections and ambiguity",
+      content: (
+        <div className="analysis-stage-grid">
+          <Card title="Correction Candidates">
+            <CompactList
+              items={run.correction_candidates}
+              idField="candidate_id"
+              labelField="suggested_value"
+            />
+          </Card>
+          <Card title="Analysis Summary">
+            <JsonBlock value={run.analysis ?? run.summary} />
+          </Card>
+        </div>
+      )
+    },
+    {
+      title: "Candidate Paths",
+      description: "Ranked traceability paths",
+      content: (
+        <ReasoningWorkspace
+          paths={pathGraph.paths}
+          selectedTarget={selectedTarget}
           onTargetSelected={onTargetSelected}
         />
-        <div className="review-controls">
-          <Select
-            className="review-target-select"
-            value={selectedTargetKey}
-            onChange={(value) => onTargetSelected(value)}
-            disabled={!run.review_targets.length}
-            options={
-              run.review_targets.length > 0
-                ? run.review_targets.map((target) => ({
-                    value: target.target_key,
-                    label: `${target.target_type} · ${shortId(target.label)}`
-                  }))
-                : [{ value: "", label: "No review targets" }]
-            }
+      )
+    },
+    {
+      title: "Review",
+      description: "Provenance and feedback",
+      content: (
+        <Card className="review-panel" title="Review Targets">
+          <Alert
+            className="claim-boundary"
+            message={run.claim_boundary}
+            type="warning"
+            showIcon
           />
-          <Input
-            className="review-note"
-            value={reviewNote}
-            onChange={(event) => onReviewNoteChanged(event.target.value)}
-            placeholder="optional review note"
-            disabled={!selectedTarget}
+          <ReviewQueue
+            targets={run.review_targets}
+            selectedTargetKey={selectedTargetKey}
+            onTargetSelected={onTargetSelected}
           />
-          <Button onClick={() => onSubmitReview("accept")} disabled={!selectedTarget}>
-            <CheckOutlined />
-            Accept
-          </Button>
-          <Button onClick={() => onSubmitReview("reject")} disabled={!selectedTarget}>
-            <CloseOutlined />
-            Reject
-          </Button>
-          <Button onClick={() => onSubmitReview("needs_review")} disabled={!selectedTarget}>
-            Needs review
-          </Button>
+          <div className="review-controls">
+            <Select
+              className="review-target-select"
+              value={selectedTargetKey}
+              onChange={(value) => onTargetSelected(value)}
+              disabled={!run.review_targets.length}
+              options={
+                run.review_targets.length > 0
+                  ? run.review_targets.map((target) => ({
+                      value: target.target_key,
+                      label: `${target.target_type} · ${shortId(target.label)}`
+                    }))
+                  : [{ value: "", label: "No review targets" }]
+              }
+            />
+            <Input
+              className="review-note"
+              value={reviewNote}
+              onChange={(event) => onReviewNoteChanged(event.target.value)}
+              placeholder="optional review note"
+              disabled={!selectedTarget}
+            />
+            <Button onClick={() => onSubmitReview("accept")} disabled={!selectedTarget}>
+              <CheckOutlined />
+              Accept
+            </Button>
+            <Button onClick={() => onSubmitReview("reject")} disabled={!selectedTarget}>
+              <CloseOutlined />
+              Reject
+            </Button>
+            <Button onClick={() => onSubmitReview("needs_review")} disabled={!selectedTarget}>
+              Needs review
+            </Button>
+          </div>
+          {selectedTarget ? (
+            <p className="muted">Stable target key: {selectedTarget.target_key}</p>
+          ) : (
+            <p className="muted">No feedback target is available for this run.</p>
+          )}
+          {reviewStatus && (
+            <Alert message={`Feedback ${reviewStatus}.`} type="success" showIcon />
+          )}
+        </Card>
+      )
+    }
+  ];
+
+  return (
+    <div className="analysis-detail-page">
+      <Card className="analysis-case-header">
+        <div>
+          <p className="eyebrow">Analysis Detail</p>
+          <Title level={2}>{run.run.label}</Title>
+          <Text type="secondary">
+            {valueText(evidence.dataset)} · {valueText(evidence.object)} ·{" "}
+            {valueText(evidence.anomaly_type)}
+          </Text>
         </div>
-        {selectedTarget ? (
-          <p className="muted">Stable target key: {selectedTarget.target_key}</p>
-        ) : (
-          <p className="muted">No feedback target is available for this run.</p>
-        )}
-        {reviewStatus && (
-          <Alert message={`Feedback ${reviewStatus}.`} type="success" showIcon />
-        )}
+        <Space wrap>
+          <Tag color="blue">{pathGraph.path_count} paths</Tag>
+          <Tag color="processing">{run.linked_entities.length} linked entities</Tag>
+          <Tag color="warning">{run.correction_candidates.length} corrections</Tag>
+        </Space>
       </Card>
+      <Card className="analysis-timeline-card">
+        <Steps
+          current={activeStep}
+          onChange={setActiveStep}
+          responsive
+          items={stages.map((stage) => ({
+            title: stage.title,
+            description: stage.description
+          }))}
+        />
+      </Card>
+      <section className="analysis-stage-canvas">{stages[activeStep]?.content}</section>
     </div>
   );
 }
@@ -1680,6 +2161,13 @@ function EmptyMessage({ title, body }: { title: string; body: string }) {
       <span>{body}</span>
     </div>
   );
+}
+
+function JsonBlock({ value }: { value: unknown }) {
+  if (value === null || value === undefined) {
+    return <Empty description="No structured payload recorded." />;
+  }
+  return <pre className="json-block">{JSON.stringify(value, null, 2)}</pre>;
 }
 
 function CompactList({
