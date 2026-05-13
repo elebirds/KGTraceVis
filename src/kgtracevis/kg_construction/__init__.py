@@ -22,6 +22,10 @@ from kgtracevis.kg_construction.case_kg_hardening import (
     write_edge_review_queue,
 )
 from kgtracevis.kg_construction.confidence_assigner import assign_confidence, edge_weight
+from kgtracevis.kg_construction.end_to_end_interpretability_audit import (
+    EndToEndInterpretabilityAuditOutput,
+    write_end_to_end_interpretability_audit,
+)
 from kgtracevis.kg_construction.export_kg_csv import (
     export_edges_csv,
     export_kg_csv,
@@ -56,6 +60,7 @@ __all__ = [
     "DEFAULT_MVTEC_SOURCES",
     "DEFAULT_MVTEC_SOURCE_DIR",
     "DownloadableSource",
+    "EndToEndInterpretabilityAuditOutput",
     "KGQAFinding",
     "KGQAReport",
     "SourceRecord",
@@ -84,5 +89,6 @@ __all__ = [
     "validate_nodes",
     "write_candidate_kg_artifacts",
     "write_case_audit_artifacts",
+    "write_end_to_end_interpretability_audit",
     "write_edge_review_queue",
 ]

@@ -507,25 +507,44 @@ def test_amazon_patchcore_object_router_lazily_routes_by_image_path(
 def test_amazon_patchcore_runtime_guard_sets_macos_openmp_workaround(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The official FAISS backend should avoid macOS libomp aborts at load time."""
+    """The official backend should avoid macOS OpenMP aborts and thread crashes."""
     monkeypatch.setattr(producer_backends.sys, "platform", "darwin")
-    monkeypatch.delenv("KMP_DUPLICATE_LIB_OK", raising=False)
+    for key in (
+        "KMP_DUPLICATE_LIB_OK",
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+    ):
+        monkeypatch.delenv(key, raising=False)
 
     _prepare_amazon_patchcore_runtime()
 
     assert producer_backends.os.environ["KMP_DUPLICATE_LIB_OK"] == "TRUE"
+    assert producer_backends.os.environ["OMP_NUM_THREADS"] == "1"
+    assert producer_backends.os.environ["MKL_NUM_THREADS"] == "1"
+    assert producer_backends.os.environ["VECLIB_MAXIMUM_THREADS"] == "1"
+    assert producer_backends.os.environ["OPENBLAS_NUM_THREADS"] == "1"
 
 
 def test_amazon_patchcore_runtime_guard_preserves_existing_setting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The macOS OpenMP workaround should not override an explicit user setting."""
+    """The macOS OpenMP workaround should not override explicit user settings."""
     monkeypatch.setattr(producer_backends.sys, "platform", "darwin")
     monkeypatch.setenv("KMP_DUPLICATE_LIB_OK", "FALSE")
+    monkeypatch.setenv("OMP_NUM_THREADS", "2")
+    monkeypatch.setenv("MKL_NUM_THREADS", "2")
+    monkeypatch.setenv("VECLIB_MAXIMUM_THREADS", "2")
+    monkeypatch.setenv("OPENBLAS_NUM_THREADS", "2")
 
     _prepare_amazon_patchcore_runtime()
 
     assert producer_backends.os.environ["KMP_DUPLICATE_LIB_OK"] == "FALSE"
+    assert producer_backends.os.environ["OMP_NUM_THREADS"] == "2"
+    assert producer_backends.os.environ["MKL_NUM_THREADS"] == "2"
+    assert producer_backends.os.environ["VECLIB_MAXIMUM_THREADS"] == "2"
+    assert producer_backends.os.environ["OPENBLAS_NUM_THREADS"] == "2"
 
 
 def test_amazon_patchcore_runtime_guard_is_macos_only(
@@ -533,11 +552,22 @@ def test_amazon_patchcore_runtime_guard_is_macos_only(
 ) -> None:
     """Non-macOS environments should not receive the FAISS/torch OpenMP workaround."""
     monkeypatch.setattr(producer_backends.sys, "platform", "linux")
-    monkeypatch.delenv("KMP_DUPLICATE_LIB_OK", raising=False)
+    for key in (
+        "KMP_DUPLICATE_LIB_OK",
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+    ):
+        monkeypatch.delenv(key, raising=False)
 
     _prepare_amazon_patchcore_runtime()
 
     assert "KMP_DUPLICATE_LIB_OK" not in producer_backends.os.environ
+    assert "OMP_NUM_THREADS" not in producer_backends.os.environ
+    assert "MKL_NUM_THREADS" not in producer_backends.os.environ
+    assert "VECLIB_MAXIMUM_THREADS" not in producer_backends.os.environ
+    assert "OPENBLAS_NUM_THREADS" not in producer_backends.os.environ
 
 
 def test_first_engine_prediction_returns_first_item() -> None:

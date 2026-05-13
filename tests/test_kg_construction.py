@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from kgtracevis.experiments.adapter_pipeline import run_adapter_pipeline
 from kgtracevis.kg.graph import KGEdge, KGNode, KnowledgeGraph
 from kgtracevis.kg_construction import (
     CandidateEntity,
@@ -25,6 +26,7 @@ from kgtracevis.kg_construction import (
     validate_candidate_claim_boundaries,
     validate_edges,
     write_candidate_kg_artifacts,
+    write_end_to_end_interpretability_audit,
 )
 from kgtracevis.kg_construction.case_kg_hardening import WAFER_PATTERNS
 from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS, NODE_COLUMNS
@@ -545,6 +547,233 @@ def test_candidate_kg_artifacts_include_review_queue_and_coverage_report(
     assert coverage["edge_counts_by_layer"]["candidate_mechanism"] > 0
     assert coverage["review_status_counts"]["auto"] > 0
     assert coverage["wm811k_pattern_coverage"] == [spec.pattern for spec in WAFER_PATTERNS]
+
+
+def test_end_to_end_interpretability_audit_records_provenance(
+    tmp_path: Path,
+) -> None:
+    """Strict audit should tie records, Evidence, overlay reasoning, and claims."""
+    mvtec_records = tmp_path / "mvtec_records.jsonl"
+    mvtec_records.write_text(
+        json.dumps(
+            {
+                "dataset": "mvtec",
+                "case_id": "mvtec_fixture_clean_scratch",
+                "object": "bottle",
+                "defect_type": "scratch",
+                "location": "surface",
+                "morphology": "linear",
+                "severity": 0.18,
+                "confidence": 0.86,
+                "source_path": "fixtures/mvtec/bottle_clean_scratch.png",
+                "mask_path": "fixtures/mvtec/bottle_clean_scratch_mask.png",
+                "detector": {
+                    "name": "mvtec_anomaly_predictor",
+                    "backend": "amazon-patchcore",
+                    "checkpoint": "fixtures/models/mvtec_bottle",
+                    "model_source": "amazon-science/patchcore-inspection",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    wm811k_records = tmp_path / "wm811k_records.jsonl"
+    wm811k_records.write_text(
+        json.dumps(
+            {
+                "dataset": "wafer",
+                "adapter": "wm811k",
+                "case_id": "wm811k_fixture_clean_nearfull",
+                "wafer_id": "W811K-0001",
+                "failure_pattern": "Near-full",
+                "zone": "wafer_surface",
+                "morphology": "dense_particles",
+                "defect_density": 0.72,
+                "classification_confidence": 0.88,
+                "wafer_map_path": "fixtures/wm811k/W811K-0001.npy",
+                "annotation_type": "native_ground_truth",
+                "source_table": "fixtures/wm811k/test.pkl",
+                "source_row_index": 42,
+                "classifier": {
+                    "name": "wm811k_classifier",
+                    "backend": "torch-resnet34",
+                    "model_source": "radai-agent/radai-wm811k-defect-detection",
+                    "model_file": "best_radai_resnet.pt",
+                    "produces_root_cause": False,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    mvtec_pipeline = run_adapter_pipeline(
+        mvtec_records,
+        tmp_path / "mvtec_adapter",
+        dataset="mvtec",
+        top_k=2,
+    )
+    wm811k_pipeline = run_adapter_pipeline(
+        wm811k_records,
+        tmp_path / "wm811k_adapter",
+        dataset="wafer",
+        top_k=2,
+    )
+
+    output = write_end_to_end_interpretability_audit(
+        output_dir=tmp_path / "audit",
+        mvtec_records_path=mvtec_records,
+        mvtec_adapter_table_path=mvtec_pipeline.table_path,
+        wm811k_record_paths=[wm811k_records],
+        wm811k_adapter_table_paths=[wm811k_pipeline.table_path],
+        top_k=2,
+        top_n=1,
+        commands_run=["uv run python scripts/run_end_to_end_interpretability_audit.py"],
+    )
+
+    summary = json.loads(output.summary_path.read_text(encoding="utf-8"))
+    assert output.markdown_path.is_file()
+    assert summary["strict_audit_passed"] is True
+    assert summary["claim_boundary"].startswith("candidate/plausible explanation")
+    assert summary["commands_run"]
+    assert "--wm811k-table" in summary["equivalent_reproduction_commands"][0]
+    assert str(wm811k_pipeline.table_path) in summary["equivalent_reproduction_commands"][0]
+    assert summary["artifacts"]["candidate_nodes"].endswith("nodes_candidate.csv")
+    assert {item["label"] for item in summary["datasets"]} == {"mvtec", "wm811k_1"}
+    for dataset in summary["datasets"]:
+        assert dataset["record_count"] > 0
+        assert dataset["adapter_evidence_count"] > 0
+        assert dataset["overlay_case_count"] > 0
+        assert dataset["overlay_kg_node_paths"]
+        assert dataset["overlay_kg_edge_paths"]
+        assert dataset["raw_dataset_or_model_producer"]["produces_root_cause"] is False
+        assert (
+            dataset["raw_dataset_or_model_producer"]["producer_provenance_level"]
+            == "model_producer_record"
+        )
+
+
+def test_end_to_end_interpretability_audit_checks_all_records(
+    tmp_path: Path,
+) -> None:
+    """Strict audit should fail mixed JSONL files with incomplete later records."""
+    mvtec_records = tmp_path / "mvtec_records.jsonl"
+    mvtec_records.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "dataset": "mvtec",
+                        "case_id": "mvtec_real_shape_1",
+                        "object": "bottle",
+                        "defect_type": "scratch",
+                        "source_path": "runs/mvtec/input/bottle/000.png",
+                        "detector": {
+                            "name": "mvtec_anomaly_predictor",
+                            "backend": "amazon-patchcore",
+                            "checkpoint": "runs/models/mvtec_bottle",
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "dataset": "mvtec",
+                        "case_id": "mvtec_incomplete_later_record",
+                        "object": "bottle",
+                        "defect_type": "scratch",
+                        "image_path": "fixtures/mvtec/incomplete.png",
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    wm811k_records = tmp_path / "wm811k_records.jsonl"
+    wm811k_records.write_text(
+        json.dumps(
+            {
+                "dataset": "wafer",
+                "adapter": "wm811k",
+                "case_id": "wm811k_real_shape_1",
+                "wafer_id": "row-1",
+                "failure_pattern": "Loc",
+                "source_table": "runs/real_model_pipeline/assets/wm811k/input_tables/test.pkl",
+                "source_row_index": 1,
+                "classifier": {
+                    "name": "wm811k_classifier",
+                    "backend": "torch-resnet34",
+                    "model_source": "radai-agent/radai-wm811k-defect-detection",
+                    "model_file": "best_radai_resnet.pt",
+                    "produces_root_cause": False,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    mvtec_pipeline = run_adapter_pipeline(
+        mvtec_records,
+        tmp_path / "mvtec_adapter",
+        dataset="mvtec",
+        top_k=2,
+    )
+    wm811k_pipeline = run_adapter_pipeline(
+        wm811k_records,
+        tmp_path / "wm811k_adapter",
+        dataset="wafer",
+        top_k=2,
+    )
+
+    output = write_end_to_end_interpretability_audit(
+        output_dir=tmp_path / "audit",
+        mvtec_records_path=mvtec_records,
+        mvtec_adapter_table_path=mvtec_pipeline.table_path,
+        wm811k_record_paths=[wm811k_records],
+        wm811k_adapter_table_paths=[wm811k_pipeline.table_path],
+        top_k=2,
+        top_n=1,
+    )
+
+    summary = json.loads(output.summary_path.read_text(encoding="utf-8"))
+    mvtec = next(item for item in summary["datasets"] if item["label"] == "mvtec")
+    producer = mvtec["raw_dataset_or_model_producer"]
+    assert summary["strict_audit_passed"] is False
+    assert producer["incomplete_record_count"] == 1
+    assert producer["incomplete_case_id_samples"] == ["mvtec_incomplete_later_record"]
+    assert any("not a strict model-producer record" in item for item in summary["strict_findings"])
+
+
+def test_end_to_end_interpretability_audit_flags_fixture_records(
+    tmp_path: Path,
+) -> None:
+    """Example records can be audited, but should not count as strict model evidence."""
+    mvtec_pipeline = run_adapter_pipeline(
+        "data/examples/records/mvtec_records.jsonl",
+        tmp_path / "mvtec_adapter",
+        dataset="mvtec",
+        top_k=2,
+    )
+    wm811k_pipeline = run_adapter_pipeline(
+        "data/examples/records/wm811k_records.jsonl",
+        tmp_path / "wm811k_adapter",
+        dataset="wafer",
+        top_k=2,
+    )
+
+    output = write_end_to_end_interpretability_audit(
+        output_dir=tmp_path / "audit",
+        mvtec_records_path="data/examples/records/mvtec_records.jsonl",
+        mvtec_adapter_table_path=mvtec_pipeline.table_path,
+        wm811k_record_paths=["data/examples/records/wm811k_records.jsonl"],
+        wm811k_adapter_table_paths=[wm811k_pipeline.table_path],
+        top_k=2,
+        top_n=1,
+    )
+
+    summary = json.loads(output.summary_path.read_text(encoding="utf-8"))
+    assert summary["strict_audit_passed"] is False
+    assert any("not a strict model-producer record" in item for item in summary["strict_findings"])
 
 
 def test_mvtec_source_bundle_downloads_local_sources(tmp_path: Path) -> None:
