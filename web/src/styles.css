@@ -381,16 +381,35 @@ button {
 .analysis-case-header .ant-card-body {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   justify-content: space-between;
+  min-width: 0;
 }
 
 .analysis-case-header h2 {
   margin: 0 0 4px;
 }
 
+.analysis-case-header .ant-card-body > div,
+.analysis-case-header .ant-space {
+  min-width: 0;
+}
+
+.analysis-case-header .ant-space {
+  justify-content: flex-end;
+}
+
 .case-selector {
-  min-width: 240px;
+  max-width: 100%;
+  min-width: 0;
+  width: min(320px, 100%);
+}
+
+.case-selector .ant-select-selection-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .analysis-timeline-card {
@@ -430,6 +449,32 @@ button {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.analysis-stage-grid .ant-card,
+.analysis-stage-grid .ant-card-body,
+.analysis-stage-grid .ant-descriptions,
+.analysis-stage-grid .ant-list,
+.analysis-stage-grid .ant-list-item,
+.analysis-stage-grid .ant-list-item-meta {
+  min-width: 0;
+}
+
+.analysis-stage-grid .ant-card,
+.analysis-stage-grid .ant-card-body {
+  overflow: hidden;
+}
+
+.analysis-stage-grid .ant-descriptions-item-content,
+.analysis-stage-grid .ant-descriptions-item-label,
+.artifact-list .ant-list-item-meta-description,
+.artifact-list .ant-list-item-meta-title,
+.breakable-value {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .analysis-stage-grid.single {

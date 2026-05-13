@@ -18,6 +18,10 @@ VisualEvidenceKind = Literal["image", "mask", "heatmap", "wafer_map"]
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
 ARRAY_SUFFIXES = {".json", ".npy"}
 PROJECT_ROOT = Path.cwd().resolve()
+MVTEC_MODEL_VISUALIZATION_HINTS = (
+    "runs/real_model_pipeline/assets/mvtec/input_root/",
+    "runs/real_model_pipeline/assets/mvtec/input_root\\",
+)
 
 
 class VisualEvidenceItem(BaseModel):
@@ -63,6 +67,18 @@ def build_visual_evidence_artifacts(
     return [item.model_dump(mode="json") for item in items]
 
 
+def normalize_visual_evidence_items(
+    items: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Normalize persisted visual-evidence metadata for current UI wording."""
+    normalized: list[dict[str, Any]] = []
+    for item in items:
+        row = dict(item)
+        _apply_visual_item_classification(row)
+        normalized.append(row)
+    return normalized
+
+
 def _record_visual_items(
     record: Mapping[str, Any],
     *,
@@ -75,7 +91,11 @@ def _record_visual_items(
     dataset = _text(_first_value(record, ("dataset",))) or "unknown"
     items: list[VisualEvidenceItem] = []
     for kind, title, keys in (
-        ("image", "Source image", ("source_path", "image_path")),
+        (
+            "image",
+            "Source image",
+            ("raw_source_path", "original_image_path", "source_path", "image_path"),
+        ),
         ("mask", "Predicted / reference mask", ("mask_path", "gt_mask_path", "segmentation_path")),
         ("heatmap", "Anomaly heatmap", ("heatmap_path", "anomaly_map_path")),
     ):
@@ -174,7 +194,7 @@ def _path_item(
             note=f"Failed to prepare preview: {exc}",
         )
 
-    return VisualEvidenceItem(
+    item = VisualEvidenceItem(
         artifact_id=artifact_id,
         case_id=case_id,
         dataset=dataset,
@@ -188,6 +208,7 @@ def _path_item(
         note="Observed visual evidence preview prepared for browser inspection.",
         metadata=metadata,
     )
+    return _classified_visual_item(item)
 
 
 def _wafer_map_item(
@@ -414,6 +435,43 @@ def _unavailable_item(
         available=False,
         note=note,
     )
+
+
+def _classified_visual_item(item: VisualEvidenceItem) -> VisualEvidenceItem:
+    row = item.model_dump(mode="json")
+    _apply_visual_item_classification(row)
+    return VisualEvidenceItem.model_validate(row)
+
+
+def _apply_visual_item_classification(item: dict[str, Any]) -> None:
+    if not _is_mvtec_model_visualization_item(item):
+        return
+    metadata = item.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata.update(
+        {
+            "visual_role": "model_visualization_panel",
+            "raw_source_available": False,
+        }
+    )
+    item["metadata"] = metadata
+    item["title"] = "Model visualization panel"
+    item["note"] = (
+        "This preview is a generated MVTec model-visualization panel "
+        "(image, ground-truth mask, anomaly map, predicted mask), not the raw source image."
+    )
+
+
+def _is_mvtec_model_visualization_item(item: Mapping[str, Any]) -> bool:
+    if str(item.get("dataset", "")).lower() != "mvtec":
+        return False
+    if str(item.get("kind", "")).lower() != "image":
+        return False
+    source_path = str(item.get("source_path") or "").replace("\\", "/").lower()
+    if not source_path:
+        return False
+    return any(hint.replace("\\", "/") in source_path for hint in MVTEC_MODEL_VISUALIZATION_HINTS)
 
 
 def _slug(value: str) -> str:

@@ -1,0 +1,6 @@
+{"type":"note","text":"Fix detail-page text overflow and MVTec source-image classification."}
+{"type":"file","path":"src/kgtracevis/service/visual_evidence.py","text":"Classify generated MVTec model visualization panels and normalize persisted metadata."}
+{"type":"file","path":"src/kgtracevis/service/runs.py","text":"Apply visual evidence normalization when loading legacy run manifests."}
+{"type":"file","path":"web/src/App.tsx","text":"Wrap Evidence Summary and Artifacts values with breakable spans."}
+{"type":"file","path":"web/src/styles.css","text":"Constrain Analysis Detail cards, selectors, descriptions, and artifact lists to avoid text overflow."}
+{"type":"file","path":"tests/test_service_api.py","text":"Lock visual-evidence title/note metadata for generated MVTec visualization panels."}

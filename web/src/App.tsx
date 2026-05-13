@@ -1870,7 +1870,7 @@ function RunDetailView({
                 "confidence"
               ].map((key) => (
                 <Descriptions.Item key={key} label={key}>
-                  {valueText(evidence[key])}
+                  <span className="breakable-value">{valueText(evidence[key])}</span>
                 </Descriptions.Item>
               ))}
             </Descriptions>
@@ -1878,11 +1878,15 @@ function RunDetailView({
           <Card title="Artifacts">
             {Object.keys(run.artifacts).length ? (
               <List
+                className="artifact-list"
                 size="small"
                 dataSource={Object.entries(run.artifacts)}
                 renderItem={([key, value]) => (
                   <List.Item>
-                    <List.Item.Meta title={key} description={value} />
+                    <List.Item.Meta
+                      title={<span className="breakable-value">{key}</span>}
+                      description={<span className="breakable-value">{value}</span>}
+                    />
                   </List.Item>
                 )}
               />

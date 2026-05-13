@@ -167,6 +167,14 @@ def test_upload_run_prepares_visual_evidence_artifacts(
     visual_items = payload["visual_evidence"]
     kinds = {item["kind"] for item in visual_items if item["available"]}
     assert {"image", "mask", "heatmap", "wafer_map"} <= kinds
+    mvtec_image = next(
+        item
+        for item in visual_items
+        if item["case_id"] == "mvtec_visual_fixture" and item["kind"] == "image"
+    )
+    assert mvtec_image["title"] == "Model visualization panel"
+    assert "not the raw source image" in mvtec_image["note"]
+    assert mvtec_image["metadata"]["visual_role"] == "model_visualization_panel"
     artifact_prefix = f"/api/runs/{payload['run']['run_id']}/artifacts/"
     assert all(
         item["url"].startswith(artifact_prefix) for item in visual_items if item["available"]

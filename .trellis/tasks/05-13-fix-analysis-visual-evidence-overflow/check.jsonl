@@ -1,0 +1,8 @@
+{"type":"command","cmd":"uv run --extra dev pytest tests/test_service_api.py -q"}
+{"type":"command","cmd":"uv run --extra dev ruff check ."}
+{"type":"command","cmd":"uv run --extra dev mypy src tests scripts"}
+{"type":"command","cmd":"npm run build","cwd":"web"}
+{"type":"command","cmd":"uv run --extra dev pytest","status":"passed"}
+{"type":"command","cmd":"uv run python scripts/run_examples.py","status":"passed"}
+{"type":"browser","url":"http://127.0.0.1:5173/analysis/run_20260513T103348Z_6e236690_mvtec_records","status":"passed","text":"Model Evidence text stayed inside cards."}
+{"type":"browser","url":"http://127.0.0.1:5173/analysis/run_20260513T102509Z_108b509d_mvtec_records","status":"passed","text":"Generated four-panel image is labeled Model visualization panel."}

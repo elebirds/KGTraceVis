@@ -39,7 +39,10 @@ from kgtracevis.producers.mvtec_models import (
 )
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
 from kgtracevis.schema.validators import load_evidence_json
-from kgtracevis.service.visual_evidence import build_visual_evidence_artifacts
+from kgtracevis.service.visual_evidence import (
+    build_visual_evidence_artifacts,
+    normalize_visual_evidence_items,
+)
 
 ROOTLENS_RUNS_DIR = Path("runs/rootlens_sessions")
 LEGACY_WEB_RUNS_DIR = Path("runs/web_sessions")
@@ -780,12 +783,16 @@ def _enrich_run_detail(detail: RunDetail) -> RunDetail:
             for target in review_targets
         ]
         changed = True
+    visual_evidence = normalize_visual_evidence_items(detail.visual_evidence)
+    if visual_evidence != detail.visual_evidence:
+        changed = True
     if not changed:
         return detail
     return detail.model_copy(
         update={
             "path_graph": path_graph,
             "review_targets": review_targets,
+            "visual_evidence": visual_evidence,
         }
     )
 
