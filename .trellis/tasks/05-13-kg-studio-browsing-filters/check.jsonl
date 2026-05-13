@@ -1,0 +1,10 @@
+{"type":"command","cmd":"npm run build","cwd":"web"}
+{"type":"command","cmd":"uv run --extra dev pytest tests/test_kg_studio.py tests/test_kg_source_drafts.py tests/test_kg_drafts.py tests/test_service_api.py -q"}
+{"type":"command","cmd":"npm run build","cwd":"web","status":"passed","note":"Vite chunk-size warning remains non-blocking."}
+{"type":"command","cmd":"uv run --extra dev pytest","status":"passed"}
+{"type":"command","cmd":"uv run python scripts/smoke_rootlens_dashboard.py","status":"passed"}
+{"type":"command","cmd":"uv run --extra dev ruff check .","status":"passed"}
+{"type":"command","cmd":"uv run --extra dev mypy src tests scripts","status":"passed"}
+{"type":"command","cmd":"uv run python scripts/run_examples.py","status":"passed"}
+{"type":"browser","url":"http://127.0.0.1:5173/kg-studio/graph","status":"passed","text":"Search Loc filtered edge count from 80 to 48."}
+{"type":"browser","url":"http://127.0.0.1:5173/kg-studio/sources","status":"passed","text":"Search wafer filtered source registry/documents."}

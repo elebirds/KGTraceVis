@@ -127,6 +127,10 @@ panel:
 - `/kg-studio/drafts` shows the selected edge and append-only draft adjustment
   form.
 
+Graph, Review, and Draft Lab share a candidate-edge filter bar for text query,
+scenario, source, and review status. Sources has a separate source/document
+search so source curation does not disturb graph review filters.
+
 The KG Studio workspace reads candidate KG artifacts from local generated outputs.
 It prefers `runs/paper_case_kg/` and falls back to
 `runs/end_to_end_interpretability_audit/candidate_kg/`. If neither directory is

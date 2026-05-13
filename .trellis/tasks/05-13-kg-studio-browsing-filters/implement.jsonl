@@ -1,0 +1,4 @@
+{"type":"note","text":"Add KG Studio search/filter tooling for candidate edge and source browsing."}
+{"type":"file","path":"web/src/KGStudioWorkspace.tsx","text":"Added shared KG edge filters for graph/review/drafts plus source/document search."}
+{"type":"file","path":"web/src/styles.css","text":"Added responsive filter bar styling for KG Studio."}
+{"type":"file","path":"docs/rootlens_dashboard.md","text":"Documented shared edge filters and source/document search."}

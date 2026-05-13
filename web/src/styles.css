@@ -1075,6 +1075,29 @@ select:disabled {
   justify-content: space-between;
 }
 
+.kg-filter-card .ant-card-body {
+  padding: 12px;
+}
+
+.kg-filter-bar {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns:
+    minmax(220px, 1.4fr)
+    minmax(130px, 0.7fr)
+    minmax(160px, 0.9fr)
+    minmax(150px, 0.8fr)
+    auto
+    auto;
+}
+
+.kg-filter-bar .ant-select,
+.kg-filter-bar .ant-input-search {
+  min-width: 0;
+  width: 100%;
+}
+
 .kg-studio-grid {
   display: grid;
   gap: 14px;
@@ -1784,7 +1807,8 @@ th {
   .kg-two-column,
   .graph-browser-layout,
   .review-layout,
-  .draft-layout {
+  .draft-layout,
+  .kg-filter-bar {
     grid-template-columns: 1fr;
   }
 

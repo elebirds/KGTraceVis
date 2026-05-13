@@ -33,7 +33,7 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum
 } from "d3-force";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
@@ -53,6 +53,20 @@ import type {
 const { Text, Title, Paragraph } = Typography;
 
 type KGStudioViewKey = "overview" | "sources" | "graph" | "review" | "drafts";
+
+interface KGStudioFilters {
+  query: string;
+  scenario: string;
+  source: string;
+  reviewStatus: string;
+}
+
+const EMPTY_FILTERS: KGStudioFilters = {
+  query: "",
+  scenario: "all",
+  source: "all",
+  reviewStatus: "all"
+};
 
 const KG_STUDIO_VIEWS: Array<{
   key: KGStudioViewKey;
@@ -163,9 +177,23 @@ export function KGStudioWorkspace({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [filters, setFilters] = useState<KGStudioFilters>(EMPTY_FILTERS);
+  const [sourceQuery, setSourceQuery] = useState("");
   const activeView = kgStudioViewForPath(location.pathname);
   const selectedEdge = payload?.graph_edges.find(
     (edge) => edge.target_key === selectedTargetKey
+  );
+  const filteredEdges = useMemo(
+    () => filterGraphEdges(payload?.graph_edges ?? [], filters),
+    [payload?.graph_edges, filters]
+  );
+  const filteredTargets = useMemo(
+    () => reviewTargetsForEdges(payload?.review_targets ?? [], filteredEdges),
+    [payload?.review_targets, filteredEdges]
+  );
+  const filterOptions = useMemo(
+    () => edgeFilterOptions(payload?.graph_edges ?? []),
+    [payload?.graph_edges]
   );
 
   if (location.pathname === "/kg-studio" || location.pathname === "/kg-studio/") {
@@ -222,51 +250,81 @@ export function KGStudioWorkspace({
           {activeView === "sources" && (
             <KGStudioSourcesPage
               payload={payload}
+              sourceQuery={sourceQuery}
               sourceDraftText={sourceDraftText}
               sourceDraftSourceId={sourceDraftSourceId}
               sourceDraftScenario={sourceDraftScenario}
               sourceDraftConfidence={sourceDraftConfidence}
               sourceDraftResult={sourceDraftResult}
+              onSourceQueryChanged={setSourceQuery}
               onSourceDraftChanged={onSourceDraftChanged}
               onGenerateSourceDraft={onGenerateSourceDraft}
             />
           )}
           {activeView === "graph" && (
-            <KGStudioGraphPage
-              payload={payload}
-              selectedEdge={selectedEdge}
-              selectedTargetKey={selectedTargetKey}
-              onTargetSelected={onTargetSelected}
-            />
+            <>
+              <KGStudioFilterBar
+                filters={filters}
+                options={filterOptions}
+                resultCount={filteredEdges.length}
+                onChanged={(patch) => setFilters((current) => ({ ...current, ...patch }))}
+                onReset={() => setFilters(EMPTY_FILTERS)}
+              />
+              <KGStudioGraphPage
+                payload={payload}
+                edges={filteredEdges}
+                selectedEdge={selectedEdge}
+                selectedTargetKey={selectedTargetKey}
+                onTargetSelected={onTargetSelected}
+              />
+            </>
           )}
           {activeView === "review" && (
-            <KGStudioReviewPage
-              payload={payload}
-              selectedEdge={selectedEdge}
-              selectedTarget={selectedTarget}
-              selectedTargetKey={selectedTargetKey}
-              reviewNote={reviewNote}
-              reviewStatus={reviewStatus}
-              onTargetSelected={onTargetSelected}
-              onReviewNoteChanged={onReviewNoteChanged}
-              onSubmitReview={onSubmitReview}
-            />
+            <>
+              <KGStudioFilterBar
+                filters={filters}
+                options={filterOptions}
+                resultCount={filteredEdges.length}
+                onChanged={(patch) => setFilters((current) => ({ ...current, ...patch }))}
+                onReset={() => setFilters(EMPTY_FILTERS)}
+              />
+              <KGStudioReviewPage
+                selectedEdge={selectedEdge}
+                selectedTarget={selectedTarget}
+                selectedTargetKey={selectedTargetKey}
+                reviewNote={reviewNote}
+                reviewStatus={reviewStatus}
+                targets={filteredTargets}
+                onTargetSelected={onTargetSelected}
+                onReviewNoteChanged={onReviewNoteChanged}
+                onSubmitReview={onSubmitReview}
+              />
+            </>
           )}
           {activeView === "drafts" && (
-            <KGStudioDraftsPage
-              payload={payload}
-              selectedEdge={selectedEdge}
-              selectedTarget={selectedTarget}
-              selectedTargetKey={selectedTargetKey}
-              draftAction={draftAction}
-              draftRelation={draftRelation}
-              draftEvidence={draftEvidence}
-              draftConfidence={draftConfidence}
-              draftStatus={draftStatus}
-              onTargetSelected={onTargetSelected}
-              onDraftChanged={onDraftChanged}
-              onSubmitDraft={onSubmitDraft}
-            />
+            <>
+              <KGStudioFilterBar
+                filters={filters}
+                options={filterOptions}
+                resultCount={filteredEdges.length}
+                onChanged={(patch) => setFilters((current) => ({ ...current, ...patch }))}
+                onReset={() => setFilters(EMPTY_FILTERS)}
+              />
+              <KGStudioDraftsPage
+                selectedEdge={selectedEdge}
+                selectedTarget={selectedTarget}
+                selectedTargetKey={selectedTargetKey}
+                draftAction={draftAction}
+                draftRelation={draftRelation}
+                draftEvidence={draftEvidence}
+                draftConfidence={draftConfidence}
+                draftStatus={draftStatus}
+                targets={filteredTargets}
+                onTargetSelected={onTargetSelected}
+                onDraftChanged={onDraftChanged}
+                onSubmitDraft={onSubmitDraft}
+              />
+            </>
           )}
         </>
       )}
@@ -277,6 +335,54 @@ export function KGStudioWorkspace({
 function kgStudioViewForPath(pathname: string): KGStudioViewKey {
   const match = KG_STUDIO_VIEWS.find((view) => pathname.startsWith(view.path));
   return match?.key ?? "overview";
+}
+
+function KGStudioFilterBar({
+  filters,
+  options,
+  resultCount,
+  onChanged,
+  onReset
+}: {
+  filters: KGStudioFilters;
+  options: {
+    scenarios: string[];
+    sources: string[];
+    reviewStatuses: string[];
+  };
+  resultCount: number;
+  onChanged: (patch: Partial<KGStudioFilters>) => void;
+  onReset: () => void;
+}) {
+  return (
+    <Card className="kg-filter-card">
+      <div className="kg-filter-bar">
+        <Input.Search
+          allowClear
+          value={filters.query}
+          onChange={(event) => onChanged({ query: event.target.value })}
+          placeholder="Search edge, source, or evidence"
+        />
+        <Select
+          value={filters.scenario}
+          onChange={(value) => onChanged({ scenario: value })}
+          options={selectOptions(options.scenarios, "All scenarios")}
+        />
+        <Select
+          value={filters.source}
+          onChange={(value) => onChanged({ source: value })}
+          options={selectOptions(options.sources, "All sources")}
+        />
+        <Select
+          value={filters.reviewStatus}
+          onChange={(value) => onChanged({ reviewStatus: value })}
+          options={selectOptions(options.reviewStatuses, "All review states")}
+        />
+        <Tag color="blue">{resultCount} edges</Tag>
+        <Button onClick={onReset}>Reset</Button>
+      </div>
+    </Card>
+  );
 }
 
 function KGStudioOverview({ payload }: { payload: KGStudioPayload }) {
@@ -327,20 +433,24 @@ function KGStudioOverview({ payload }: { payload: KGStudioPayload }) {
 
 function KGStudioSourcesPage({
   payload,
+  sourceQuery,
   sourceDraftText,
   sourceDraftSourceId,
   sourceDraftScenario,
   sourceDraftConfidence,
   sourceDraftResult,
+  onSourceQueryChanged,
   onSourceDraftChanged,
   onGenerateSourceDraft
 }: {
   payload: KGStudioPayload;
+  sourceQuery: string;
   sourceDraftText: string;
   sourceDraftSourceId: string;
   sourceDraftScenario: string;
   sourceDraftConfidence: string;
   sourceDraftResult: KGSourceDraftResponse | null;
+  onSourceQueryChanged: (query: string) => void;
   onSourceDraftChanged: (
     patch: Partial<{
       sourceDraftText: string;
@@ -351,6 +461,8 @@ function KGStudioSourcesPage({
   ) => void;
   onGenerateSourceDraft: () => void;
 }) {
+  const filteredSources = filterSources(payload.sources, sourceQuery);
+  const filteredDocuments = filterSourceDocuments(payload.source_documents, sourceQuery);
   return (
     <div className="kg-workspace-stack">
       <Card title="Source-to-KG Draft Generator">
@@ -364,12 +476,20 @@ function KGStudioSourcesPage({
           onGenerate={onGenerateSourceDraft}
         />
       </Card>
+      <Card className="kg-filter-card">
+        <Input.Search
+          allowClear
+          value={sourceQuery}
+          onChange={(event) => onSourceQueryChanged(event.target.value)}
+          placeholder="Search source registry and documents"
+        />
+      </Card>
       <section className="kg-two-column">
         <Card title="Source Registry">
-          <KGSourceList sources={payload.sources} />
+          <KGSourceList sources={filteredSources} />
         </Card>
         <Card title="Source Documents">
-          <KGSourceDocumentList documents={payload.source_documents} />
+          <KGSourceDocumentList documents={filteredDocuments} />
         </Card>
       </section>
     </div>
@@ -378,11 +498,13 @@ function KGStudioSourcesPage({
 
 function KGStudioGraphPage({
   payload,
+  edges,
   selectedEdge,
   selectedTargetKey,
   onTargetSelected
 }: {
   payload: KGStudioPayload;
+  edges: KGStudioGraphEdge[];
   selectedEdge: KGStudioGraphEdge | undefined;
   selectedTargetKey: string;
   onTargetSelected: (targetKey: string) => void;
@@ -392,7 +514,7 @@ function KGStudioGraphPage({
       <Card title="Candidate Edge Graph">
         <KGForceGraph
           nodes={payload.graph_nodes}
-          edges={payload.graph_edges}
+          edges={edges}
           selectedTargetKey={selectedTargetKey}
           onTargetSelected={onTargetSelected}
         />
@@ -400,7 +522,7 @@ function KGStudioGraphPage({
       <section className="kg-two-column graph-browser-layout">
         <Card title="Edge Browser">
           <KGEdgeTable
-            edges={payload.graph_edges}
+            edges={edges}
             selectedTargetKey={selectedTargetKey}
             onTargetSelected={onTargetSelected}
           />
@@ -414,22 +536,22 @@ function KGStudioGraphPage({
 }
 
 function KGStudioReviewPage({
-  payload,
   selectedEdge,
   selectedTarget,
   selectedTargetKey,
   reviewNote,
   reviewStatus,
+  targets,
   onTargetSelected,
   onReviewNoteChanged,
   onSubmitReview
 }: {
-  payload: KGStudioPayload;
   selectedEdge: KGStudioGraphEdge | undefined;
   selectedTarget: KGStudioReviewTarget | undefined;
   selectedTargetKey: string;
   reviewNote: string;
   reviewStatus: string | null;
+  targets: KGStudioReviewTarget[];
   onTargetSelected: (targetKey: string) => void;
   onReviewNoteChanged: (note: string) => void;
   onSubmitReview: (action: ReviewAction) => void;
@@ -438,7 +560,7 @@ function KGStudioReviewPage({
     <section className="kg-two-column review-layout">
       <Card title="Review Queue">
         <KGReviewQueue
-          targets={payload.review_targets}
+          targets={targets}
           selectedTargetKey={selectedTargetKey}
           onTargetSelected={onTargetSelected}
         />
@@ -446,7 +568,7 @@ function KGStudioReviewPage({
       <Card title="Decision Panel">
         <KGEdgeInspector edge={selectedEdge} />
         <KGReviewBox
-          targets={payload.review_targets}
+          targets={targets}
           selectedTarget={selectedTarget}
           selectedTargetKey={selectedTargetKey}
           reviewNote={reviewNote}
@@ -461,7 +583,6 @@ function KGStudioReviewPage({
 }
 
 function KGStudioDraftsPage({
-  payload,
   selectedEdge,
   selectedTarget,
   selectedTargetKey,
@@ -470,11 +591,11 @@ function KGStudioDraftsPage({
   draftEvidence,
   draftConfidence,
   draftStatus,
+  targets,
   onTargetSelected,
   onDraftChanged,
   onSubmitDraft
 }: {
-  payload: KGStudioPayload;
   selectedEdge: KGStudioGraphEdge | undefined;
   selectedTarget: KGStudioReviewTarget | undefined;
   selectedTargetKey: string;
@@ -483,6 +604,7 @@ function KGStudioDraftsPage({
   draftEvidence: string;
   draftConfidence: string;
   draftStatus: string | null;
+  targets: KGStudioReviewTarget[];
   onTargetSelected: (targetKey: string) => void;
   onDraftChanged: (
     patch: Partial<{
@@ -498,7 +620,7 @@ function KGStudioDraftsPage({
     <section className="kg-two-column draft-layout">
       <Card title="Draft Target">
         <EdgeSelectionControl
-          targets={payload.review_targets}
+          targets={targets}
           selectedTargetKey={selectedTargetKey}
           onTargetSelected={onTargetSelected}
         />
@@ -532,6 +654,99 @@ function countRows(counts: Record<string, number>): Array<{ label: string; value
   return Object.entries(counts)
     .sort((left, right) => right[1] - left[1])
     .map(([label, value]) => ({ label, value }));
+}
+
+function selectOptions(values: string[], allLabel: string): Array<{ value: string; label: string }> {
+  return [
+    { value: "all", label: allLabel },
+    ...values.map((value) => ({ value, label: value || "unknown" }))
+  ];
+}
+
+function edgeFilterOptions(edges: KGStudioGraphEdge[]): {
+  scenarios: string[];
+  sources: string[];
+  reviewStatuses: string[];
+} {
+  return {
+    scenarios: uniqueSorted(edges.map((edge) => edge.scenario)),
+    sources: uniqueSorted(edges.map((edge) => edge.source)),
+    reviewStatuses: uniqueSorted(edges.map((edge) => edge.review_status))
+  };
+}
+
+function filterGraphEdges(
+  edges: KGStudioGraphEdge[],
+  filters: KGStudioFilters
+): KGStudioGraphEdge[] {
+  const query = filters.query.trim().toLowerCase();
+  return edges.filter((edge) => {
+    if (filters.scenario !== "all" && edge.scenario !== filters.scenario) return false;
+    if (filters.source !== "all" && edge.source !== filters.source) return false;
+    if (filters.reviewStatus !== "all" && edge.review_status !== filters.reviewStatus) {
+      return false;
+    }
+    if (!query) return true;
+    return [
+      edge.edge_id,
+      edge.head,
+      edge.relation,
+      edge.tail,
+      edge.scenario,
+      edge.source,
+      edge.evidence,
+      edge.review_status
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+}
+
+function reviewTargetsForEdges(
+  targets: KGStudioReviewTarget[],
+  edges: KGStudioGraphEdge[]
+): KGStudioReviewTarget[] {
+  const allowed = new Set(edges.map((edge) => edge.target_key));
+  return targets.filter((target) => allowed.has(target.target_key));
+}
+
+function filterSources(sources: KGStudioSource[], query: string): KGStudioSource[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return sources;
+  return sources.filter((source) =>
+    [
+      source.source_id,
+      source.title,
+      source.source_type,
+      source.path_or_url,
+      source.used_for,
+      source.notes
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalized)
+  );
+}
+
+function filterSourceDocuments(
+  documents: KGStudioSourceDocument[],
+  query: string
+): KGStudioSourceDocument[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return documents;
+  return documents.filter((document) =>
+    [document.title, document.path, String(document.line_count)]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalized)
+  );
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean))).sort((left, right) =>
+    left.localeCompare(right)
+  );
 }
 
 function CountList({
