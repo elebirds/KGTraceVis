@@ -20,6 +20,7 @@ from kgtracevis.service.handlers import (
     record_feedback,
     what_if_request,
 )
+from kgtracevis.service.kg_studio import kg_studio_payload
 from kgtracevis.service.runs import (
     create_run_from_upload,
     download_model_assets,
@@ -109,6 +110,10 @@ def create_app() -> FastAPI:
             return get_run_detail(run_id).model_dump(mode="json")
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/kg/studio")
+    def kg_studio() -> dict[str, object]:
+        return kg_studio_payload().model_dump(mode="json")
 
     @app.post("/api/runs/upload")
     async def upload_run(

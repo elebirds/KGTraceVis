@@ -94,6 +94,19 @@ def _run_smoke(example_path: Path, *, run_dir: Path, feedback_path: Path, top_k:
         == {mode["mode"] for mode in bootstrap_payload["upload_modes"]},
         "bootstrap upload modes are incomplete",
     )
+    kg_studio = client.get("/api/kg/studio")
+    _require(kg_studio.status_code == 200, "KG Studio route failed")
+    kg_studio_payload = kg_studio.json()
+    _require(
+        kg_studio_payload["status"] in {"ok", "empty"},
+        "KG Studio returned an unsupported status",
+    )
+    if kg_studio_payload["status"] == "ok":
+        _require(kg_studio_payload["edge_count"] > 0, "KG Studio returned no edges")
+        _require(
+            len(kg_studio_payload["review_targets"]) > 0,
+            "KG Studio returned no review targets",
+        )
 
     with example_path.open("rb") as handle:
         upload = client.post(

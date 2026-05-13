@@ -1,5 +1,6 @@
 import type {
   DashboardBootstrap,
+  KGStudioPayload,
   ReviewRequest,
   RunDetail,
   RunSummary,
@@ -19,6 +20,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   bootstrap: () => requestJson<DashboardBootstrap>("/api/dashboard/bootstrap"),
+  kgStudio: () => requestJson<KGStudioPayload>("/api/kg/studio"),
   listRuns: () => requestJson<RunSummary[]>("/api/runs"),
   getRun: (runId: string) => requestJson<RunDetail>(`/api/runs/${runId}`),
   uploadRun: (request: UploadRequest) => {

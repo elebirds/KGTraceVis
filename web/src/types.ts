@@ -126,6 +126,75 @@ export interface DashboardBootstrap {
   recent_runs: RunSummary[];
 }
 
+export interface KGStudioSource {
+  source_id: string;
+  title: string;
+  source_type: string;
+  path_or_url: string;
+  used_for: string;
+  notes: string;
+}
+
+export interface KGStudioSourceDocument {
+  path: string;
+  title: string;
+  line_count: number;
+}
+
+export interface KGStudioGraphNode {
+  node_id: string;
+  label: string;
+  node_type: string;
+  scenario: string;
+  description: string;
+}
+
+export interface KGStudioGraphEdge {
+  edge_id: string;
+  target_key: string;
+  head: string;
+  relation: string;
+  tail: string;
+  scenario: string;
+  source: string;
+  evidence: string;
+  confidence: number | null;
+  weight: number | null;
+  review_status: string;
+}
+
+export interface KGStudioReviewTarget {
+  target_type: "edge";
+  target_id: string;
+  target_key: string;
+  label: string;
+  source: string;
+  confidence: number | null;
+  review_status: string;
+}
+
+export interface KGStudioPayload {
+  status: "ok" | "empty" | string;
+  claim_boundary: string;
+  candidate_dir: string | null;
+  nodes_path: string | null;
+  edges_path: string | null;
+  source_registry_path: string;
+  node_count: number;
+  edge_count: number;
+  scenario_counts: Record<string, number>;
+  review_status_counts: Record<string, number>;
+  source_counts: Record<string, number>;
+  confidence_summary: Record<string, number | null>;
+  validation_summary: Record<string, unknown> | null;
+  sources: KGStudioSource[];
+  source_documents: KGStudioSourceDocument[];
+  graph_nodes: KGStudioGraphNode[];
+  graph_edges: KGStudioGraphEdge[];
+  review_targets: KGStudioReviewTarget[];
+  note: string;
+}
+
 export interface UploadRequest {
   file: File;
   mode: UploadMode;

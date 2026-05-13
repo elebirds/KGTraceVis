@@ -3,6 +3,7 @@ import {
   Check,
   ChevronRight,
   Circle,
+  Database,
   FileUp,
   GitBranch,
   History,
@@ -18,6 +19,11 @@ import { initialState, reducer } from "./state";
 import type {
   ReviewAction,
   ReviewTarget,
+  KGStudioGraphEdge,
+  KGStudioPayload,
+  KGStudioReviewTarget,
+  KGStudioSource,
+  KGStudioSourceDocument,
   RunDetail,
   PathGraphEdge,
   PathGraphPath,
@@ -65,9 +71,17 @@ export function App() {
       ),
     [state.selectedRun?.review_targets, state.selectedTargetKey]
   );
+  const selectedKGTarget = useMemo(
+    () =>
+      state.kgStudio?.review_targets.find(
+        (item) => item.target_key === state.selectedKGEdgeKey
+      ),
+    [state.kgStudio?.review_targets, state.selectedKGEdgeKey]
+  );
 
   useEffect(() => {
     void loadBootstrap();
+    void loadKGStudio();
   }, []);
 
   async function loadBootstrap() {
@@ -91,6 +105,15 @@ export function App() {
       dispatch({ type: "error", error: (error as Error).message });
     } finally {
       dispatch({ type: "loading", value: false });
+    }
+  }
+
+  async function loadKGStudio() {
+    try {
+      const kgStudio = await api.kgStudio();
+      dispatch({ type: "kgStudioLoaded", kgStudio });
+    } catch (error) {
+      dispatch({ type: "error", error: (error as Error).message });
     }
   }
 
@@ -158,6 +181,33 @@ export function App() {
       dispatch({
         type: "reviewRecorded",
         status: `${response.status} for ${selectedTarget.target_key}`
+      });
+    } catch (error) {
+      dispatch({ type: "error", error: (error as Error).message });
+    } finally {
+      dispatch({ type: "loading", value: false });
+    }
+  }
+
+  async function submitKGReview(action: ReviewAction) {
+    if (!selectedKGTarget) return;
+    dispatch({ type: "loading", value: true });
+    try {
+      const response = await api.submitReview({
+        target_type: "edge",
+        target_id: selectedKGTarget.target_id,
+        action,
+        note: state.kgReviewNote || undefined,
+        source: "rootlens-kg-studio",
+        metadata: {
+          target_key: selectedKGTarget.target_key,
+          candidate_dir: state.kgStudio?.candidate_dir,
+          source_registry_path: state.kgStudio?.source_registry_path
+        }
+      });
+      dispatch({
+        type: "kgReviewRecorded",
+        status: `${response.status} for ${selectedKGTarget.target_key}`
       });
     } catch (error) {
       dispatch({ type: "error", error: (error as Error).message });
@@ -401,8 +451,255 @@ export function App() {
             </div>
           )}
         </section>
+
+        <section className="kg-studio-region">
+          <KGStudioPanel
+            payload={state.kgStudio}
+            selectedTarget={selectedKGTarget}
+            selectedTargetKey={state.selectedKGEdgeKey}
+            reviewNote={state.kgReviewNote}
+            reviewStatus={state.kgReviewStatus}
+            onRefresh={() => void loadKGStudio()}
+            onTargetSelected={(targetKey) =>
+              dispatch({ type: "kgEdgeSelected", targetKey })
+            }
+            onReviewNoteChanged={(note) =>
+              dispatch({ type: "kgReviewNoteChanged", note })
+            }
+            onSubmitReview={(action) => void submitKGReview(action)}
+          />
+        </section>
       </section>
     </main>
+  );
+}
+
+function KGStudioPanel({
+  payload,
+  selectedTarget,
+  selectedTargetKey,
+  reviewNote,
+  reviewStatus,
+  onRefresh,
+  onTargetSelected,
+  onReviewNoteChanged,
+  onSubmitReview
+}: {
+  payload: KGStudioPayload | null;
+  selectedTarget: KGStudioReviewTarget | undefined;
+  selectedTargetKey: string;
+  reviewNote: string;
+  reviewStatus: string | null;
+  onRefresh: () => void;
+  onTargetSelected: (targetKey: string) => void;
+  onReviewNoteChanged: (note: string) => void;
+  onSubmitReview: (action: ReviewAction) => void;
+}) {
+  const selectedEdge = payload?.graph_edges.find(
+    (edge) => edge.target_key === selectedTargetKey
+  );
+  return (
+    <section className="panel kg-studio-panel">
+      <div className="panel-heading">
+        <Database size={18} />
+        <h2>KG Studio</h2>
+        <button className="ghost-button" onClick={onRefresh}>
+          Refresh
+        </button>
+      </div>
+      {payload ? (
+        <>
+          <p className="claim-boundary">{payload.note}</p>
+          <div className="kg-metrics">
+            <Metric label="status" value={payload.status} />
+            <Metric label="nodes" value={payload.node_count} />
+            <Metric label="edges" value={payload.edge_count} />
+            <Metric
+              label="validation"
+              value={payload.validation_summary?.passed ?? "unknown"}
+            />
+            <Metric
+              label="mean confidence"
+              value={payload.confidence_summary.mean ?? "unknown"}
+            />
+          </div>
+          <div className="kg-studio-grid">
+            <section>
+              <h3>Sources</h3>
+              <KGSourceList sources={payload.sources} />
+              <h3>Documents</h3>
+              <KGSourceDocumentList documents={payload.source_documents} />
+            </section>
+            <section>
+              <h3>Candidate Edge Graph</h3>
+              <KGEdgePreview
+                edges={payload.graph_edges}
+                selectedTargetKey={selectedTargetKey}
+                onTargetSelected={onTargetSelected}
+              />
+            </section>
+            <section>
+              <h3>Edge Provenance</h3>
+              <KGEdgeInspector edge={selectedEdge} />
+              <div className="kg-review-box">
+                <select
+                  value={selectedTargetKey}
+                  onChange={(event) => onTargetSelected(event.target.value)}
+                  disabled={!payload.review_targets.length}
+                >
+                  {payload.review_targets.length > 0 ? (
+                    payload.review_targets.slice(0, 80).map((target) => (
+                      <option key={target.target_key} value={target.target_key}>
+                        {shortId(target.label)}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No KG edge targets</option>
+                  )}
+                </select>
+                <input
+                  value={reviewNote}
+                  onChange={(event) => onReviewNoteChanged(event.target.value)}
+                  placeholder="optional KG edge review note"
+                  disabled={!selectedTarget}
+                />
+                <div className="kg-review-actions">
+                  <button onClick={() => onSubmitReview("accept")} disabled={!selectedTarget}>
+                    <Check size={16} />
+                    Accept
+                  </button>
+                  <button onClick={() => onSubmitReview("reject")} disabled={!selectedTarget}>
+                    <X size={16} />
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => onSubmitReview("needs_review")}
+                    disabled={!selectedTarget}
+                  >
+                    Needs review
+                  </button>
+                </div>
+                {reviewStatus && <p className="muted">Feedback {reviewStatus}.</p>}
+              </div>
+            </section>
+          </div>
+        </>
+      ) : (
+        <EmptyMessage
+          title="KG Studio loading"
+          body="Reading source registry and candidate KG artifacts from local project paths."
+        />
+      )}
+    </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{valueText(value)}</strong>
+    </div>
+  );
+}
+
+function KGSourceList({ sources }: { sources: KGStudioSource[] }) {
+  if (!sources.length) return <p className="muted">No source registry rows found.</p>;
+  return (
+    <ul className="compact-list">
+      {sources.slice(0, 10).map((source) => (
+        <li key={source.source_id}>
+          <strong>{source.source_id}</strong>
+          <span>{source.used_for}</span>
+          <span>{source.path_or_url}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function KGSourceDocumentList({ documents }: { documents: KGStudioSourceDocument[] }) {
+  if (!documents.length) return <p className="muted">No source documents found.</p>;
+  return (
+    <ul className="compact-list">
+      {documents.slice(0, 8).map((document) => (
+        <li key={document.path}>
+          <strong>{document.title}</strong>
+          <span>{document.path}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function KGEdgePreview({
+  edges,
+  selectedTargetKey,
+  onTargetSelected
+}: {
+  edges: KGStudioGraphEdge[];
+  selectedTargetKey: string;
+  onTargetSelected: (targetKey: string) => void;
+}) {
+  if (!edges.length) {
+    return (
+      <EmptyMessage
+        title="No candidate edges"
+        body="Generate candidate KG artifacts first, then refresh this panel."
+      />
+    );
+  }
+  return (
+    <div className="kg-edge-list">
+      {edges.slice(0, 40).map((edge) => (
+        <button
+          key={edge.edge_id}
+          className={selectedTargetKey === edge.target_key ? "selected" : ""}
+          onClick={() => onTargetSelected(edge.target_key)}
+        >
+          <span>{edge.head}</span>
+          <strong>{edge.relation}</strong>
+          <span>{edge.tail}</span>
+          <small>
+            {edge.scenario} · {edge.source} · {valueText(edge.confidence)}
+          </small>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function KGEdgeInspector({ edge }: { edge: KGStudioGraphEdge | undefined }) {
+  if (!edge) {
+    return <p className="muted">Select a candidate KG edge to inspect provenance.</p>;
+  }
+  return (
+    <dl className="kg-edge-inspector">
+      <div>
+        <dt>edge</dt>
+        <dd>{shortId(edge.edge_id)}</dd>
+      </div>
+      <div>
+        <dt>scenario</dt>
+        <dd>{edge.scenario}</dd>
+      </div>
+      <div>
+        <dt>source</dt>
+        <dd>{edge.source}</dd>
+      </div>
+      <div>
+        <dt>confidence</dt>
+        <dd>{valueText(edge.confidence)}</dd>
+      </div>
+      <div>
+        <dt>review status</dt>
+        <dd>{edge.review_status}</dd>
+      </div>
+      <div className="kg-edge-evidence">
+        <dt>evidence</dt>
+        <dd>{edge.evidence}</dd>
+      </div>
+    </dl>
   );
 }
 
