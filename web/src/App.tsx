@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  BarChart3,
   Check,
   ChevronRight,
   Circle,
@@ -25,6 +26,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useReducer } from "react";
 
 import { api } from "./api";
 import { initialState, reducer } from "./state";
+import type { AppState } from "./state";
 import type {
   ReviewAction,
   KGDraftAction,
@@ -56,6 +58,16 @@ const EXAMPLE_UPLOADS: Record<UploadMode, Array<{ path: string; label: string }>
     { path: "data/external/mvtec/<object>/test/<defect>/<image>.png", label: "Local MVTec image" }
   ]
 };
+const DASHBOARD_PAGES: Array<{
+  page: AppState["activePage"];
+  label: string;
+  description: string;
+}> = [
+  { page: "overview", label: "Overview", description: "Status and next actions" },
+  { page: "intake", label: "Intake", description: "Upload and run history" },
+  { page: "analysis", label: "Case Analysis", description: "Paths and evidence review" },
+  { page: "kg", label: "KG Studio", description: "Sources, graph, and drafts" }
+];
 
 function valueText(value: unknown): string {
   if (value === null || value === undefined || value === "") return "unknown";
@@ -322,7 +334,24 @@ export function App() {
         </div>
       )}
 
-      <section className="workspace-grid">
+      <DashboardNav
+        activePage={state.activePage}
+        onPageSelected={(page) => dispatch({ type: "pageSelected", page })}
+      />
+
+      <section className={`workspace-grid page-${state.activePage}`}>
+        <section className="overview-region">
+          <OverviewPage
+            bootstrapStatus={state.bootstrap?.status ?? "connecting"}
+            apiVersion={state.bootstrap?.api_version ?? "unknown"}
+            recentRunCount={state.runs.length}
+            selectedRunLabel={state.selectedRun?.run.label ?? "No run selected"}
+            kgStatus={state.kgStudio?.status ?? "loading"}
+            kgEdgeCount={state.kgStudio?.edge_count ?? 0}
+            onPageSelected={(page) => dispatch({ type: "pageSelected", page })}
+          />
+        </section>
+
         <aside className="panel upload-panel">
           <div className="panel-heading">
             <FileUp size={18} />
@@ -560,6 +589,107 @@ export function App() {
         </section>
       </section>
     </main>
+  );
+}
+
+function DashboardNav({
+  activePage,
+  onPageSelected
+}: {
+  activePage: AppState["activePage"];
+  onPageSelected: (page: AppState["activePage"]) => void;
+}) {
+  return (
+    <nav className="dashboard-nav" aria-label="RootLens workspace pages">
+      {DASHBOARD_PAGES.map((item) => (
+        <button
+          key={item.page}
+          className={activePage === item.page ? "selected" : ""}
+          onClick={() => onPageSelected(item.page)}
+        >
+          <span>{item.label}</span>
+          <small>{item.description}</small>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function OverviewPage({
+  bootstrapStatus,
+  apiVersion,
+  recentRunCount,
+  selectedRunLabel,
+  kgStatus,
+  kgEdgeCount,
+  onPageSelected
+}: {
+  bootstrapStatus: string;
+  apiVersion: string;
+  recentRunCount: number;
+  selectedRunLabel: string;
+  kgStatus: string;
+  kgEdgeCount: number;
+  onPageSelected: (page: AppState["activePage"]) => void;
+}) {
+  return (
+    <div className="overview-page">
+      <section className="panel overview-hero">
+        <div>
+          <p className="eyebrow">Dashboard</p>
+          <h2>Traceable Industrial Anomaly Workspace</h2>
+          <p>
+            Upload evidence, inspect case reasoning, and manage candidate KG
+            changes from separate focused pages.
+          </p>
+        </div>
+        <div className="overview-actions">
+          <button className="primary-button" onClick={() => onPageSelected("intake")}>
+            <FileUp size={16} />
+            New analysis
+          </button>
+          <button className="ghost-button" onClick={() => onPageSelected("analysis")}>
+            <GitBranch size={16} />
+            Review case paths
+          </button>
+          <button className="ghost-button" onClick={() => onPageSelected("kg")}>
+            <Database size={16} />
+            Open KG Studio
+          </button>
+        </div>
+      </section>
+
+      <section className="overview-metrics">
+        <div className="panel">
+          <BarChart3 size={18} />
+          <span>API</span>
+          <strong>{bootstrapStatus}</strong>
+          <small>{apiVersion}</small>
+        </div>
+        <div className="panel">
+          <History size={18} />
+          <span>Runs</span>
+          <strong>{recentRunCount}</strong>
+          <small>{selectedRunLabel}</small>
+        </div>
+        <div className="panel">
+          <Database size={18} />
+          <span>Candidate KG</span>
+          <strong>{kgStatus}</strong>
+          <small>{kgEdgeCount} preview edges</small>
+        </div>
+      </section>
+
+      <section className="overview-flow">
+        {DASHBOARD_PAGES.filter((item) => item.page !== "overview").map((item, index) => (
+          <button key={item.page} className="panel" onClick={() => onPageSelected(item.page)}>
+            <span>{`0${index + 1}`}</span>
+            <strong>{item.label}</strong>
+            <small>{item.description}</small>
+          </button>
+        ))}
+      </section>
+    </div>
   );
 }
 

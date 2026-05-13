@@ -25,10 +25,19 @@ npm run dev
 The API runs on `http://127.0.0.1:8000`. Vite runs on
 `http://127.0.0.1:5173` and proxies `/api` to the API server.
 
-On first load, the dashboard shows the API bootstrap state, supported upload
-modes, accepted file extensions, and exact local example paths. If no runs have
-been created, the history and detail panes stay in empty states until a user
-uploads a file or selects an existing run.
+On first load, the dashboard opens to an Overview page rather than a single
+mixed workspace. Navigation separates the demo into four focused pages:
+
+- Overview: API/KG/run status and next actions.
+- Intake: upload modes, accepted file extensions, exact local example paths,
+  and run history.
+- Case Analysis: selected-run evidence, path graph, provenance, and review
+  queue.
+- KG Studio: source registry, source-to-KG drafts, candidate graph, edge
+  provenance, and KG draft adjustments.
+
+If no runs have been created, Intake and Case Analysis show empty states until
+a user uploads a file or selects an existing run.
 
 ## Example Uploads
 

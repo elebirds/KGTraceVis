@@ -18,6 +18,7 @@ export interface UploadFormState {
 }
 
 export interface AppState {
+  activePage: "overview" | "intake" | "analysis" | "kg";
   bootstrap: DashboardBootstrap | null;
   kgStudio: KGStudioPayload | null;
   runs: RunSummary[];
@@ -45,6 +46,7 @@ export interface AppState {
 }
 
 export type AppAction =
+  | { type: "pageSelected"; page: AppState["activePage"] }
   | { type: "bootstrapLoaded"; bootstrap: DashboardBootstrap }
   | { type: "kgStudioLoaded"; kgStudio: KGStudioPayload }
   | { type: "runsLoaded"; runs: RunSummary[] }
@@ -85,6 +87,7 @@ export type AppAction =
   | { type: "error"; error: string | null };
 
 export const initialState: AppState = {
+  activePage: "overview",
   bootstrap: null,
   kgStudio: null,
   runs: [],
@@ -122,6 +125,8 @@ export const initialState: AppState = {
 
 export function reducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    case "pageSelected":
+      return { ...state, activePage: action.page };
     case "bootstrapLoaded":
       return {
         ...state,
