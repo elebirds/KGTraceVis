@@ -84,6 +84,21 @@ export interface PathGraph {
   edge_count: number;
 }
 
+export interface VisualEvidenceItem {
+  artifact_id: string;
+  case_id: string;
+  dataset: string;
+  kind: "image" | "mask" | "heatmap" | "wafer_map";
+  title: string;
+  source_key: string;
+  source_path: string | null;
+  url: string | null;
+  preview_path: string | null;
+  available: boolean;
+  note: string;
+  metadata: Record<string, unknown>;
+}
+
 export interface RunDetail {
   run: RunSummary;
   workflow_steps: WorkflowStep[];
@@ -101,6 +116,7 @@ export interface RunDetail {
   source_edge_provenance: Array<Record<string, unknown>>;
   review_targets: ReviewTarget[];
   artifacts: Record<string, string>;
+  visual_evidence: VisualEvidenceItem[];
 }
 
 export interface UploadModeInfo {

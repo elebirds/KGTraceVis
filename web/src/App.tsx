@@ -78,7 +78,8 @@ import type {
   PathGraphEdge,
   PathGraphPath,
   UploadMode,
-  UploadModeInfo
+  UploadModeInfo,
+  VisualEvidenceItem
 } from "./types";
 
 const { Header, Content } = Layout;
@@ -1809,7 +1810,10 @@ function RunDetailView({
       title: "Model Evidence",
       description: "Observed anomaly fields",
       content: (
-        <div className="analysis-stage-grid">
+        <div className="analysis-stage-grid visual-evidence-layout">
+          <Card className="visual-evidence-card" title="Visual Evidence">
+            <VisualEvidencePanel items={run.visual_evidence ?? []} />
+          </Card>
           <Card title="Evidence Summary">
             <Descriptions size="small" column={2} bordered>
               {[
@@ -1994,6 +1998,46 @@ function RunDetailView({
         />
       </Card>
       <section className="analysis-stage-canvas">{stages[activeStep]?.content}</section>
+    </div>
+  );
+}
+
+function VisualEvidencePanel({ items }: { items: VisualEvidenceItem[] }) {
+  if (!items.length) {
+    return <Empty description="No visual evidence artifacts were recorded for this run." />;
+  }
+  return (
+    <div className="visual-evidence-grid">
+      {items.map((item) => (
+        <article className="visual-evidence-item" key={item.artifact_id}>
+          <div className="visual-evidence-preview">
+            {item.available && item.url ? (
+              <img src={item.url} alt={`${item.title} for ${item.case_id}`} />
+            ) : (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Preview unavailable" />
+            )}
+          </div>
+          <div className="visual-evidence-meta">
+            <div>
+              <strong>{item.title}</strong>
+              <span>{item.case_id}</span>
+            </div>
+            <Space wrap>
+              <Tag color={item.available ? "green" : "default"}>
+                {item.available ? "available" : "missing"}
+              </Tag>
+              <Tag color="blue">{item.kind}</Tag>
+              <Tag>{item.dataset}</Tag>
+            </Space>
+            <p>{item.note}</p>
+            {item.source_path && (
+              <code title={item.source_path}>
+                {item.source_key}: {shortId(item.source_path)}
+              </code>
+            )}
+          </div>
+        </article>
+      ))}
     </div>
   );
 }

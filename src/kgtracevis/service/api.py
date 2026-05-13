@@ -6,6 +6,7 @@ from typing import Annotated, cast
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 
 from kgtracevis.producers.model_assets import MODEL_ASSET_CHOICES, ModelAsset
@@ -29,6 +30,7 @@ from kgtracevis.service.kg_studio import kg_studio_payload
 from kgtracevis.service.runs import (
     create_run_from_upload,
     download_model_assets,
+    get_run_artifact_path,
     get_run_detail,
     list_runs,
     mvtec_model_presets,
@@ -113,6 +115,13 @@ def create_app() -> FastAPI:
     def run_detail(run_id: str) -> dict[str, object]:
         try:
             return get_run_detail(run_id).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/runs/{run_id}/artifacts/{artifact_name}")
+    def run_artifact(run_id: str, artifact_name: str) -> FileResponse:
+        try:
+            return FileResponse(get_run_artifact_path(run_id, artifact_name))
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

@@ -1,0 +1,9 @@
+{"type":"note","text":"Add visual evidence rendering to Analysis detail for real MVTec/WM811K uploads."}
+{"type":"file","path":"src/kgtracevis/service/visual_evidence.py","reason":"Run-scoped visual evidence preview generation."}
+{"type":"file","path":"src/kgtracevis/service/runs.py","reason":"Attach visual evidence payloads to RunDetail manifests."}
+{"type":"file","path":"src/kgtracevis/service/api.py","reason":"Serve safe run artifact preview files."}
+{"type":"file","path":"web/src/App.tsx","reason":"Render visual evidence cards in Analysis detail."}
+{"type":"file","path":"web/src/types.ts","reason":"Add visual evidence API contract types."}
+{"type":"file","path":"web/src/styles.css","reason":"Style visual evidence preview cards."}
+{"type":"file","path":"tests/test_service_api.py","reason":"Regression coverage for visual evidence artifacts and route."}
+{"type":"file","path":"docs/rootlens_dashboard.md","reason":"Document run visual evidence contract."}

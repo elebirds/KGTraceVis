@@ -173,6 +173,7 @@ def _run_smoke(
     _require(run_detail["run"]["case_count"] > 0, "upload created no cases")
     _require(len(run_detail["workflow_steps"]) > 0, "upload returned no workflow steps")
     _require(len(run_detail["top_k_paths"]) > 0, "upload returned no candidate paths")
+    _require("visual_evidence" in run_detail, "upload omitted visual evidence field")
     _require(len(run_detail["path_graph"]["paths"]) > 0, "upload returned no path graph")
     _require(
         len(run_detail["path_graph"]["paths"][0]["edges"]) > 0,

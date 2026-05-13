@@ -13,6 +13,7 @@ from typing import Any, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field
 
 from kgtracevis.adapters import evidence_from_mvtec_record
+from kgtracevis.adapters.batch import load_records as load_adapter_records
 from kgtracevis.core import KGTracePipeline
 from kgtracevis.core.result import AnalysisResult
 from kgtracevis.experiments.adapter_pipeline import run_adapter_pipeline
@@ -38,6 +39,7 @@ from kgtracevis.producers.mvtec_models import (
 )
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
 from kgtracevis.schema.validators import load_evidence_json
+from kgtracevis.service.visual_evidence import build_visual_evidence_artifacts
 
 ROOTLENS_RUNS_DIR = Path("runs/rootlens_sessions")
 LEGACY_WEB_RUNS_DIR = Path("runs/web_sessions")
@@ -100,6 +102,7 @@ class RunDetail(BaseModel):
     source_edge_provenance: list[dict[str, Any]] = Field(default_factory=list)
     review_targets: list[dict[str, Any]] = Field(default_factory=list)
     artifacts: dict[str, str] = Field(default_factory=dict)
+    visual_evidence: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def list_runs(
@@ -139,6 +142,22 @@ def get_run_detail(
             )
             return _enrich_run_detail(detail)
     raise ValueError(f"unknown run session: {run_id}")
+
+
+def get_run_artifact_path(
+    run_id: str,
+    artifact_name: str,
+    *,
+    runs_dir: str | Path | None = None,
+) -> Path:
+    """Return a safe run artifact path by filename."""
+    if artifact_name != Path(artifact_name).name:
+        raise ValueError("artifact name must not contain path separators")
+    detail = get_run_detail(run_id, runs_dir=runs_dir)
+    artifact_path = Path(detail.run.run_dir) / "artifacts" / artifact_name
+    if not artifact_path.is_file():
+        raise ValueError(f"unknown run artifact: {artifact_name}")
+    return artifact_path
 
 
 def create_run_from_upload(
@@ -438,6 +457,11 @@ def _run_evidence_upload(
         artifacts={
             "input_path": str(input_path),
         },
+        visual_evidence=build_visual_evidence_artifacts(
+            [evidence.model_dump(mode="json")],
+            run_id=run_id,
+            run_dir=input_path.parent.parent,
+        ),
     )
     return detail
 
@@ -462,6 +486,7 @@ def _run_records_upload(
         pipeline=pipeline,
     )
     summary = output.summary
+    records = _load_visual_records(input_path)
     summary_cases = summary.get("cases", [])
     inferred_dataset = None
     if isinstance(summary_cases, list) and summary_cases:
@@ -537,6 +562,11 @@ def _run_records_upload(
             "summary_path": str(output.summary_path),
             "table_path": str(output.table_path),
         },
+        visual_evidence=build_visual_evidence_artifacts(
+            records,
+            run_id=run_id,
+            run_dir=input_path.parent.parent,
+        ),
     )
     return detail
 
@@ -656,6 +686,11 @@ def _run_mvtec_image_upload(
             "model_preset": selection.preset,
             "model_backend": selection.backend,
         },
+        visual_evidence=build_visual_evidence_artifacts(
+            generated_records,
+            run_id=run_id,
+            run_dir=input_path.parent.parent,
+        ),
     )
     return detail
 
@@ -754,6 +789,13 @@ def _enrich_run_detail(detail: RunDetail) -> RunDetail:
             "review_targets": review_targets,
         }
     )
+
+
+def _load_visual_records(input_path: Path) -> list[dict[str, Any]]:
+    try:
+        return [dict(record) for record in load_adapter_records(input_path)]
+    except (OSError, ValueError, json.JSONDecodeError):
+        return []
 
 
 def _dashboard_fields_from_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:

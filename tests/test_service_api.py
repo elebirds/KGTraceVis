@@ -100,6 +100,81 @@ def test_upload_run_route_persists_a_run_manifest(tmp_path: Path, monkeypatch) -
     assert all("target_key" in target for target in payload["review_targets"])
 
 
+def test_upload_run_prepares_visual_evidence_artifacts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Record uploads should expose browser-safe visual evidence previews."""
+    original = service_api.create_run_from_upload
+    original_get_artifact_path = service_api.get_run_artifact_path
+
+    def _patched_create_run_from_upload(*args, **kwargs):
+        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        return original(*args, **kwargs)
+
+    def _patched_get_run_artifact_path(*args, **kwargs):
+        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        return original_get_artifact_path(*args, **kwargs)
+
+    monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
+    monkeypatch.setattr(service_api, "get_run_artifact_path", _patched_get_run_artifact_path)
+    client = TestClient(app)
+
+    mvtec_record = {
+        "dataset": "mvtec",
+        "case_id": "mvtec_visual_fixture",
+        "object": "capsule",
+        "defect_type": "crack",
+        "source_label": "crack",
+        "image_path": "runs/real_model_pipeline/assets/mvtec/input_root/capsule/test/"
+        "crack/000.png",
+        "source_path": "runs/real_model_pipeline/assets/mvtec/input_root/capsule/test/"
+        "crack/000.png",
+        "mask_path": "runs/real_model_pipeline/assets/mvtec/generated_records/"
+        "mvtec_capsule_test_crack_000_mask.json",
+        "heatmap_path": "runs/real_model_pipeline/assets/mvtec/generated_records/"
+        "mvtec_capsule_test_crack_000_heatmap.json",
+        "confidence": 0.6,
+    }
+    wafer_record = {
+        "dataset": "wafer",
+        "adapter": "wm811k",
+        "case_id": "wafer_visual_fixture",
+        "wafer_id": "WVIS-1",
+        "predicted_pattern": "Loc",
+        "failure_pattern": "Loc",
+        "classification_confidence": 0.67,
+        "wafer_map": [[0, 0, 0], [0, 2, 0], [0, 0, 0]],
+    }
+    records_path = tmp_path / "visual_records.jsonl"
+    records_path.write_text(
+        json.dumps(mvtec_record) + "\n" + json.dumps(wafer_record) + "\n",
+        encoding="utf-8",
+    )
+
+    with records_path.open("rb") as handle:
+        response = client.post(
+            "/api/runs/upload",
+            files={"file": ("visual_records.jsonl", handle, "application/jsonl")},
+            data={"mode": "records", "top_k": "2"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    visual_items = payload["visual_evidence"]
+    kinds = {item["kind"] for item in visual_items if item["available"]}
+    assert {"image", "mask", "heatmap", "wafer_map"} <= kinds
+    artifact_prefix = f"/api/runs/{payload['run']['run_id']}/artifacts/"
+    assert all(
+        item["url"].startswith(artifact_prefix) for item in visual_items if item["available"]
+    )
+
+    first_url = next(item["url"] for item in visual_items if item["kind"] == "wafer_map")
+    artifact_response = client.get(first_url)
+    assert artifact_response.status_code == 200
+    assert artifact_response.headers["content-type"] == "image/png"
+
+
 def test_default_run_store_prefers_rootlens_and_reads_legacy(
     tmp_path: Path,
 ) -> None:
