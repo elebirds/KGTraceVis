@@ -33,8 +33,8 @@ modules:
 
 - Home: API/KG/run status, recent analysis context, and next actions.
 - Analysis: live upload, historical run lookup, and per-run detail.
-- KG Studio: source registry, source-to-KG drafts, candidate graph, edge
-  provenance, and KG draft adjustments.
+- KG Studio: route-backed source registry, source-to-KG drafts, candidate
+  graph, edge provenance, review decisions, and KG draft adjustments.
 - Experiments: paper case, coverage, before/after, and export workspace
   placeholders.
 
@@ -114,16 +114,30 @@ editor, KG mutation workflow, or LLM source-to-KG construction UI.
 
 ## KG Studio
 
-The KG Studio panel reads candidate KG artifacts from local generated outputs.
+KG Studio is split into focused workspace pages rather than a single mixed
+panel:
+
+- `/kg-studio/overview` shows KG status, validation, source/scenario/review
+  counts, and artifact paths.
+- `/kg-studio/sources` shows source registry rows, source documents, and the
+  source-to-KG draft generator.
+- `/kg-studio/graph` shows the candidate graph, edge browser, and selected edge
+  provenance.
+- `/kg-studio/review` shows the review queue and feedback decision panel.
+- `/kg-studio/drafts` shows the selected edge and append-only draft adjustment
+  form.
+
+The KG Studio workspace reads candidate KG artifacts from local generated outputs.
 It prefers `runs/paper_case_kg/` and falls back to
 `runs/end_to_end_interpretability_audit/candidate_kg/`. If neither directory is
-present, the panel stays in an empty state and still shows any available source
+present, the workspace stays in an empty state and still shows any available source
 registry/source document metadata.
 
-The panel is intentionally non-mutating. It previews candidate KG edges, shows
-source/evidence/confidence/review status, and includes a force-directed SVG
-graph preview for visual edge selection. It submits edge review feedback via the
-same append-only `/api/feedback` route used by case reasoning.
+The workspace is intentionally non-mutating. It previews candidate KG edges,
+shows source/evidence/confidence/review status, and includes a focused
+force-directed SVG graph preview for visual edge selection. It submits edge
+review feedback via the same append-only `/api/feedback` route used by case
+reasoning.
 
 The Draft Adjustment form writes append-only JSONL records through
 `POST /api/kg/drafts` into `runs/kg_studio_drafts/drafts.jsonl`. Draft actions

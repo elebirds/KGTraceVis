@@ -38,15 +38,6 @@ import {
   ReloadOutlined,
   SendOutlined
 } from "@ant-design/icons";
-import {
-  forceCenter,
-  forceCollide,
-  forceLink,
-  forceManyBody,
-  forceSimulation,
-  type SimulationLinkDatum,
-  type SimulationNodeDatum
-} from "d3-force";
 import { useEffect, useMemo, useReducer, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -60,19 +51,13 @@ import {
 } from "react-router-dom";
 
 import { api } from "./api";
+import { shortId, valueText } from "./format";
+import { KGStudioWorkspace } from "./KGStudioWorkspace";
 import { initialState, reducer } from "./state";
 import type { AppState } from "./state";
 import type {
   ReviewAction,
-  KGDraftAction,
   ReviewTarget,
-  KGStudioGraphEdge,
-  KGStudioGraphNode,
-  KGStudioPayload,
-  KGStudioReviewTarget,
-  KGStudioSource,
-  KGStudioSourceDocument,
-  KGSourceDraftResponse,
   RunDetail,
   RunSummary,
   PathGraph,
@@ -115,7 +100,12 @@ const TOP_LEVEL_MODULES: Array<{
     label: "Analysis",
     description: "Live runs, history, and case detail"
   },
-  { key: "kg-studio", path: "/kg-studio", label: "KG Studio", description: "Sources, graph, and drafts" },
+  {
+    key: "kg-studio",
+    path: "/kg-studio/overview",
+    label: "KG Studio",
+    description: "Sources, graph, and drafts"
+  },
   { key: "experiments", path: "/experiments", label: "Experiments", description: "Paper cases and exports" }
 ];
 
@@ -129,18 +119,6 @@ const ANALYSIS_VIEWS: Array<{
   { key: "history", path: "/analysis/history", label: "History", description: "Search previous runs" },
   { key: "detail", path: "/analysis/detail", label: "Detail", description: "Timeline investigation" }
 ];
-
-function valueText(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "unknown";
-  if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(3);
-  if (Array.isArray(value)) return value.length ? value.join(", ") : "none";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
-function shortId(value: string): string {
-  return value.length > 42 ? `${value.slice(0, 39)}...` : value;
-}
 
 export function App() {
   return (
@@ -516,9 +494,9 @@ function RootLensApp() {
             }
           />
           <Route
-            path="/kg-studio"
+            path="/kg-studio/*"
             element={
-              <KGStudioPanel
+              <KGStudioWorkspace
                 payload={state.kgStudio}
                 selectedTarget={selectedKGTarget}
                 selectedTargetKey={state.selectedKGEdgeKey}
@@ -560,7 +538,7 @@ function RootLensApp() {
                 runCount={state.runs.length}
                 kgEdgeCount={state.kgStudio?.edge_count ?? 0}
                 onOpenAnalysis={() => navigate("/analysis/history")}
-                onOpenKG={() => navigate("/kg-studio")}
+                onOpenKG={() => navigate("/kg-studio/overview")}
               />
             }
           />
@@ -583,6 +561,18 @@ function pageInfoForPath(pathname: string): { label: string; description: string
     return { label: "Live Analysis", description: "Upload evidence and run a new analysis" };
   }
   if (pathname.startsWith("/kg-studio")) {
+    if (pathname.startsWith("/kg-studio/sources")) {
+      return { label: "KG Studio · Sources", description: "Source registry and source-to-KG draft generation" };
+    }
+    if (pathname.startsWith("/kg-studio/graph")) {
+      return { label: "KG Studio · Graph", description: "Candidate graph topology and edge provenance" };
+    }
+    if (pathname.startsWith("/kg-studio/review")) {
+      return { label: "KG Studio · Review", description: "Edge review queue and append-only feedback" };
+    }
+    if (pathname.startsWith("/kg-studio/drafts")) {
+      return { label: "KG Studio · Draft Lab", description: "Draft relation, evidence, and confidence adjustments" };
+    }
     return { label: "KG Studio", description: "Sources, candidate graph, and review drafts" };
   }
   if (pathname.startsWith("/experiments")) {
@@ -671,7 +661,7 @@ function HomePage({
           <Button icon={<HistoryOutlined />} onClick={() => onNavigate("/analysis/history")}>
             Browse history
           </Button>
-          <Button icon={<DatabaseOutlined />} onClick={() => onNavigate("/kg-studio")}>
+          <Button icon={<DatabaseOutlined />} onClick={() => onNavigate("/kg-studio/overview")}>
             Open KG Studio
           </Button>
         </div>
@@ -1178,569 +1168,6 @@ function ExperimentsPage({
         </Card>
       </section>
     </div>
-  );
-}
-
-function KGStudioPanel({
-  payload,
-  selectedTarget,
-  selectedTargetKey,
-  reviewNote,
-  reviewStatus,
-  draftAction,
-  draftRelation,
-  draftEvidence,
-  draftConfidence,
-  draftStatus,
-  sourceDraftText,
-  sourceDraftSourceId,
-  sourceDraftScenario,
-  sourceDraftConfidence,
-  sourceDraftResult,
-  onRefresh,
-  onTargetSelected,
-  onReviewNoteChanged,
-  onSubmitReview,
-  onDraftChanged,
-  onSubmitDraft,
-  onSourceDraftChanged,
-  onGenerateSourceDraft
-}: {
-  payload: KGStudioPayload | null;
-  selectedTarget: KGStudioReviewTarget | undefined;
-  selectedTargetKey: string;
-  reviewNote: string;
-  reviewStatus: string | null;
-  draftAction: KGDraftAction;
-  draftRelation: string;
-  draftEvidence: string;
-  draftConfidence: string;
-  draftStatus: string | null;
-  sourceDraftText: string;
-  sourceDraftSourceId: string;
-  sourceDraftScenario: string;
-  sourceDraftConfidence: string;
-  sourceDraftResult: KGSourceDraftResponse | null;
-  onRefresh: () => void;
-  onTargetSelected: (targetKey: string) => void;
-  onReviewNoteChanged: (note: string) => void;
-  onSubmitReview: (action: ReviewAction) => void;
-  onDraftChanged: (
-    patch: Partial<{
-      kgDraftAction: KGDraftAction;
-      kgDraftRelation: string;
-      kgDraftEvidence: string;
-      kgDraftConfidence: string;
-    }>
-  ) => void;
-  onSubmitDraft: () => void;
-  onSourceDraftChanged: (
-    patch: Partial<{
-      sourceDraftText: string;
-      sourceDraftSourceId: string;
-      sourceDraftScenario: string;
-      sourceDraftConfidence: string;
-    }>
-  ) => void;
-  onGenerateSourceDraft: () => void;
-}) {
-  const selectedEdge = payload?.graph_edges.find(
-    (edge) => edge.target_key === selectedTargetKey
-  );
-  return (
-    <Card
-      className="kg-studio-panel"
-      title={
-        <Space>
-          <DatabaseOutlined />
-          KG Studio
-        </Space>
-      }
-      extra={
-        <Button icon={<ReloadOutlined />} onClick={onRefresh}>
-          Refresh
-        </Button>
-      }
-    >
-      {payload ? (
-        <>
-          <Alert className="claim-boundary" message={payload.note} type="warning" showIcon />
-          <div className="kg-metrics">
-            <Metric label="status" value={payload.status} />
-            <Metric label="nodes" value={payload.node_count} />
-            <Metric label="edges" value={payload.edge_count} />
-            <Metric
-              label="validation"
-              value={payload.validation_summary?.passed ?? "unknown"}
-            />
-            <Metric
-              label="mean confidence"
-              value={payload.confidence_summary.mean ?? "unknown"}
-            />
-          </div>
-          <div className="kg-studio-grid">
-            <section>
-              <h3>Sources</h3>
-              <SourceToKGDraftForm
-                sourceText={sourceDraftText}
-                sourceId={sourceDraftSourceId}
-                scenario={sourceDraftScenario}
-                confidence={sourceDraftConfidence}
-                result={sourceDraftResult}
-                onChanged={onSourceDraftChanged}
-                onGenerate={onGenerateSourceDraft}
-              />
-              <KGSourceList sources={payload.sources} />
-              <h3>Documents</h3>
-              <KGSourceDocumentList documents={payload.source_documents} />
-            </section>
-            <section>
-              <h3>Candidate Edge Graph</h3>
-              <KGForceGraph
-                nodes={payload.graph_nodes}
-                edges={payload.graph_edges}
-                selectedTargetKey={selectedTargetKey}
-                onTargetSelected={onTargetSelected}
-              />
-              <KGEdgePreview
-                edges={payload.graph_edges}
-                selectedTargetKey={selectedTargetKey}
-                onTargetSelected={onTargetSelected}
-              />
-            </section>
-            <section>
-              <h3>Edge Provenance</h3>
-              <KGEdgeInspector edge={selectedEdge} />
-              <KGDraftForm
-                selectedTarget={selectedTarget}
-                draftAction={draftAction}
-                draftRelation={draftRelation}
-                draftEvidence={draftEvidence}
-                draftConfidence={draftConfidence}
-                draftStatus={draftStatus}
-                onDraftChanged={onDraftChanged}
-                onSubmitDraft={onSubmitDraft}
-              />
-              <div className="kg-review-box">
-                <Select
-                  value={selectedTargetKey}
-                  onChange={(value) => onTargetSelected(value)}
-                  disabled={!payload.review_targets.length}
-                  options={
-                    payload.review_targets.length > 0
-                      ? payload.review_targets.slice(0, 80).map((target) => ({
-                          value: target.target_key,
-                          label: shortId(target.label)
-                        }))
-                      : [{ value: "", label: "No KG edge targets" }]
-                  }
-                />
-                <Input
-                  value={reviewNote}
-                  onChange={(event) => onReviewNoteChanged(event.target.value)}
-                  placeholder="optional KG edge review note"
-                  disabled={!selectedTarget}
-                />
-                <div className="kg-review-actions">
-                  <Button onClick={() => onSubmitReview("accept")} disabled={!selectedTarget}>
-                    <CheckOutlined />
-                    Accept
-                  </Button>
-                  <Button onClick={() => onSubmitReview("reject")} disabled={!selectedTarget}>
-                    <CloseOutlined />
-                    Reject
-                  </Button>
-                  <Button
-                    onClick={() => onSubmitReview("needs_review")}
-                    disabled={!selectedTarget}
-                  >
-                    Needs review
-                  </Button>
-                </div>
-                {reviewStatus && <Alert message={`Feedback ${reviewStatus}.`} type="success" showIcon />}
-              </div>
-            </section>
-          </div>
-        </>
-      ) : (
-        <Empty description="Reading source registry and candidate KG artifacts from local project paths." />
-      )}
-    </Card>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: unknown }) {
-  return (
-    <Card size="small">
-      <Statistic title={label} value={valueText(value)} />
-    </Card>
-  );
-}
-
-function KGSourceList({ sources }: { sources: KGStudioSource[] }) {
-  if (!sources.length) return <Empty description="No source registry rows found." />;
-  return (
-    <List
-      className="compact-list"
-      size="small"
-      dataSource={sources.slice(0, 10)}
-      renderItem={(source) => (
-        <List.Item>
-          <List.Item.Meta
-            title={source.source_id}
-            description={
-              <Space direction="vertical" size={0}>
-                <Text type="secondary">{source.used_for}</Text>
-                <Text type="secondary">{source.path_or_url}</Text>
-              </Space>
-            }
-          />
-        </List.Item>
-      )}
-    />
-  );
-}
-
-function SourceToKGDraftForm({
-  sourceText,
-  sourceId,
-  scenario,
-  confidence,
-  result,
-  onChanged,
-  onGenerate
-}: {
-  sourceText: string;
-  sourceId: string;
-  scenario: string;
-  confidence: string;
-  result: KGSourceDraftResponse | null;
-  onChanged: (
-    patch: Partial<{
-      sourceDraftText: string;
-      sourceDraftSourceId: string;
-      sourceDraftScenario: string;
-      sourceDraftConfidence: string;
-    }>
-  ) => void;
-  onGenerate: () => void;
-}) {
-  return (
-    <div className="source-draft-box">
-      <strong>Source-to-KG Draft</strong>
-      <div className="source-draft-fields">
-        <Input
-          value={sourceId}
-          onChange={(event) => onChanged({ sourceDraftSourceId: event.target.value })}
-          placeholder="source id"
-        />
-        <Input
-          value={scenario}
-          onChange={(event) => onChanged({ sourceDraftScenario: event.target.value })}
-          placeholder="scenario"
-        />
-        <Input
-          value={confidence}
-          onChange={(event) => onChanged({ sourceDraftConfidence: event.target.value })}
-          placeholder="confidence"
-        />
-      </div>
-      <Input.TextArea
-        value={sourceText}
-        onChange={(event) => onChanged({ sourceDraftText: event.target.value })}
-        placeholder="head,relation,tail,scenario,evidence"
-      />
-      <Button type="primary" onClick={onGenerate}>
-        Generate candidates
-      </Button>
-      {result && (
-        <div className="source-draft-results">
-          <Tag color="processing">{result.candidate_edges.length} candidate edge(s)</Tag>
-          {result.candidate_edges.slice(0, 4).map((edge) => (
-            <code key={edge.edge_id}>{edge.edge_id}</code>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function KGSourceDocumentList({ documents }: { documents: KGStudioSourceDocument[] }) {
-  if (!documents.length) return <Empty description="No source documents found." />;
-  return (
-    <List
-      className="compact-list"
-      size="small"
-      dataSource={documents.slice(0, 8)}
-      renderItem={(document) => (
-        <List.Item>
-          <List.Item.Meta title={document.title} description={document.path} />
-        </List.Item>
-      )}
-    />
-  );
-}
-
-interface ForceNode extends SimulationNodeDatum {
-  id: string;
-  label: string;
-  nodeType: string;
-  scenario: string;
-}
-
-interface ForceLink extends SimulationLinkDatum<ForceNode> {
-  edge: KGStudioGraphEdge;
-}
-
-function KGForceGraph({
-  nodes,
-  edges,
-  selectedTargetKey,
-  onTargetSelected
-}: {
-  nodes: KGStudioGraphNode[];
-  edges: KGStudioGraphEdge[];
-  selectedTargetKey: string;
-  onTargetSelected: (targetKey: string) => void;
-}) {
-  const layout = useMemo(() => buildForceLayout(nodes, edges), [nodes, edges]);
-  if (!layout.nodes.length || !layout.links.length) {
-    return null;
-  }
-  const nodeById = new Map(layout.nodes.map((node) => [node.id, node]));
-  return (
-    <svg className="kg-force-graph" viewBox="0 0 760 360" role="img" aria-label="Candidate KG force graph">
-      <g>
-        {layout.links.map((link) => {
-          const source = forceNode(link.source, nodeById);
-          const target = forceNode(link.target, nodeById);
-          if (!source || !target) return null;
-          const selected = selectedTargetKey === link.edge.target_key;
-          return (
-            <g key={link.edge.edge_id}>
-              <line
-                className={selected ? "selected" : ""}
-                x1={source.x}
-                y1={source.y}
-                x2={target.x}
-                y2={target.y}
-              />
-              <circle
-                className="svg-edge-hit"
-                cx={((source.x ?? 0) + (target.x ?? 0)) / 2}
-                cy={((source.y ?? 0) + (target.y ?? 0)) / 2}
-                r={selected ? 8 : 5}
-                onClick={() => onTargetSelected(link.edge.target_key)}
-              />
-            </g>
-          );
-        })}
-      </g>
-      <g>
-        {layout.nodes.map((node) => (
-          <g key={node.id} transform={`translate(${node.x ?? 0}, ${node.y ?? 0})`}>
-            <circle
-              className={`kg-node-dot ${node.nodeType}`}
-              r={node.nodeType === "RootCause" ? 16 : 13}
-            />
-            <text y={-20}>{shortId(node.label)}</text>
-          </g>
-        ))}
-      </g>
-    </svg>
-  );
-}
-
-function buildForceLayout(
-  graphNodes: KGStudioGraphNode[],
-  graphEdges: KGStudioGraphEdge[]
-): { nodes: ForceNode[]; links: ForceLink[] } {
-  const edgeSlice = graphEdges.slice(0, 60);
-  const nodeRows = new Map(graphNodes.map((node) => [node.node_id, node]));
-  for (const edge of edgeSlice) {
-    if (!nodeRows.has(edge.head)) {
-      nodeRows.set(edge.head, {
-        node_id: edge.head,
-        label: edge.head,
-        node_type: "Unknown",
-        scenario: edge.scenario,
-        description: ""
-      });
-    }
-    if (!nodeRows.has(edge.tail)) {
-      nodeRows.set(edge.tail, {
-        node_id: edge.tail,
-        label: edge.tail,
-        node_type: "Unknown",
-        scenario: edge.scenario,
-        description: ""
-      });
-    }
-  }
-  const nodes: ForceNode[] = Array.from(nodeRows.values())
-    .slice(0, 80)
-    .map((node) => ({
-      id: node.node_id,
-      label: node.label,
-      nodeType: node.node_type,
-      scenario: node.scenario
-    }));
-  const available = new Set(nodes.map((node) => node.id));
-  const links: ForceLink[] = edgeSlice
-    .filter((edge) => available.has(edge.head) && available.has(edge.tail))
-    .map((edge) => ({
-      source: edge.head,
-      target: edge.tail,
-      edge
-    }));
-  forceSimulation(nodes)
-    .force(
-      "link",
-      forceLink<ForceNode, ForceLink>(links)
-        .id((node) => node.id)
-        .distance(96)
-        .strength(0.45)
-    )
-    .force("charge", forceManyBody().strength(-210))
-    .force("collide", forceCollide<ForceNode>().radius(35))
-    .force("center", forceCenter(380, 180))
-    .stop()
-    .tick(140);
-  for (const node of nodes) {
-    node.x = Math.min(725, Math.max(35, node.x ?? 380));
-    node.y = Math.min(330, Math.max(35, node.y ?? 180));
-  }
-  return { nodes, links };
-}
-
-function forceNode(
-  value: string | number | ForceNode | undefined,
-  nodes: Map<string, ForceNode>
-): ForceNode | undefined {
-  if (typeof value === "object" && value !== null) return value;
-  if (value === undefined) return undefined;
-  return nodes.get(String(value));
-}
-
-function KGDraftForm({
-  selectedTarget,
-  draftAction,
-  draftRelation,
-  draftEvidence,
-  draftConfidence,
-  draftStatus,
-  onDraftChanged,
-  onSubmitDraft
-}: {
-  selectedTarget: KGStudioReviewTarget | undefined;
-  draftAction: KGDraftAction;
-  draftRelation: string;
-  draftEvidence: string;
-  draftConfidence: string;
-  draftStatus: string | null;
-  onDraftChanged: (
-    patch: Partial<{
-      kgDraftAction: KGDraftAction;
-      kgDraftRelation: string;
-      kgDraftEvidence: string;
-      kgDraftConfidence: string;
-    }>
-  ) => void;
-  onSubmitDraft: () => void;
-}) {
-  return (
-    <div className="kg-draft-form">
-      <strong>Draft Adjustment</strong>
-      <Select
-        value={draftAction}
-        onChange={(value) =>
-          onDraftChanged({ kgDraftAction: value as KGDraftAction })
-        }
-        disabled={!selectedTarget}
-        options={[
-          { value: "revise", label: "revise" },
-          { value: "keep", label: "keep" },
-          { value: "reject", label: "reject" },
-          { value: "promote_later", label: "promote later" }
-        ]}
-      />
-      <Input
-        value={draftRelation}
-        onChange={(event) => onDraftChanged({ kgDraftRelation: event.target.value })}
-        placeholder="proposed relation"
-        disabled={!selectedTarget}
-      />
-      <Input
-        value={draftConfidence}
-        onChange={(event) => onDraftChanged({ kgDraftConfidence: event.target.value })}
-        placeholder="proposed confidence 0-1"
-        disabled={!selectedTarget}
-      />
-      <Input.TextArea
-        value={draftEvidence}
-        onChange={(event) => onDraftChanged({ kgDraftEvidence: event.target.value })}
-        placeholder="proposed evidence or adjustment rationale"
-        disabled={!selectedTarget}
-      />
-      <Button type="primary" onClick={onSubmitDraft} disabled={!selectedTarget}>
-        Save draft
-      </Button>
-      {draftStatus && <Alert message={`Draft ${draftStatus}.`} type="success" showIcon />}
-    </div>
-  );
-}
-
-function KGEdgePreview({
-  edges,
-  selectedTargetKey,
-  onTargetSelected
-}: {
-  edges: KGStudioGraphEdge[];
-  selectedTargetKey: string;
-  onTargetSelected: (targetKey: string) => void;
-}) {
-  if (!edges.length) {
-    return <Empty description="Generate candidate KG artifacts first, then refresh this panel." />;
-  }
-  return (
-    <List
-      className="kg-edge-list"
-      size="small"
-      dataSource={edges.slice(0, 40)}
-      renderItem={(edge) => (
-        <List.Item
-          className={selectedTargetKey === edge.target_key ? "selected" : ""}
-          onClick={() => onTargetSelected(edge.target_key)}
-        >
-          <List.Item.Meta
-            title={
-              <Space wrap>
-                <Text>{edge.head}</Text>
-                <Tag color="blue">{edge.relation}</Tag>
-                <Text>{edge.tail}</Text>
-              </Space>
-            }
-            description={`${edge.scenario} · ${edge.source} · ${valueText(edge.confidence)}`}
-          />
-        </List.Item>
-      )}
-    />
-  );
-}
-
-function KGEdgeInspector({ edge }: { edge: KGStudioGraphEdge | undefined }) {
-  if (!edge) {
-    return <Empty description="Select a candidate KG edge to inspect provenance." />;
-  }
-  return (
-    <Descriptions className="kg-edge-inspector" size="small" column={1} bordered>
-      <Descriptions.Item label="edge">{shortId(edge.edge_id)}</Descriptions.Item>
-      <Descriptions.Item label="scenario">{edge.scenario}</Descriptions.Item>
-      <Descriptions.Item label="source">{edge.source}</Descriptions.Item>
-      <Descriptions.Item label="confidence">{valueText(edge.confidence)}</Descriptions.Item>
-      <Descriptions.Item label="review status">{edge.review_status}</Descriptions.Item>
-      <Descriptions.Item label="evidence">{edge.evidence}</Descriptions.Item>
-    </Descriptions>
   );
 }
 

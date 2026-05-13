@@ -1,0 +1,6 @@
+{"type":"note","text":"Refactor KG Studio into route-backed Overview/Sources/Graph/Review/Draft Lab workspace pages."}
+{"type":"file","path":"web/src/KGStudioWorkspace.tsx","text":"New route-backed KG Studio workspace with Overview, Sources, Graph, Review, and Draft Lab pages."}
+{"type":"file","path":"web/src/App.tsx","text":"Routes /kg-studio/* into the dedicated workspace and updates KG navigation targets."}
+{"type":"file","path":"web/src/format.ts","text":"Shared frontend value and ID formatting helpers."}
+{"type":"file","path":"web/src/styles.css","text":"Adds focused KG workspace, subnav, overview, graph, review, and draft page styles."}
+{"type":"file","path":"docs/rootlens_dashboard.md","text":"Documents the KG Studio subpage split and non-mutating workflow."}
