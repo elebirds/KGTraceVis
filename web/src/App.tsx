@@ -751,30 +751,44 @@ function AnalysisLivePage({
   return (
     <div className="analysis-module">
       <AnalysisSubnav activeView="live" />
-      <section className="analysis-live-grid">
-        <div className="analysis-primary">{uploadPanel}</div>
-        <Card
-          className="analysis-side-panel"
-          title={
-            <Space>
-              <HistoryOutlined />
-              Recent analyses
-            </Space>
-          }
-          extra={
-            <Button size="small" onClick={onOpenHistory}>
-              View all
-            </Button>
-          }
-        >
-          <RunList
-            runs={recentRuns.slice(0, 6)}
-            selectedRunId={selectedRunId}
-            onOpenRun={onOpenRun}
-            emptyDescription="No analysis runs yet. Upload evidence to create the first run."
-          />
-        </Card>
+      <section className="analysis-command-strip">
+        <div>
+          <p className="eyebrow">Live Workspace</p>
+          <strong>Run a new investigation from evidence or producer records.</strong>
+          <span>
+            The result becomes a history entry and opens as a timeline-driven detail view.
+          </span>
+        </div>
+        <Space wrap>
+          <Tag color="blue">{recentRuns.length} saved runs</Tag>
+          <Button icon={<HistoryOutlined />} onClick={onOpenHistory}>
+            Browse history
+          </Button>
+        </Space>
       </section>
+      <section className="analysis-primary">{uploadPanel}</section>
+      <Card
+        className="analysis-recent-panel"
+        title={
+          <Space>
+            <HistoryOutlined />
+            Recent analyses
+          </Space>
+        }
+        extra={
+          <Button size="small" onClick={onOpenHistory}>
+            View all
+          </Button>
+        }
+      >
+        <RunList
+          runs={recentRuns.slice(0, 4)}
+          selectedRunId={selectedRunId}
+          onOpenRun={onOpenRun}
+          emptyDescription="No analysis runs yet. Upload evidence to create the first run."
+          compact
+        />
+      </Card>
     </div>
   );
 }
@@ -804,97 +818,99 @@ function UploadPanel({
         </Space>
       }
     >
-      <Form layout="vertical" onFinish={onRunUpload} className="stack">
-        <Form.Item label="Mode">
-          <Select
-            value={state.upload.mode}
-            onChange={(value) => onUploadChanged({ mode: value as UploadMode })}
-            options={
-              uploadModes.length
-                ? uploadModes.map((mode) => ({ value: mode.mode, label: mode.label }))
-                : [{ value: state.upload.mode, label: "Loading modes..." }]
-            }
-          />
-        </Form.Item>
-        <UploadModeGuidance mode={selectedUploadMode} uploadMode={state.upload.mode} />
-        <Form.Item label="File">
-          <Upload
-            accept={selectedUploadMode?.accepted_extensions.join(",")}
-            maxCount={1}
-            beforeUpload={(file) => {
-              onUploadChanged({ file });
-              return false;
-            }}
-            onRemove={() => {
-              onUploadChanged({ file: null });
-            }}
-          >
-            <Button icon={<CloudUploadOutlined />}>Choose file</Button>
-          </Upload>
-          <Text type="secondary" className="field-hint">
-            {state.upload.file
-              ? `${state.upload.file.name} selected`
-              : "Choose a local example file from the paths above."}
-          </Text>
-        </Form.Item>
-        <div className="inline-fields">
-          <Form.Item label="Dataset">
-            <Select
-              value={state.upload.dataset}
-              onChange={(value) => onUploadChanged({ dataset: value })}
-              options={[
-                { value: "", label: "auto" },
-                ...(state.bootstrap?.supported_datasets.map((dataset) => ({
-                  value: dataset,
-                  label: dataset
-                })) ?? [])
-              ]}
-            />
-          </Form.Item>
-          <Form.Item label="Top K">
-            <InputNumber
-              min={1}
-              max={20}
-              value={state.upload.topK}
-              onChange={(value) => onUploadChanged({ topK: Number(value ?? 1) })}
-            />
-          </Form.Item>
-        </div>
-        {state.upload.mode === "image" && (
-          <>
-            <Form.Item label="Object">
-              <Input
-                value={state.upload.objectName}
-                onChange={(event) => onUploadChanged({ objectName: event.target.value })}
+      <Form layout="vertical" onFinish={onRunUpload} className="analysis-upload-form">
+        <div className="analysis-upload-grid">
+          <section className="analysis-upload-main">
+            <Form.Item label="Mode">
+              <Select
+                value={state.upload.mode}
+                onChange={(value) => onUploadChanged({ mode: value as UploadMode })}
+                options={
+                  uploadModes.length
+                    ? uploadModes.map((mode) => ({ value: mode.mode, label: mode.label }))
+                    : [{ value: state.upload.mode, label: "Loading modes..." }]
+                }
               />
             </Form.Item>
-            <div className="inline-fields">
-              <Form.Item label="Preset">
-                <Select
-                  value={state.upload.modelPreset}
-                  onChange={(value) => onUploadChanged({ modelPreset: value })}
-                  options={[
-                    { value: "auto", label: "auto" },
-                    ...presets.map((preset) => ({
-                      value: String(preset.preset),
-                      label: String(preset.preset)
-                    }))
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item label="Defect">
-                <Input
-                  value={state.upload.defectType}
-                  onChange={(event) => onUploadChanged({ defectType: event.target.value })}
-                />
-              </Form.Item>
-            </div>
-          </>
-        )}
-        <Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={state.loading}>
-          {state.loading ? "Analyzing" : "Analyze"}
-        </Button>
-        {state.uploadStatus && <Alert message={state.uploadStatus} type="success" showIcon />}
+            <UploadModeGuidance mode={selectedUploadMode} uploadMode={state.upload.mode} />
+            <Form.Item label="File">
+              <Upload
+                accept={selectedUploadMode?.accepted_extensions.join(",")}
+                maxCount={1}
+                beforeUpload={(file) => {
+                  onUploadChanged({ file });
+                  return false;
+                }}
+                onRemove={() => {
+                  onUploadChanged({ file: null });
+                }}
+              >
+                <Button icon={<CloudUploadOutlined />}>Choose file</Button>
+              </Upload>
+              <Text type="secondary" className="field-hint">
+                {state.upload.file
+                  ? `${state.upload.file.name} selected`
+                  : "Choose a local example file from the paths above."}
+              </Text>
+            </Form.Item>
+          </section>
+          <section className="analysis-upload-params">
+            <Form.Item label="Dataset">
+              <Select
+                value={state.upload.dataset}
+                onChange={(value) => onUploadChanged({ dataset: value })}
+                options={[
+                  { value: "", label: "auto" },
+                  ...(state.bootstrap?.supported_datasets.map((dataset) => ({
+                    value: dataset,
+                    label: dataset
+                  })) ?? [])
+                ]}
+              />
+            </Form.Item>
+            <Form.Item label="Top K">
+              <InputNumber
+                min={1}
+                max={20}
+                value={state.upload.topK}
+                onChange={(value) => onUploadChanged({ topK: Number(value ?? 1) })}
+              />
+            </Form.Item>
+            {state.upload.mode === "image" && (
+              <>
+                <Form.Item label="Object">
+                  <Input
+                    value={state.upload.objectName}
+                    onChange={(event) => onUploadChanged({ objectName: event.target.value })}
+                  />
+                </Form.Item>
+                <Form.Item label="Preset">
+                  <Select
+                    value={state.upload.modelPreset}
+                    onChange={(value) => onUploadChanged({ modelPreset: value })}
+                    options={[
+                      { value: "auto", label: "auto" },
+                      ...presets.map((preset) => ({
+                        value: String(preset.preset),
+                        label: String(preset.preset)
+                      }))
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item label="Defect">
+                  <Input
+                    value={state.upload.defectType}
+                    onChange={(event) => onUploadChanged({ defectType: event.target.value })}
+                  />
+                </Form.Item>
+              </>
+            )}
+            <Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={state.loading} block>
+              {state.loading ? "Analyzing" : "Analyze"}
+            </Button>
+            {state.uploadStatus && <Alert message={state.uploadStatus} type="success" showIcon />}
+          </section>
+        </div>
       </Form>
     </Card>
   );
@@ -911,6 +927,27 @@ function AnalysisHistoryPage({
   onRefresh: () => void;
   onOpenRun: (runId: string) => void;
 }) {
+  const [searchText, setSearchText] = useState("");
+  const [datasetFilter, setDatasetFilter] = useState("all");
+  const datasetOptions = Array.from(new Set(runs.map((run) => run.dataset ?? "unknown"))).sort();
+  const filteredRuns = runs.filter((run) => {
+    const dataset = run.dataset ?? "unknown";
+    const matchesDataset = datasetFilter === "all" || dataset === datasetFilter;
+    const haystack = [
+      run.label,
+      run.run_id,
+      run.source_filename,
+      run.mode,
+      dataset,
+      run.status,
+      run.model_backend,
+      run.model_preset
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return matchesDataset && haystack.includes(searchText.toLowerCase());
+  });
   const columns: TableColumnsType<RunSummary> = [
     {
       title: "Run",
@@ -942,6 +979,32 @@ function AnalysisHistoryPage({
   return (
     <div className="analysis-module">
       <AnalysisSubnav activeView="history" />
+      <section className="analysis-command-strip">
+        <div>
+          <p className="eyebrow">Run Lookup</p>
+          <strong>{filteredRuns.length} visible analyses</strong>
+          <span>Search and reopen previous RootLens runs for timeline inspection.</span>
+        </div>
+        <Space wrap className="history-toolbar">
+          <Input.Search
+            allowClear
+            placeholder="Search run, file, dataset, backend"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+          />
+          <Select
+            value={datasetFilter}
+            onChange={setDatasetFilter}
+            options={[
+              { value: "all", label: "All datasets" },
+              ...datasetOptions.map((dataset) => ({ value: dataset, label: dataset }))
+            ]}
+          />
+          <Button icon={<ReloadOutlined />} onClick={onRefresh}>
+            Refresh
+          </Button>
+        </Space>
+      </section>
       <Card
         title={
           <Space>
@@ -949,16 +1012,11 @@ function AnalysisHistoryPage({
             Analysis History
           </Space>
         }
-        extra={
-          <Button icon={<ReloadOutlined />} onClick={onRefresh}>
-            Refresh
-          </Button>
-        }
       >
         <Table
           rowKey="run_id"
           columns={columns}
-          dataSource={runs}
+          dataSource={filteredRuns}
           pagination={{ pageSize: 8 }}
           rowClassName={(run) => (run.run_id === selectedRunId ? "selected-table-row" : "")}
         />
@@ -971,17 +1029,19 @@ function RunList({
   runs,
   selectedRunId,
   onOpenRun,
-  emptyDescription
+  emptyDescription,
+  compact = false
 }: {
   runs: RunSummary[];
   selectedRunId: string;
   onOpenRun: (runId: string) => void;
   emptyDescription: string;
+  compact?: boolean;
 }) {
   if (!runs.length) return <Empty description={emptyDescription} />;
   return (
     <List
-      className="run-list"
+      className={`run-list ${compact ? "compact-run-list" : ""}`}
       dataSource={runs}
       renderItem={(run) => (
         <List.Item
@@ -1923,10 +1983,11 @@ function RunDetailView({
         <Steps
           current={activeStep}
           onChange={setActiveStep}
-          responsive
+          responsive={false}
+          size="small"
+          type="navigation"
           items={stages.map((stage) => ({
-            title: stage.title,
-            description: stage.description
+            title: stage.title
           }))}
         />
       </Card>

@@ -273,20 +273,81 @@ button {
   display: none;
 }
 
-.analysis-live-grid {
-  align-items: start;
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(420px, 0.72fr) minmax(320px, 0.28fr);
-}
-
 .analysis-primary,
-.analysis-side-panel {
+.analysis-recent-panel {
   min-width: 0;
 }
 
-.analysis-upload-panel .ant-card-body {
-  max-width: 760px;
+.analysis-command-strip {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.analysis-command-strip strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.analysis-command-strip span {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.analysis-upload-form {
+  max-width: none;
+}
+
+.analysis-upload-grid {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(360px, 1fr) minmax(260px, 340px);
+}
+
+.analysis-upload-main,
+.analysis-upload-params {
+  min-width: 0;
+}
+
+.analysis-upload-params {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.analysis-recent-panel .ant-card-body {
+  padding-top: 8px;
+}
+
+.compact-run-list .ant-list-items {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.compact-run-list .ant-list-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px !important;
+}
+
+.history-toolbar .ant-input-search {
+  width: 300px;
+}
+
+.history-toolbar .ant-select {
+  min-width: 150px;
 }
 
 .selected-table-row td {
@@ -304,8 +365,32 @@ button {
   margin: 0 0 4px;
 }
 
+.analysis-timeline-card {
+  position: sticky;
+  top: 88px;
+  z-index: 10;
+}
+
 .analysis-timeline-card .ant-card-body {
   overflow-x: auto;
+  padding: 0;
+}
+
+.analysis-timeline-card .ant-steps {
+  min-width: 1040px;
+}
+
+.analysis-timeline-card .ant-steps-item {
+  padding: 0 !important;
+}
+
+.analysis-timeline-card .ant-steps-item-container {
+  min-height: 58px;
+}
+
+.analysis-timeline-card .ant-steps-item-title {
+  max-width: 132px;
+  white-space: normal;
 }
 
 .analysis-stage-canvas {
@@ -1415,7 +1500,8 @@ th {
     grid-template-columns: 1fr 1fr;
   }
 
-  .analysis-live-grid,
+  .analysis-upload-grid,
+  .compact-run-list .ant-list-items,
   .analysis-stage-grid {
     grid-template-columns: 1fr;
   }
@@ -1461,6 +1547,17 @@ th {
   .analysis-case-header .ant-card-body {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .analysis-command-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .history-toolbar,
+  .history-toolbar .ant-input-search,
+  .history-toolbar .ant-select {
+    width: 100%;
   }
 
   .review-controls {

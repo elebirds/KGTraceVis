@@ -1,0 +1,3 @@
+{"type":"note","text":"Polish Analysis module layout after route-backed IA refactor. Scope is frontend composition/style only."}
+{"type":"file","path":"web/src/App.tsx","reason":"Analysis Live/History/Detail composition."}
+{"type":"file","path":"web/src/styles.css","reason":"Analysis module layout and responsive styling."}
