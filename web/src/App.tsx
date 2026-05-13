@@ -370,10 +370,6 @@ export function App() {
               />
             </div>
           </div>
-          <div className="topbar-claim">
-            <InfoCircleOutlined />
-            <span>{state.bootstrap?.claim_boundary ?? "Candidate explanations only."}</span>
-          </div>
         </Header>
 
       {state.loading && (
