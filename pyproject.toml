@@ -22,11 +22,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-app = [
-    "plotly>=5.0",
-    "pyvis>=0.3",
-    "streamlit>=1.30",
-]
 vision = [
     "matplotlib>=3.7",
     "opencv-python>=4.8",
@@ -63,7 +58,6 @@ ml = [
 [project.scripts]
 kgtrace-build-kg = "kgtracevis.cli:build_kg"
 kgtrace-import-kg = "kgtracevis.cli:import_kg"
-kgtrace-run-demo = "kgtracevis.cli:run_demo"
 kgtrace-run-web-api = "scripts.run_web_api:main"
 
 [build-system]

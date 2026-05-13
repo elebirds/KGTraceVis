@@ -217,8 +217,8 @@ Priority 2:
 
 Priority 3:
 
-- Build Streamlit views for evidence, linked entities, conflicts,
-  corrections, and RCA paths.
+- Rebuild the future RootLens dashboard against the FastAPI backend for
+  evidence, linked entities, conflicts, corrections, and RCA paths.
 - Add feedback records and deterministic confidence updates.
 - Add Neo4j import/query parity after the in-memory pipeline is stable.
 

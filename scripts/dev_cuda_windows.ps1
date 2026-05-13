@@ -1,7 +1,6 @@
 param(
     [string]$TorchCudaIndex = "https://download.pytorch.org/whl/cu128",
     [int]$ApiPort = 8000,
-    [int]$WebPort = 5173,
     [switch]$SkipSetup,
     [switch]$SkipCudaTorch
 )
@@ -29,16 +28,12 @@ if (-not $SkipSetup) {
         }
     }
 
-    Invoke-Step "Install web dependencies" {
-        npm --prefix web ci
-    }
 }
 
 Write-Host ""
-Write-Host "Starting KGTraceVis API and web frontend." -ForegroundColor Green
+Write-Host "Starting KGTraceVis FastAPI service." -ForegroundColor Green
 Write-Host "API: http://127.0.0.1:$ApiPort"
-Write-Host "Web: http://127.0.0.1:$WebPort"
-Write-Host "Press Ctrl+C to stop both processes."
+Write-Host "Press Ctrl+C to stop the process."
 
 $apiArgs = @(
     "run",
@@ -49,28 +44,13 @@ $apiArgs = @(
     "--port",
     "$ApiPort"
 )
-$webArgs = @(
-    "--prefix",
-    "web",
-    "run",
-    "dev",
-    "--",
-    "--host",
-    "127.0.0.1",
-    "--port",
-    "$WebPort"
-)
-
 $apiProcess = Start-Process -FilePath "uv" -ArgumentList $apiArgs -NoNewWindow -PassThru
-$webProcess = Start-Process -FilePath "npm" -ArgumentList $webArgs -NoNewWindow -PassThru
 
 try {
-    Wait-Process -Id $apiProcess.Id, $webProcess.Id
+    Wait-Process -Id $apiProcess.Id
 }
 finally {
-    foreach ($process in @($apiProcess, $webProcess)) {
-        if ($process -and -not $process.HasExited) {
-            Stop-Process -Id $process.Id -Force
-        }
+    if ($apiProcess -and -not $apiProcess.HasExited) {
+        Stop-Process -Id $apiProcess.Id -Force
     }
 }

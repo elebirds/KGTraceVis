@@ -61,8 +61,3 @@ neo4j_logs/
 .DS_Store
 .vscode/
 .idea/
-
-# Web app
-web/node_modules/
-web/dist/
-web/.vite/

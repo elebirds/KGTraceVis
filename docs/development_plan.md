@@ -68,17 +68,16 @@ Goal: generate paper-ready numbers from reproducible scripts.
 - Correction accuracy and top-k correction accuracy.
 - Top-k root-cause accuracy, MRR, and path hit rate.
 
-## Phase 6: Streamlit Demo
+## Phase 6: FastAPI Backend And Future RootLens Dashboard
 
-Goal: show the full RCA reasoning loop in a lightweight visual interface.
+Goal: expose the full RCA reasoning loop through a maintained backend contract
+and rebuild the dashboard cleanly later.
 
-- Case selector.
-- Raw and normalized evidence.
-- Linked entities.
-- Consistency score and inconsistent fields.
-- Correction candidates.
-- Top-k RCA paths.
-- Optional what-if editing and accept/reject feedback.
+- FastAPI case/run endpoints.
+- Raw and normalized evidence payloads.
+- Linked entities, consistency score, and inconsistent fields.
+- Correction candidates and top-k RCA paths with provenance.
+- Optional what-if editing and accept/reject feedback endpoints.
 
 ## Phase 7: Neo4j And Wafer Deepening
 

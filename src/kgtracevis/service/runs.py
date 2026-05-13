@@ -40,7 +40,7 @@ from kgtracevis.schema.evidence_schema import DatasetName, Evidence
 from kgtracevis.schema.validators import load_evidence_json
 
 DEFAULT_RUNS_DIR = Path("runs/web_sessions")
-DEFAULT_MVTEC_WEB_CHECKPOINT = DEFAULT_MVTEC_STFPM_CHECKPOINT
+DEFAULT_MVTEC_UPLOAD_CHECKPOINT = DEFAULT_MVTEC_STFPM_CHECKPOINT
 UploadMode = Literal["evidence", "records", "image"]
 RunStatus = Literal["completed", "failed"]
 
@@ -654,7 +654,7 @@ def _build_mvtec_upload_predictor(
 
 
 def mvtec_model_presets() -> list[dict[str, Any]]:
-    """Return the selectable MVTec model presets for the web UI."""
+    """Return the selectable MVTec model presets for API clients."""
     return list_mvtec_model_presets()
 
 
@@ -723,7 +723,7 @@ def _default_checkpoint_for_preset(model_preset: str | None) -> Path:
         return DEFAULT_MVTEC_EFFICIENTAD_CHECKPOINT
     if model_preset == "patchcore":
         return DEFAULT_MVTEC_PATCHCORE_CHECKPOINT
-    return DEFAULT_MVTEC_WEB_CHECKPOINT
+    return DEFAULT_MVTEC_UPLOAD_CHECKPOINT
 
 
 def _checkpoint_env_for_preset(model_preset: str | None) -> str:

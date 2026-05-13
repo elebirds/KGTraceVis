@@ -15,10 +15,3 @@ def import_kg() -> None:
     from scripts.import_kg import main
 
     main()
-
-
-def run_demo() -> None:
-    """Print instructions for starting the Streamlit demo."""
-    from scripts.run_app import main
-
-    main()

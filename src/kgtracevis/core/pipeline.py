@@ -1,7 +1,7 @@
 """Minimal reusable pipeline facade.
 
-Scripts, Streamlit, and future services should call this facade instead of
-duplicating analysis logic in their own entry points.
+Scripts and services should call this facade instead of duplicating analysis
+logic in their own entry points.
 """
 
 from __future__ import annotations

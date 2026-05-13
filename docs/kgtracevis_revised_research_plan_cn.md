@@ -358,9 +358,9 @@ path_hit_topk,mrr,notes
 
 推荐脚本：
 
-1. 打开 Streamlit
-   - 命令：`uv run streamlit run src/kgtracevis/app/streamlit_app.py`。
-   - 先说明 v0 demo 使用手工整理 example evidence 和小型 CSV KG，不是 paper-grade experiment。
+1. 打开 FastAPI backend
+   - 命令：`uv run python scripts/run_web_api.py`。
+   - 先说明 v0 backend 使用手工整理 example evidence 和小型 CSV KG，不是 paper-grade experiment。Legacy Streamlit/React demos 已移除，RootLens dashboard 后续重建。
 
 2. MVTec clean case
    - 展示输入 JSON 只有 observed visual evidence。
@@ -460,7 +460,7 @@ path_hit_topk,mrr,notes
 可选图：
 
 - Noise experiment flow。
-- Streamlit screenshot montage。
+- Future RootLens dashboard screenshot montage。
 - Annotation taxonomy table。
 
 ## 14. Implementation Backlog
@@ -469,7 +469,7 @@ path_hit_topk,mrr,notes
 
 - 确保 example evidence 的 `kg_analysis` 初始为空，adapter 不输出 root cause。
 - 在 README/demo notes 中统一 MVTec 边界：curated plausible references, not verified factory RCA。
-- 保持 `KGTracePipeline` 为 scripts 和 Streamlit 的唯一 reasoning 入口。
+- 保持 `KGTracePipeline` 为 scripts 和 service 的唯一 reasoning 入口。
 - 保证 path 和 correction 输出有 stable IDs 和 source edge provenance。
 - 运行 `scripts/run_examples.py`、`scripts/run_kg_qa.py`、`scripts/run_path_ranking.py` 作为 demo backup。
 

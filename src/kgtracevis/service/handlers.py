@@ -1,4 +1,4 @@
-"""Reusable service handlers for the KGTraceVis web system."""
+"""Reusable service handlers for KGTraceVis API clients."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ FeedbackDecision = Literal["accept", "reject", "comment"]
 
 
 class CaseSummary(BaseModel):
-    """Compact case metadata for the web case list."""
+    """Compact case metadata for the API case list."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -69,7 +69,7 @@ class WhatIfRequest(BaseModel):
 
 
 class FeedbackRequest(BaseModel):
-    """Lightweight feedback record submitted from the web UI."""
+    """Lightweight feedback record submitted from an API client."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -84,7 +84,7 @@ class FeedbackRequest(BaseModel):
 def list_cases(
     case_dirs: Sequence[str | Path] = DEFAULT_EVIDENCE_DIRS,
 ) -> list[CaseSummary]:
-    """Return all discoverable evidence cases for the web UI."""
+    """Return all discoverable evidence cases for API clients."""
     summaries: list[CaseSummary] = []
     for path in _iter_evidence_paths(case_dirs):
         evidence = load_evidence_json(path)

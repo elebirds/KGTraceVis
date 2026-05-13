@@ -47,7 +47,7 @@ KGTraceVis 的 UI 和 stable IDs 正适合这个方向。
 
 - 把 MVTec/wafer 的人工 plausible reference 讲成真实根因标签。
 - Adapter 或 example JSON 预置 root cause、top-k paths 或 `kg_analysis`。
-- Streamlit 主要展示静态 JSON，不强调 runtime recomputation。
+- UI/API 主要展示静态 JSON，不强调 runtime recomputation。
 - 论文 claim 写成“自动发现真实工业根因”。
 
 问题：

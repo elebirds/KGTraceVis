@@ -4,22 +4,26 @@
 
 系统边界需要在演示时说清楚：adapters/manual demo annotations provide observed anomaly evidence only。当前唯一 canonical observed-evidence contract 是 `observations`；top-level 字段只描述 evidence envelope 和展示元数据，`raw_evidence` 只保存源数据、模型输出和 provenance。example JSON 里的 `kg_analysis` 为空，root cause 也不是输入字段。`KGTracePipeline` computes linking/consistency/corrections/candidate RCA paths at runtime。
 
-## Streamlit 演示流程
+## FastAPI 演示流程
 
 运行：
 
 ```bash
-uv run streamlit run src/kgtracevis/app/streamlit_app.py
+uv run python scripts/run_web_api.py
 ```
+
+Legacy Streamlit/React demos have been removed. For live discussion, use the
+FastAPI service responses together with the reproducibility scripts below until
+the RootLens dashboard is rebuilt.
 
 建议按下面的 case 顺序演示：
 
-1. `MVTEC: mvtec_0001 - ds_mvtec_example.json` 输入只包含视觉缺陷 evidence。app 运行后展示 KG entity linking、一致性判断，以及 KGTracePipeline 计算出的 candidate RCA paths。MVTec demo RCA source edges 是 curated plausible references；不要把 displayed paths 说成预置 placeholders 或 MVTec 原生的 factory root-cause labels。
+1. `MVTEC: mvtec_0001 - ds_mvtec_example.json` 输入只包含视觉缺陷 evidence。API/pipeline 运行后展示 KG entity linking、一致性判断，以及 KGTracePipeline 计算出的 candidate RCA paths。MVTec demo RCA source edges 是 curated plausible references；不要把 displayed paths 说成预置 placeholders 或 MVTec 原生的 factory root-cause labels。
 2. `MVTEC: mvtec_noisy_0001 噪声演示 - mvtec_noisy_morphology_demo.json` 输入只包含一个 intentionally noisy scratch evidence，把 morphology 设为 `surface`。consistency checker 应该标出 `anomaly_type` 和 `morphology`，然后基于 supporting KG edge 提出 `Linear morphology` correction candidate。
 3. `TEP: tep_0001 - tep_example.json` 输入包含 time-series process variable evidence。pipeline 运行后展示 process-unit linking 和一条 candidate process-fault path。
 4. `WAFER: wafer_0001 - wafer_example.json` 输入包含 multimodal image/log evidence。pipeline 运行后展示 morphology、location、log-event consistency，以及 wafer process provenance。
 
-在 app 里，可以按 Step 0-6 的线性流水线展示：
+在 API 或脚本输出里，可以按 Step 0-6 的线性流水线展示：
 
 - 输入边界与 observed evidence，
 - adapter 输出和运行前为空的 `kg_analysis`，

@@ -22,7 +22,7 @@ KGTraceVis should stay small and reproducible in v0.
 The stable v0 runtime path is:
 
 ```text
-example JSON -> KG link -> consistency score -> correction -> path ranking -> demo
+example JSON -> KG link -> consistency score -> correction -> path ranking -> API
 ```
 
 The current paper-facing adapter milestone uses the same runtime pipeline but
@@ -45,7 +45,7 @@ reusable core pipeline.
 
 ```text
 Scripts are clients.
-The app is also a client.
+The FastAPI service is also a client.
 The reusable pipeline is the product.
 ```
 
@@ -58,12 +58,12 @@ KGTraceVis supports two usage modes:
    metric evaluation.
 2. Interactive visual analytics mode:
    evidence inspection, correction review, path comparison, and human feedback
-   in the FastAPI + React web system. The web UI also supports uploading
-   producer-record bundles or evidence JSON to run the pipeline and inspect
-   step-by-step outputs.
+   through the maintained FastAPI backend. A new RootLens dashboard can be
+   rebuilt cleanly on top of this API later.
 
-The web system is now the primary interactive shell. Streamlit remains
-available as a lightweight legacy demo for quick inspection.
+The legacy Streamlit demo and old React/Vite frontend have been removed. Do
+not add new dashboard code in this repository until the RootLens UI scope is
+defined.
 
 ## Repository Layout
 
@@ -88,8 +88,7 @@ KGTraceVis/
 │       ├── metrics/
 │       ├── viz/
 │       ├── feedback/
-│       ├── service/
-│       └── app/
+│       └── service/
 ├── scripts/
 ├── data/
 │   ├── examples/
@@ -273,7 +272,7 @@ does not provide verified root-cause labels or a normal-wafer detector.
 `--wm811k-input-repo`, `--wm811k-input-file`, and `--wm811k-input-repo-type`.
 The downloader stores trusted public model assets under
 `runs/real_model_pipeline/assets/`, including the default MVTec STFPM OpenVINO
-checkpoint used by web image mode and a default capsule PatchCore Lightning
+checkpoint used by FastAPI image upload mode and a default capsule PatchCore Lightning
 checkpoint from `NTHoang2103/patchcore-mvtec-models`. EfficientAD downloads
 are wired into the same preset path, but require an explicitly trusted
 Hugging Face repo/file or `KGTRACEVIS_DOWNLOAD_MVTEC_EFFICIENTAD_REPO` because
@@ -394,7 +393,7 @@ uv run python scripts/run_mvtec_calibrated_pipeline.py \
 This writes producer records, generated Evidence JSON, the KGTrace summary, and
 a table-ready CSV under the output root.
 
-For Web/API image uploads, set the PatchCore checkpoint env var to the common
+For FastAPI image uploads, set the PatchCore checkpoint env var to the common
 root instead of one hard-coded object directory:
 
 ```bash
@@ -408,12 +407,6 @@ MVTec objects. A calibrated full-class smoke run using
 `configs/mvtec_patchcore_thresholds.json` produced 30 records, 15/15 defect
 samples predicted anomalous, 14/15 sampled good images predicted normal, and a
 mean mask area ratio of about 0.058 instead of near-full-image masks.
-
-Start the Streamlit demo:
-
-```bash
-uv run streamlit run src/kgtracevis/app/streamlit_app.py
-```
 
 The checked-in examples include all three scenarios plus one explicitly noisy
 MVTec demo case that triggers correction candidates. The example JSON files are
@@ -439,27 +432,27 @@ make setup-ml
 make setup-cuda
 make test
 make examples
-make check-web
 make dev
 make real-pipeline
 ```
 
-Start the web API directly:
+Start the maintained web-facing backend directly:
 
 ```bash
 make api
 ```
 
-Start the React frontend directly:
+or:
 
 ```bash
-make web
+uv run python scripts/run_web_api.py
 ```
 
-The frontend proxies `/api` requests to `http://127.0.0.1:8000`, so keep the
-API process running while using the browser UI.
+This starts the FastAPI service on `http://127.0.0.1:8000`. The legacy
+Streamlit demo and old React/Vite frontend were removed; the future RootLens
+dashboard should be rebuilt against this API.
 
-On a Windows CUDA workstation, install `uv`, Node.js, and GNU Make, then run:
+On a Windows CUDA workstation, install `uv` and GNU Make, then run:
 
 ```powershell
 make setup-cuda
@@ -472,9 +465,9 @@ If Make is not available, use the PowerShell helper instead:
 .\scripts\dev_cuda_windows.ps1
 ```
 
-The upload workflow currently accepts evidence JSON, producer-record bundles
-(`.json`, `.jsonl`, or `.csv`), or a raw MVTec-style image, and writes run
-artifacts under `runs/web_sessions/`. Image mode uses a selectable MVTec
+The FastAPI upload workflow currently accepts evidence JSON, producer-record
+bundles (`.json`, `.jsonl`, or `.csv`), or a raw MVTec-style image, and writes
+run artifacts under `runs/web_sessions/`. Image mode uses a selectable MVTec
 anomaly-detection/localization preset. `auto` prefers EfficientAD, then
 PatchCore, then the checked-in STFPM OpenVINO checkpoint. Configure replacement
 weights with `KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT` or
@@ -483,12 +476,13 @@ checkpoint/artifact directory or a full Amazon PatchCore root containing
 `mvtec_<object>` directories. In image mode, Amazon PatchCore roots are resolved
 by the uploaded `object_name`. Git LFS pointer-only directories are reported as
 unavailable until the real `.pkl` and `.faiss` files are downloaded. By default,
-the web API also recognizes the Makefile/API asset path under
-`runs/real_model_pipeline/assets/`. The optional defect field in the UI is a
-human prior, not a model-inferred semantic defect class.
-When a MVTec preset checkpoint is missing, the web UI can request its download
-through the API and then refresh the preset availability. STFPM and PatchCore
-have default trusted sources; EfficientAD requires a configured trusted source.
+the API also recognizes the Makefile/API asset path under
+`runs/real_model_pipeline/assets/`. The optional defect field accepted by API
+clients is a human prior, not a model-inferred semantic defect class.
+When a MVTec preset checkpoint is missing, API clients can request its download
+through the backend and then refresh the preset availability. STFPM and
+PatchCore have default trusted sources; EfficientAD requires a configured
+trusted source.
 
 ## Unified Evidence Schema
 
@@ -599,7 +593,7 @@ Recommended v0 order:
 10. path ranker
 11. noise injector
 12. metrics
-13. Web system / legacy Streamlit demo
+13. FastAPI backend and future RootLens dashboard boundary
 14. dataset adapters
 15. experiments
 

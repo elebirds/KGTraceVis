@@ -100,7 +100,7 @@ MVTEC_MODEL_PRESET_SPECS: dict[MVTecResolvedPreset, MVTecModelPresetSpec] = {
 
 
 def list_mvtec_model_presets() -> list[dict[str, Any]]:
-    """Return all preset options for the web UI, including auto-selection."""
+    """Return all preset options for API clients, including auto-selection."""
     resolved = {preset: _selection_for_preset(preset) for preset in MVTEC_MODEL_PRESET_PRIORITY}
     selected_auto = _best_available_selection(resolved)
     presets: list[dict[str, Any]] = [

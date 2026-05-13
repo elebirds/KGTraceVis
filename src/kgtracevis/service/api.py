@@ -1,4 +1,4 @@
-"""FastAPI entry point for the KGTraceVis web system."""
+"""FastAPI entry point for KGTraceVis API clients."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class ModelAssetDownloadRequest(BaseModel):
 
 
 def create_app() -> FastAPI:
-    """Create the FastAPI application used by the React web client."""
+    """Create the FastAPI application used by dashboard/API clients."""
     app = FastAPI(
         title="KGTraceVis Web API",
         version="0.1.0",

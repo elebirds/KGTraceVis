@@ -13,7 +13,7 @@
 ## 5-10 分钟汇报故事线
 
 1. **研究问题**：工业异常检测输出很分散，图像、过程变量和日志各说各话；我们想解决的是异常之后的 evidence organization、knowledge-constrained reasoning 和 traceability review，而不是替代异常检测模型。
-2. **总体方案**：adapter 把不同数据源转换成统一 Evidence JSON；KGTracePipeline 在运行时完成 entity linking、一致性检查、修正候选和候选 RCA 路径排序；Streamlit 负责把证据、推理链和 provenance 展示出来。
+2. **总体方案**：adapter 把不同数据源转换成统一 Evidence JSON；KGTracePipeline 在运行时完成 entity linking、一致性检查、修正候选和候选 RCA 路径排序；FastAPI backend 负责把证据、推理链和 provenance 暴露给未来 RootLens dashboard。
 3. **关键边界**：adapter 只产出 observed evidence，不产出 root cause；`kg_analysis` 初始为空；candidate paths 由 pipeline 运行时计算。
 4. **数据集分工**：MVTec/DS-MVTec 做视觉 evidence normalization、consistency/correction 和 plausible explanation；TEP 是主 RCA/path-ranking 量化方向；wafer 做 image/log traceability case study，除非后续有私有 RCA 标签。
 5. **当前实现**：已有 `KGTracePipeline` 串起 linker、checker、correction generator 和 path ranker；当前是可运行 v0 baseline，不是 paper-grade causal model。

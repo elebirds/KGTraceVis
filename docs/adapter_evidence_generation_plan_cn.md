@@ -591,7 +591,7 @@ wafer 才能升级为正式 RCA evaluation。
 - 使用手工 demo records 或 DefectSpectrum-style metadata。
 - adapter 生成 observation-first JSON。
 - mask/spatial/time-series feature 可以先用规则或小样例模拟。
-- Streamlit 展示 observations -> linking -> consistency -> correction -> path provenance。
+- FastAPI/未来 RootLens dashboard 展示 observations -> linking -> consistency -> correction -> path provenance。
 
 ### v0.2：MVTec 真实模型输出
 

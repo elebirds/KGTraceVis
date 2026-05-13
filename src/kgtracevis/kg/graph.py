@@ -1,7 +1,7 @@
 """In-memory knowledge graph utilities for v0 analysis.
 
 The in-memory graph is intentionally small and deterministic. It gives scripts,
-tests, and the Streamlit app a fast backend before Neo4j is required.
+tests, and service handlers a fast backend before Neo4j is required.
 """
 
 from __future__ import annotations

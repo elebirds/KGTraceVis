@@ -1,4 +1,4 @@
-"""Tests for the KGTraceVis FastAPI web service."""
+"""Tests for the KGTraceVis FastAPI service."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from kgtracevis.service.handlers import (
 
 
 def test_case_index_includes_checked_in_and_real_output_cases() -> None:
-    """The web case index should expose both example and real pipeline evidence."""
+    """The API case index should expose both example and real pipeline evidence."""
     cases = list_cases()
     case_ids = {case.case_id for case in cases}
 
@@ -133,7 +133,7 @@ def test_mvtec_model_preset_route_reports_available_default(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """The web API should expose selectable MVTec model presets for image uploads."""
+    """The API should expose selectable MVTec model presets for image uploads."""
     checkpoint = tmp_path / "efficientad.pt"
     checkpoint.write_bytes(b"trusted local checkpoint placeholder")
     monkeypatch.setenv("KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT", str(checkpoint))
@@ -153,7 +153,7 @@ def test_mvtec_model_preset_route_detects_makefile_patchcore_asset(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """The web preset route should recognize make download-patchcore output."""
+    """The model preset route should recognize make download-patchcore output."""
     monkeypatch.chdir(tmp_path)
     checkpoint = (
         tmp_path
@@ -183,7 +183,7 @@ def test_mvtec_model_preset_route_detects_amazon_patchcore_artifact_dir(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """The web preset route should recognize official Amazon PatchCore artifacts."""
+    """The model preset route should recognize official Amazon PatchCore artifacts."""
     checkpoint = tmp_path / "models" / "mvtec_bottle"
     checkpoint.mkdir(parents=True)
     (checkpoint / "patchcore_params.pkl").write_bytes(b"params")
@@ -204,7 +204,7 @@ def test_mvtec_model_preset_route_detects_amazon_patchcore_artifact_root(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """The web preset route should recognize full official PatchCore object roots."""
+    """The model preset route should recognize full official PatchCore object roots."""
     root = tmp_path / "models"
     checkpoint = root / "mvtec_bottle"
     checkpoint.mkdir(parents=True)
@@ -253,7 +253,7 @@ def test_mvtec_model_preset_route_ignores_amazon_patchcore_lfs_pointers(
 
 
 def test_model_asset_download_route_uses_default_asset(monkeypatch) -> None:
-    """The web API should expose a trusted default model asset download action."""
+    """The API should expose a trusted default model asset download action."""
     captured: dict[str, object] = {}
 
     def _patched_download_model_assets(*, models, force=False):

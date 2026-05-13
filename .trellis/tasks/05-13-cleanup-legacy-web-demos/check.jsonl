@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Review cleanup against backend package and script/service separation rules."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Confirm removed legacy UI surfaces leave the intended repo layout."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify required tests, lint, type check, and examples pass."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Review cross-layer docs/tests/dependency fallout from UI deletion."}

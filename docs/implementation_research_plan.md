@@ -12,7 +12,7 @@ guide development until formal experiment design replaces it.
 3. Add scenario-specific CSV merge support.
 4. Add noisy evidence generation.
 5. Add metrics for linking, correction, and RCA ranking.
-6. Build a Streamlit page that exposes the current pipeline outputs.
+6. Maintain the FastAPI backend contract for a future RootLens dashboard.
 
 ## Data Files To Add
 
@@ -102,19 +102,16 @@ Next:
 - `mrr`.
 - `path_hit_rate`.
 
-### Streamlit Demo
+### FastAPI Backend And Future Dashboard
 
-Current status: placeholder.
+Current status: FastAPI backend retained; legacy local demos removed.
 
 Next:
 
-- Case selector from `data/examples` and later `runs`.
-- Evidence JSON viewer.
-- Linked entity table.
-- Consistency score and inconsistent fields.
-- Correction candidate table.
-- RCA path list with source edges.
-- Basic what-if editor for evidence fields.
+- Keep service endpoints focused on reusable `KGTracePipeline` outputs.
+- Preserve contracts for case discovery, upload runs, what-if analysis, model
+  preset availability, and feedback records.
+- Rebuild dashboard UI separately when RootLens scope is defined.
 
 ## Development Experiments
 

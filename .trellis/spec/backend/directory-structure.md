@@ -1,7 +1,7 @@
 # Directory Structure
 
 KGTraceVis is a single uv-managed Python package. Keep reusable behavior under
-`src/kgtracevis/`; scripts, notebooks, Streamlit, and services are clients.
+`src/kgtracevis/`; scripts, notebooks, and services are clients.
 
 ## Package Layout
 
@@ -17,8 +17,7 @@ src/kgtracevis/
 ├── metrics/           # standalone metric functions
 ├── viz/               # graph/plot export helpers
 ├── feedback/          # feedback records and confidence updates
-├── service/           # future API handlers
-└── app/               # Streamlit demo client
+└── service/           # FastAPI backend handlers
 ```
 
 Examples:
@@ -56,14 +55,14 @@ Keep dependency flow one-way:
 
 ```text
 scripts/        -> src/kgtracevis/
-app/service     -> src/kgtracevis/
+service/        -> src/kgtracevis/
 notebooks/      -> src/kgtracevis/
-src/kgtracevis/ -> no dependency on scripts/notebooks/app UI state
+src/kgtracevis/ -> no dependency on scripts/notebooks/service runtime state
 ```
 
-Reusable logic must not live in scripts, Streamlit pages, notebooks, or service
-handlers. Those entry points may parse arguments, load config, call the core
-pipeline, and save outputs.
+Reusable logic must not live in scripts, notebooks, or service handlers. Those
+entry points may parse arguments, load config, call the core pipeline, and save
+outputs.
 
 ## Data And KG Files
 

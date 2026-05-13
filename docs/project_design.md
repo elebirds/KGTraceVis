@@ -59,6 +59,7 @@ Evidence and writes runtime analysis outputs: linked entities, consistency
 score, inconsistent fields, correction candidates, and top-k candidate paths.
 
 Scripts under `scripts/` should only orchestrate these modules. The FastAPI
-service under `src/kgtracevis/service/` and the React app under `web/` should
-also call the same pipeline APIs. Streamlit remains a lightweight legacy demo,
-not the primary product shell.
+service under `src/kgtracevis/service/` should also call the same pipeline
+APIs. The legacy Streamlit demo and old React/Vite frontend have been removed;
+the future RootLens dashboard should be rebuilt cleanly against the FastAPI
+backend.

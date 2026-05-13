@@ -63,7 +63,7 @@ KGTraceVis 是一个面向工业异常检测和根因可追溯的研究原型。
 
 5. Demo 可能看起来像 static display 或 placeholder
 
-   如果 example JSON 已经写入 `kg_analysis` 或 root cause，Streamlit 只是在展示静态 JSON，就会显得像 placeholder。正确方式是 example JSON 只包含 evidence input；每次 what-if 编辑后清空 stale analysis，由 `KGTracePipeline` 重新计算 linking、consistency、correction candidates 和 candidate RCA paths，并展示 source edge provenance。
+   如果 example JSON 已经写入 `kg_analysis` 或 root cause，UI/API 只是在展示静态 JSON，就会显得像 placeholder。正确方式是 example JSON 只包含 evidence input；每次 what-if 编辑后清空 stale analysis，由 `KGTracePipeline` 重新计算 linking、consistency、correction candidates 和 candidate RCA paths，并展示 source edge provenance。
 
 ## 4. Codex/GPT Agent 的分析与推荐架构
 
@@ -94,7 +94,7 @@ KGTraceVis 是一个面向工业异常检测和根因可追溯的研究原型。
 
 4. Visual analytics and feedback layer
 
-   Streamlit 或未来服务只调用 pipeline，不复制核心逻辑。UI 应把 evidence input、runtime KG analysis、source edge provenance 分开展示。用户反馈可针对 correction candidate、path、entity linking、KG edge 记录稳定引用。
+   服务或未来 UI 只调用 pipeline，不复制核心逻辑。UI/API 应把 evidence input、runtime KG analysis、source edge provenance 分开展示。用户反馈可针对 correction candidate、path、entity linking、KG edge 记录稳定引用。
 
 推荐论文叙事：
 
@@ -111,7 +111,7 @@ KGTraceVis 是一个面向工业异常检测和根因可追溯的研究原型。
 
 - `src/kgtracevis/core/pipeline.py` 定义 `KGTracePipeline`，统一运行 entity linking、consistency checking、correction generation 和 path ranking。
 - `src/kgtracevis/core/result.py` 定义 `AnalysisResult`，包含 `case_id`、`linked_entities`、`consistency_score`、`inconsistent_fields`、`correction_candidates`、`top_k_paths`、`human_feedback`。
-- 这个 pipeline 是 scripts、Streamlit 和未来 service 应调用的核心入口。
+- 这个 pipeline 是 scripts 和 service 应调用的核心入口。
 
 ### 5.2 Unified evidence schema
 
@@ -167,13 +167,17 @@ KGTraceVis 是一个面向工业异常检测和根因可追溯的研究原型。
 
 当前 KG 是小规模 v0 demo KG。PRD 中记录此前 smoke checks 通过：`uv run --extra dev pytest -q` 为 63 passed，`uv run python scripts/run_examples.py` 可分析 MVTec、TEP 和 wafer examples；QA 输出记录过约 36 nodes 和 29 edges，足以 demo，但不是 paper-grade KG。
 
-### 5.7 Streamlit demo
+### 5.7 FastAPI backend and dashboard boundary
 
-- `src/kgtracevis/app/streamlit_app.py` 是当前本地 demo 入口。
-- UI 已改为中文组会演示口径，支持 example case 选择、what-if 编辑、运行 pipeline、展示 metrics、raw evidence、normalized evidence、KG analysis、correction/path source provenance。
-- Case label 中明确标出 scenario；noisy case 标为“噪声演示”。
-- What-if 编辑后会清空 stale `normalized_evidence` 和 `kg_analysis`，再运行 pipeline。
-- MVTec sidebar notes 明确说明 RCA source edges 是 curated plausible references，显示的 paths 是 runtime candidates，不是 MVTec 原生 factory RCA labels。
+- `src/kgtracevis/service/` 是当前保留的 web-facing backend。
+- Legacy Streamlit demo and old React/Vite frontend have been removed so the
+  RootLens dashboard can be rebuilt cleanly later.
+- Service/API outputs must keep example case selection, what-if editing,
+  runtime pipeline analysis, KG analysis, and correction/path source provenance
+  available to future clients.
+- MVTec client copy must continue to explain that RCA source edges are curated
+  plausible references and displayed paths are runtime candidates, not MVTec
+  native factory RCA labels.
 
 ### 5.8 Scripts, metrics, experiments, tests
 
@@ -187,14 +191,14 @@ KGTraceVis 是一个面向工业异常检测和根因可追溯的研究原型。
   - `scripts/run_experiment_suite.py`
   - `scripts/run_feedback_update.py`
   - `scripts/import_kg.py`
-  - `scripts/run_app.py`
+  - `scripts/run_web_api.py`
 - Metrics：
   - schema validity
   - linking metrics
   - consistency/detection metrics
   - correction metrics
   - ranking metrics
-- Tests cover adapters, schema, KG graph/loading, entity linking, consistency checking, path ranking, noise injection, metrics, KG construction/QA, Streamlit helper behavior, scripts.
+- Tests cover adapters, schema, KG graph/loading, entity linking, consistency checking, path ranking, noise injection, metrics, KG construction/QA, service behavior, scripts.
 
 ## 6. 希望 GPT Pro 重点调研和回答的问题
 
