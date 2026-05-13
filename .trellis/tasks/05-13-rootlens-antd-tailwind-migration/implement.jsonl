@@ -1,0 +1,10 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "AGENTS.md", "reason": "Frontend visual analytics and quality rules"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Quality checklist"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gates"}
+{"file": "web/package.json", "reason": "Frontend dependencies"}
+{"file": "web/vite.config.ts", "reason": "Vite config"}
+{"file": "web/src/main.tsx", "reason": "Style entry"}
+{"file": "web/src/App.tsx", "reason": "Dashboard component to migrate"}
+{"file": "web/src/styles.css", "reason": "CSS to reduce/preserve"}
+{"file": "docs/rootlens_dashboard.md", "reason": "Docs"}

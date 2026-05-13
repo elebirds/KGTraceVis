@@ -1,18 +1,41 @@
 import {
-  AlertTriangle,
   BarChart3,
-  Check,
-  ChevronRight,
-  Circle,
-  Database,
-  FileUp,
-  GitBranch,
-  History,
-  Info,
-  RefreshCw,
-  Send,
-  X
+  Database
 } from "lucide-react";
+import {
+  Alert,
+  Button,
+  Card,
+  ConfigProvider,
+  Descriptions,
+  Empty,
+  Form,
+  Input,
+  InputNumber,
+  Layout,
+  List,
+  Menu,
+  Select,
+  Space,
+  Statistic,
+  Tag,
+  Typography,
+  Upload
+} from "antd";
+import type { MenuProps } from "antd";
+import {
+  ApiOutlined,
+  BranchesOutlined,
+  CheckOutlined,
+  CloudUploadOutlined,
+  DatabaseOutlined,
+  HistoryOutlined,
+  HomeOutlined,
+  InfoCircleOutlined,
+  CloseOutlined,
+  ReloadOutlined,
+  SendOutlined
+} from "@ant-design/icons";
 import {
   forceCenter,
   forceCollide,
@@ -22,7 +45,8 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum
 } from "d3-force";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer } from "react";
+import type { ReactNode } from "react";
 
 import { api } from "./api";
 import { initialState, reducer } from "./state";
@@ -44,6 +68,9 @@ import type {
   UploadMode,
   UploadModeInfo
 } from "./types";
+
+const { Header, Content } = Layout;
+const { Text, Title, Paragraph } = Typography;
 
 const EXAMPLE_UPLOADS: Record<UploadMode, Array<{ path: string; label: string }>> = {
   records: [
@@ -153,8 +180,7 @@ export function App() {
     }
   }
 
-  async function submitUpload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function runUpload() {
     if (!state.upload.file) {
       dispatch({ type: "error", error: "Choose a file before uploading." });
       return;
@@ -305,57 +331,72 @@ export function App() {
     DASHBOARD_PAGES.find((item) => item.page === state.activePage) ?? DASHBOARD_PAGES[0];
 
   return (
-    <main className="app-shell">
-      <aside className="app-sidebar">
-        <div className="brand-block">
-          <div className="brand-mark">RL</div>
-          <div>
-            <p className="eyebrow">RootLens</p>
-            <strong>Traceability Studio</strong>
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: "#0f5f78",
+          borderRadius: 8,
+          fontFamily:
+            "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+        }
+      }}
+    >
+      <Layout className="app-shell">
+        <Header className="topbar">
+          <div className="topbar-main">
+            <div className="brand-block">
+              <div className="brand-mark">RL</div>
+              <div>
+                <p className="eyebrow">RootLens</p>
+                <strong>Traceability Studio</strong>
+              </div>
+            </div>
+            <DashboardNav
+              activePage={state.activePage}
+              onPageSelected={(page) => dispatch({ type: "pageSelected", page })}
+            />
+            <div className="topbar-actions">
+              <Tag
+                className="connection-pill"
+                color={apiConnected ? "success" : "default"}
+                icon={<ApiOutlined />}
+              >
+                {apiConnected ? `API ${state.bootstrap?.api_version}` : "API connecting"}
+              </Tag>
+              <Button
+                aria-label="Refresh RootLens API status"
+                icon={<ReloadOutlined spin={state.loading} />}
+                onClick={() => void loadBootstrap()}
+              />
+            </div>
           </div>
-        </div>
-        <DashboardNav
-          activePage={state.activePage}
-          onPageSelected={(page) => dispatch({ type: "pageSelected", page })}
-        />
-        <div className="sidebar-note">
-          <Info size={16} />
-          <span>{state.bootstrap?.claim_boundary ?? "Candidate explanations only."}</span>
-        </div>
-      </aside>
+          <div className="topbar-claim">
+            <InfoCircleOutlined />
+            <span>{state.bootstrap?.claim_boundary ?? "Candidate explanations only."}</span>
+          </div>
+        </Header>
 
-      <section className="app-main">
-        <header className="topbar">
+      {state.loading && (
+        <Alert
+          className="app-alert"
+          message="Working with the local RootLens API..."
+          type="info"
+          showIcon
+        />
+      )}
+
+      {state.error && (
+        <Alert className="app-alert" message={state.error} type="error" showIcon />
+      )}
+
+        <Content className="app-content">
+        <section className="page-heading">
           <div>
             <p className="eyebrow">Workspace</p>
             <h1>{activePageInfo.label}</h1>
             <span className="page-description">{activePageInfo.description}</span>
           </div>
-          <div className="topbar-actions">
-            <span className={`connection-pill ${apiConnected ? "connected" : "disconnected"}`}>
-              <Circle size={10} fill="currentColor" />
-              {apiConnected ? `API ${state.bootstrap?.api_version}` : "API connecting"}
-            </span>
-            <button className="icon-button" onClick={() => void loadBootstrap()} title="Refresh">
-              <RefreshCw className={state.loading ? "spin" : ""} size={18} />
-            </button>
-          </div>
-        </header>
-
-      {state.loading && (
-        <div className="status status-info" aria-live="polite">
-          <RefreshCw className="spin" size={16} />
-          <span>Working with the local RootLens API...</span>
-        </div>
-      )}
-
-      {state.error && (
-        <div className="status status-error" aria-live="assertive">
-          <AlertTriangle size={16} />
-          <span>{state.error}</span>
-        </div>
-      )}
-
+        </section>
         <section className={`workspace-grid page-${state.activePage}`}>
         <section className="overview-region">
           <OverviewPage
@@ -369,88 +410,90 @@ export function App() {
           />
         </section>
 
-        <aside className="panel upload-panel">
-          <div className="panel-heading">
-            <FileUp size={18} />
-            <h2>Upload</h2>
-          </div>
-          <form onSubmit={(event) => void submitUpload(event)} className="stack">
-            <label>
-              Mode
-              <select
+        <Card
+          className="upload-panel"
+          title={
+            <Space>
+              <CloudUploadOutlined />
+              Upload
+            </Space>
+          }
+        >
+          <Form layout="vertical" onFinish={() => void runUpload()} className="stack">
+            <Form.Item label="Mode">
+              <Select
                 value={state.upload.mode}
-                onChange={(event) =>
+                onChange={(value) =>
                   dispatch({
                     type: "uploadChanged",
-                    patch: { mode: event.target.value as UploadMode }
+                    patch: { mode: value as UploadMode }
                   })
                 }
-              >
-                {uploadModes.length === 0 && <option value={state.upload.mode}>Loading modes...</option>}
-                {uploadModes.map((mode) => (
-                  <option key={mode.mode} value={mode.mode}>
-                    {mode.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <UploadModeGuidance mode={selectedUploadMode} uploadMode={state.upload.mode} />
-            <label>
-              File
-              <input
-                type="file"
-                accept={selectedUploadMode?.accepted_extensions.join(",")}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  dispatch({
-                    type: "uploadChanged",
-                    patch: { file: event.target.files?.[0] ?? null }
-                  })
+                options={
+                  uploadModes.length
+                    ? uploadModes.map((mode) => ({ value: mode.mode, label: mode.label }))
+                    : [{ value: state.upload.mode, label: "Loading modes..." }]
                 }
               />
-              <span className="field-hint">
+            </Form.Item>
+            <UploadModeGuidance mode={selectedUploadMode} uploadMode={state.upload.mode} />
+            <Form.Item label="File">
+              <Upload
+                accept={selectedUploadMode?.accepted_extensions.join(",")}
+                maxCount={1}
+                beforeUpload={(file) => {
+                  dispatch({
+                    type: "uploadChanged",
+                    patch: { file }
+                  });
+                  return false;
+                }}
+                onRemove={() => {
+                  dispatch({ type: "uploadChanged", patch: { file: null } });
+                }}
+              >
+                <Button icon={<CloudUploadOutlined />}>Choose file</Button>
+              </Upload>
+              <Text type="secondary" className="field-hint">
                 {state.upload.file
                   ? `${state.upload.file.name} selected`
                   : "Choose a local example file from the paths above."}
-              </span>
-            </label>
+              </Text>
+            </Form.Item>
             <div className="inline-fields">
-              <label>
-                Dataset
-                <select
+              <Form.Item label="Dataset">
+                <Select
                   value={state.upload.dataset}
-                  onChange={(event) =>
-                    dispatch({ type: "uploadChanged", patch: { dataset: event.target.value } })
+                  onChange={(value) =>
+                    dispatch({ type: "uploadChanged", patch: { dataset: value } })
                   }
-                >
-                  <option value="">auto</option>
-                  {state.bootstrap?.supported_datasets.map((dataset) => (
-                    <option key={dataset} value={dataset}>
-                      {dataset}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Top K
-                <input
-                  type="number"
+                  options={[
+                    { value: "", label: "auto" },
+                    ...(state.bootstrap?.supported_datasets.map((dataset) => ({
+                      value: dataset,
+                      label: dataset
+                    })) ?? [])
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item label="Top K">
+                <InputNumber
                   min={1}
                   max={20}
                   value={state.upload.topK}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     dispatch({
                       type: "uploadChanged",
-                      patch: { topK: Number(event.target.value) }
+                      patch: { topK: Number(value ?? 1) }
                     })
                   }
                 />
-              </label>
+              </Form.Item>
             </div>
             {state.upload.mode === "image" && (
               <>
-                <label>
-                  Object
-                  <input
+                <Form.Item label="Object">
+                  <Input
                     value={state.upload.objectName}
                     onChange={(event) =>
                       dispatch({
@@ -459,30 +502,28 @@ export function App() {
                       })
                     }
                   />
-                </label>
+                </Form.Item>
                 <div className="inline-fields">
-                  <label>
-                    Preset
-                    <select
+                  <Form.Item label="Preset">
+                    <Select
                       value={state.upload.modelPreset}
-                      onChange={(event) =>
+                      onChange={(value) =>
                         dispatch({
                           type: "uploadChanged",
-                          patch: { modelPreset: event.target.value }
+                          patch: { modelPreset: value }
                         })
                       }
-                    >
-                      <option value="auto">auto</option>
-                      {presets.map((preset) => (
-                        <option key={String(preset.preset)} value={String(preset.preset)}>
-                          {String(preset.preset)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Defect
-                    <input
+                      options={[
+                        { value: "auto", label: "auto" },
+                        ...presets.map((preset) => ({
+                          value: String(preset.preset),
+                          label: String(preset.preset)
+                        }))
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Defect">
+                    <Input
                       value={state.upload.defectType}
                       onChange={(event) =>
                         dispatch({
@@ -491,56 +532,62 @@ export function App() {
                         })
                       }
                     />
-                  </label>
+                  </Form.Item>
                 </div>
               </>
             )}
-            <button className="primary-button" disabled={state.loading}>
-              <Send size={16} />
+            <Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={state.loading}>
               {state.loading ? "Analyzing" : "Analyze"}
-            </button>
+            </Button>
             {state.uploadStatus && (
-              <div className="inline-status status-success" aria-live="polite">
-                <Check size={16} />
-                <span>{state.uploadStatus}</span>
-              </div>
+              <Alert message={state.uploadStatus} type="success" showIcon />
             )}
-          </form>
-        </aside>
+          </Form>
+        </Card>
 
-        <aside className="panel history-panel">
-          <div className="panel-heading">
-            <History size={18} />
-            <h2>Run History</h2>
-            <button className="ghost-button" onClick={() => void loadRuns()}>
+        <Card
+          className="history-panel"
+          title={
+            <Space>
+              <HistoryOutlined />
+              Run History
+            </Space>
+          }
+          extra={
+            <Button size="small" icon={<ReloadOutlined />} onClick={() => void loadRuns()}>
               Refresh
-            </button>
-          </div>
-          <div className="run-list">
-            {state.runs.length > 0 ? (
-              state.runs.map((run) => (
-                <button
-                  key={run.run_id}
+            </Button>
+          }
+        >
+          {state.runs.length > 0 ? (
+            <List
+              className="run-list"
+              dataSource={state.runs}
+              renderItem={(run) => (
+                <List.Item
                   className={`run-row ${
                     state.selectedRun?.run.run_id === run.run_id ? "selected" : ""
                   }`}
                   onClick={() => void loadRun(run.run_id)}
                 >
-                  <span className="run-title">{run.label}</span>
-                  <span className="run-meta">
-                    {run.mode} · {run.dataset ?? "auto"} · {run.case_count} cases
-                  </span>
-                  <span className="run-meta">{new Date(run.created_at).toLocaleString()}</span>
-                </button>
-              ))
-            ) : (
-              <EmptyMessage
-                title="No runs yet"
-                body="Upload producer records or evidence JSON to create a local review run."
-              />
-            )}
-          </div>
-        </aside>
+                  <List.Item.Meta
+                    title={run.label}
+                    description={
+                      <Space direction="vertical" size={2}>
+                        <Text type="secondary">
+                          {run.mode} · {run.dataset ?? "auto"} · {run.case_count} cases
+                        </Text>
+                        <Text type="secondary">{new Date(run.created_at).toLocaleString()}</Text>
+                      </Space>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          ) : (
+            <Empty description="Upload producer records or evidence JSON to create a run." />
+          )}
+        </Card>
 
         <section className="detail-region">
           {state.selectedRun ? (
@@ -559,13 +606,12 @@ export function App() {
               onSubmitReview={(action) => void submitReview(action)}
             />
           ) : (
-            <div className="empty-state">
-              <GitBranch size={28} />
-              <div>
-                <strong>No run selected</strong>
-                <p>Select a history item or upload an example record file to inspect candidate paths, provenance, and review targets.</p>
-              </div>
-            </div>
+            <Card className="empty-state">
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Select a history item or upload an example record file to inspect candidate paths, provenance, and review targets."
+              />
+            </Card>
           )}
         </section>
 
@@ -605,8 +651,9 @@ export function App() {
           />
         </section>
         </section>
-      </section>
-    </main>
+        </Content>
+      </Layout>
+    </ConfigProvider>
   );
 }
 
@@ -617,19 +664,31 @@ function DashboardNav({
   activePage: AppState["activePage"];
   onPageSelected: (page: AppState["activePage"]) => void;
 }) {
+  const menuIcons: Record<AppState["activePage"], ReactNode> = {
+    overview: <HomeOutlined />,
+    intake: <CloudUploadOutlined />,
+    analysis: <BranchesOutlined />,
+    kg: <DatabaseOutlined />
+  };
+  const items: MenuProps["items"] = DASHBOARD_PAGES.map((item) => ({
+    key: item.page,
+    icon: menuIcons[item.page],
+    label: (
+      <div className="menu-label">
+        <span>{item.label}</span>
+        <small>{item.description}</small>
+      </div>
+    )
+  }));
   return (
-    <nav className="dashboard-nav" aria-label="RootLens workspace pages">
-      {DASHBOARD_PAGES.map((item) => (
-        <button
-          key={item.page}
-          className={activePage === item.page ? "selected" : ""}
-          onClick={() => onPageSelected(item.page)}
-        >
-          <span>{item.label}</span>
-          <small>{item.description}</small>
-        </button>
-      ))}
-    </nav>
+    <Menu
+      className="dashboard-nav"
+      mode="horizontal"
+      theme="light"
+      selectedKeys={[activePage]}
+      items={items}
+      onClick={({ key }) => onPageSelected(key as AppState["activePage"])}
+    />
   );
 }
 
@@ -652,59 +711,58 @@ function OverviewPage({
 }) {
   return (
     <div className="overview-page">
-      <section className="panel overview-hero">
+      <Card className="overview-hero">
         <div>
           <p className="eyebrow">Dashboard</p>
-          <h2>Traceable Industrial Anomaly Workspace</h2>
-          <p>
+          <Title level={2}>Traceable Industrial Anomaly Workspace</Title>
+          <Paragraph>
             Upload evidence, inspect case reasoning, and manage candidate KG
             changes from separate focused pages.
-          </p>
+          </Paragraph>
         </div>
         <div className="overview-actions">
-          <button className="primary-button" onClick={() => onPageSelected("intake")}>
-            <FileUp size={16} />
+          <Button type="primary" icon={<CloudUploadOutlined />} onClick={() => onPageSelected("intake")}>
             New analysis
-          </button>
-          <button className="ghost-button" onClick={() => onPageSelected("analysis")}>
-            <GitBranch size={16} />
+          </Button>
+          <Button icon={<BranchesOutlined />} onClick={() => onPageSelected("analysis")}>
             Review case paths
-          </button>
-          <button className="ghost-button" onClick={() => onPageSelected("kg")}>
-            <Database size={16} />
+          </Button>
+          <Button icon={<DatabaseOutlined />} onClick={() => onPageSelected("kg")}>
             Open KG Studio
-          </button>
+          </Button>
         </div>
-      </section>
+      </Card>
 
       <section className="overview-metrics">
-        <div className="panel">
+        <Card>
           <BarChart3 size={18} />
-          <span>API</span>
-          <strong>{bootstrapStatus}</strong>
-          <small>{apiVersion}</small>
-        </div>
-        <div className="panel">
-          <History size={18} />
-          <span>Runs</span>
-          <strong>{recentRunCount}</strong>
-          <small>{selectedRunLabel}</small>
-        </div>
-        <div className="panel">
+          <Statistic title="API" value={bootstrapStatus} />
+          <Text type="secondary">{apiVersion}</Text>
+        </Card>
+        <Card>
+          <HistoryOutlined />
+          <Statistic title="Runs" value={recentRunCount} />
+          <Text type="secondary">{selectedRunLabel}</Text>
+        </Card>
+        <Card>
           <Database size={18} />
-          <span>Candidate KG</span>
-          <strong>{kgStatus}</strong>
-          <small>{kgEdgeCount} preview edges</small>
-        </div>
+          <Statistic title="Candidate KG" value={kgStatus} />
+          <Text type="secondary">{kgEdgeCount} preview edges</Text>
+        </Card>
       </section>
 
       <section className="overview-flow">
         {DASHBOARD_PAGES.filter((item) => item.page !== "overview").map((item, index) => (
-          <button key={item.page} className="panel" onClick={() => onPageSelected(item.page)}>
+          <Card
+            key={item.page}
+            className="overview-flow-card"
+            hoverable
+            onClick={() => onPageSelected(item.page)}
+          >
             <span>{`0${index + 1}`}</span>
             <strong>{item.label}</strong>
             <small>{item.description}</small>
-          </button>
+          </Card>
         ))}
       </section>
     </div>
@@ -778,17 +836,23 @@ function KGStudioPanel({
     (edge) => edge.target_key === selectedTargetKey
   );
   return (
-    <section className="panel kg-studio-panel">
-      <div className="panel-heading">
-        <Database size={18} />
-        <h2>KG Studio</h2>
-        <button className="ghost-button" onClick={onRefresh}>
+    <Card
+      className="kg-studio-panel"
+      title={
+        <Space>
+          <DatabaseOutlined />
+          KG Studio
+        </Space>
+      }
+      extra={
+        <Button icon={<ReloadOutlined />} onClick={onRefresh}>
           Refresh
-        </button>
-      </div>
+        </Button>
+      }
+    >
       {payload ? (
         <>
-          <p className="claim-boundary">{payload.note}</p>
+          <Alert className="claim-boundary" message={payload.note} type="warning" showIcon />
           <div className="kg-metrics">
             <Metric label="status" value={payload.status} />
             <Metric label="nodes" value={payload.node_count} />
@@ -846,79 +910,82 @@ function KGStudioPanel({
                 onSubmitDraft={onSubmitDraft}
               />
               <div className="kg-review-box">
-                <select
+                <Select
                   value={selectedTargetKey}
-                  onChange={(event) => onTargetSelected(event.target.value)}
+                  onChange={(value) => onTargetSelected(value)}
                   disabled={!payload.review_targets.length}
-                >
-                  {payload.review_targets.length > 0 ? (
-                    payload.review_targets.slice(0, 80).map((target) => (
-                      <option key={target.target_key} value={target.target_key}>
-                        {shortId(target.label)}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">No KG edge targets</option>
-                  )}
-                </select>
-                <input
+                  options={
+                    payload.review_targets.length > 0
+                      ? payload.review_targets.slice(0, 80).map((target) => ({
+                          value: target.target_key,
+                          label: shortId(target.label)
+                        }))
+                      : [{ value: "", label: "No KG edge targets" }]
+                  }
+                />
+                <Input
                   value={reviewNote}
                   onChange={(event) => onReviewNoteChanged(event.target.value)}
                   placeholder="optional KG edge review note"
                   disabled={!selectedTarget}
                 />
                 <div className="kg-review-actions">
-                  <button onClick={() => onSubmitReview("accept")} disabled={!selectedTarget}>
-                    <Check size={16} />
+                  <Button onClick={() => onSubmitReview("accept")} disabled={!selectedTarget}>
+                    <CheckOutlined />
                     Accept
-                  </button>
-                  <button onClick={() => onSubmitReview("reject")} disabled={!selectedTarget}>
-                    <X size={16} />
+                  </Button>
+                  <Button onClick={() => onSubmitReview("reject")} disabled={!selectedTarget}>
+                    <CloseOutlined />
                     Reject
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => onSubmitReview("needs_review")}
                     disabled={!selectedTarget}
                   >
                     Needs review
-                  </button>
+                  </Button>
                 </div>
-                {reviewStatus && <p className="muted">Feedback {reviewStatus}.</p>}
+                {reviewStatus && <Alert message={`Feedback ${reviewStatus}.`} type="success" showIcon />}
               </div>
             </section>
           </div>
         </>
       ) : (
-        <EmptyMessage
-          title="KG Studio loading"
-          body="Reading source registry and candidate KG artifacts from local project paths."
-        />
+        <Empty description="Reading source registry and candidate KG artifacts from local project paths." />
       )}
-    </section>
+    </Card>
   );
 }
 
 function Metric({ label, value }: { label: string; value: unknown }) {
   return (
-    <div>
-      <span>{label}</span>
-      <strong>{valueText(value)}</strong>
-    </div>
+    <Card size="small">
+      <Statistic title={label} value={valueText(value)} />
+    </Card>
   );
 }
 
 function KGSourceList({ sources }: { sources: KGStudioSource[] }) {
-  if (!sources.length) return <p className="muted">No source registry rows found.</p>;
+  if (!sources.length) return <Empty description="No source registry rows found." />;
   return (
-    <ul className="compact-list">
-      {sources.slice(0, 10).map((source) => (
-        <li key={source.source_id}>
-          <strong>{source.source_id}</strong>
-          <span>{source.used_for}</span>
-          <span>{source.path_or_url}</span>
-        </li>
-      ))}
-    </ul>
+    <List
+      className="compact-list"
+      size="small"
+      dataSource={sources.slice(0, 10)}
+      renderItem={(source) => (
+        <List.Item>
+          <List.Item.Meta
+            title={source.source_id}
+            description={
+              <Space direction="vertical" size={0}>
+                <Text type="secondary">{source.used_for}</Text>
+                <Text type="secondary">{source.path_or_url}</Text>
+              </Space>
+            }
+          />
+        </List.Item>
+      )}
+    />
   );
 }
 
@@ -950,31 +1017,33 @@ function SourceToKGDraftForm({
     <div className="source-draft-box">
       <strong>Source-to-KG Draft</strong>
       <div className="source-draft-fields">
-        <input
+        <Input
           value={sourceId}
           onChange={(event) => onChanged({ sourceDraftSourceId: event.target.value })}
           placeholder="source id"
         />
-        <input
+        <Input
           value={scenario}
           onChange={(event) => onChanged({ sourceDraftScenario: event.target.value })}
           placeholder="scenario"
         />
-        <input
+        <Input
           value={confidence}
           onChange={(event) => onChanged({ sourceDraftConfidence: event.target.value })}
           placeholder="confidence"
         />
       </div>
-      <textarea
+      <Input.TextArea
         value={sourceText}
         onChange={(event) => onChanged({ sourceDraftText: event.target.value })}
         placeholder="head,relation,tail,scenario,evidence"
       />
-      <button onClick={onGenerate}>Generate candidates</button>
+      <Button type="primary" onClick={onGenerate}>
+        Generate candidates
+      </Button>
       {result && (
         <div className="source-draft-results">
-          <span>{result.candidate_edges.length} candidate edge(s)</span>
+          <Tag color="processing">{result.candidate_edges.length} candidate edge(s)</Tag>
           {result.candidate_edges.slice(0, 4).map((edge) => (
             <code key={edge.edge_id}>{edge.edge_id}</code>
           ))}
@@ -985,16 +1054,18 @@ function SourceToKGDraftForm({
 }
 
 function KGSourceDocumentList({ documents }: { documents: KGStudioSourceDocument[] }) {
-  if (!documents.length) return <p className="muted">No source documents found.</p>;
+  if (!documents.length) return <Empty description="No source documents found." />;
   return (
-    <ul className="compact-list">
-      {documents.slice(0, 8).map((document) => (
-        <li key={document.path}>
-          <strong>{document.title}</strong>
-          <span>{document.path}</span>
-        </li>
-      ))}
-    </ul>
+    <List
+      className="compact-list"
+      size="small"
+      dataSource={documents.slice(0, 8)}
+      renderItem={(document) => (
+        <List.Item>
+          <List.Item.Meta title={document.title} description={document.path} />
+        </List.Item>
+      )}
+    />
   );
 }
 
@@ -1168,40 +1239,41 @@ function KGDraftForm({
   return (
     <div className="kg-draft-form">
       <strong>Draft Adjustment</strong>
-      <select
+      <Select
         value={draftAction}
-        onChange={(event) =>
-          onDraftChanged({ kgDraftAction: event.target.value as KGDraftAction })
+        onChange={(value) =>
+          onDraftChanged({ kgDraftAction: value as KGDraftAction })
         }
         disabled={!selectedTarget}
-      >
-        <option value="revise">revise</option>
-        <option value="keep">keep</option>
-        <option value="reject">reject</option>
-        <option value="promote_later">promote later</option>
-      </select>
-      <input
+        options={[
+          { value: "revise", label: "revise" },
+          { value: "keep", label: "keep" },
+          { value: "reject", label: "reject" },
+          { value: "promote_later", label: "promote later" }
+        ]}
+      />
+      <Input
         value={draftRelation}
         onChange={(event) => onDraftChanged({ kgDraftRelation: event.target.value })}
         placeholder="proposed relation"
         disabled={!selectedTarget}
       />
-      <input
+      <Input
         value={draftConfidence}
         onChange={(event) => onDraftChanged({ kgDraftConfidence: event.target.value })}
         placeholder="proposed confidence 0-1"
         disabled={!selectedTarget}
       />
-      <textarea
+      <Input.TextArea
         value={draftEvidence}
         onChange={(event) => onDraftChanged({ kgDraftEvidence: event.target.value })}
         placeholder="proposed evidence or adjustment rationale"
         disabled={!selectedTarget}
       />
-      <button onClick={onSubmitDraft} disabled={!selectedTarget}>
+      <Button type="primary" onClick={onSubmitDraft} disabled={!selectedTarget}>
         Save draft
-      </button>
-      {draftStatus && <p className="muted">Draft {draftStatus}.</p>}
+      </Button>
+      {draftStatus && <Alert message={`Draft ${draftStatus}.`} type="success" showIcon />}
     </div>
   );
 }
@@ -1216,64 +1288,47 @@ function KGEdgePreview({
   onTargetSelected: (targetKey: string) => void;
 }) {
   if (!edges.length) {
-    return (
-      <EmptyMessage
-        title="No candidate edges"
-        body="Generate candidate KG artifacts first, then refresh this panel."
-      />
-    );
+    return <Empty description="Generate candidate KG artifacts first, then refresh this panel." />;
   }
   return (
-    <div className="kg-edge-list">
-      {edges.slice(0, 40).map((edge) => (
-        <button
-          key={edge.edge_id}
+    <List
+      className="kg-edge-list"
+      size="small"
+      dataSource={edges.slice(0, 40)}
+      renderItem={(edge) => (
+        <List.Item
           className={selectedTargetKey === edge.target_key ? "selected" : ""}
           onClick={() => onTargetSelected(edge.target_key)}
         >
-          <span>{edge.head}</span>
-          <strong>{edge.relation}</strong>
-          <span>{edge.tail}</span>
-          <small>
-            {edge.scenario} · {edge.source} · {valueText(edge.confidence)}
-          </small>
-        </button>
-      ))}
-    </div>
+          <List.Item.Meta
+            title={
+              <Space wrap>
+                <Text>{edge.head}</Text>
+                <Tag color="blue">{edge.relation}</Tag>
+                <Text>{edge.tail}</Text>
+              </Space>
+            }
+            description={`${edge.scenario} · ${edge.source} · ${valueText(edge.confidence)}`}
+          />
+        </List.Item>
+      )}
+    />
   );
 }
 
 function KGEdgeInspector({ edge }: { edge: KGStudioGraphEdge | undefined }) {
   if (!edge) {
-    return <p className="muted">Select a candidate KG edge to inspect provenance.</p>;
+    return <Empty description="Select a candidate KG edge to inspect provenance." />;
   }
   return (
-    <dl className="kg-edge-inspector">
-      <div>
-        <dt>edge</dt>
-        <dd>{shortId(edge.edge_id)}</dd>
-      </div>
-      <div>
-        <dt>scenario</dt>
-        <dd>{edge.scenario}</dd>
-      </div>
-      <div>
-        <dt>source</dt>
-        <dd>{edge.source}</dd>
-      </div>
-      <div>
-        <dt>confidence</dt>
-        <dd>{valueText(edge.confidence)}</dd>
-      </div>
-      <div>
-        <dt>review status</dt>
-        <dd>{edge.review_status}</dd>
-      </div>
-      <div className="kg-edge-evidence">
-        <dt>evidence</dt>
-        <dd>{edge.evidence}</dd>
-      </div>
-    </dl>
+    <Descriptions className="kg-edge-inspector" size="small" column={1} bordered>
+      <Descriptions.Item label="edge">{shortId(edge.edge_id)}</Descriptions.Item>
+      <Descriptions.Item label="scenario">{edge.scenario}</Descriptions.Item>
+      <Descriptions.Item label="source">{edge.source}</Descriptions.Item>
+      <Descriptions.Item label="confidence">{valueText(edge.confidence)}</Descriptions.Item>
+      <Descriptions.Item label="review status">{edge.review_status}</Descriptions.Item>
+      <Descriptions.Item label="evidence">{edge.evidence}</Descriptions.Item>
+    </Descriptions>
   );
 }
 
@@ -1307,38 +1362,30 @@ function RunDetailView({
   };
   return (
     <div className="detail-grid">
-      <section className="panel">
-        <div className="panel-heading">
-          <ChevronRight size={18} />
-          <h2>{run.run.label}</h2>
-        </div>
-        <p className="claim-boundary">{run.claim_boundary}</p>
-        <div className="kv-grid">
+      <Card title={run.run.label}>
+        <Alert className="claim-boundary" message={run.claim_boundary} type="warning" showIcon />
+        <Descriptions size="small" column={2} bordered>
           {["case_id", "dataset", "object", "anomaly_type", "location", "morphology", "confidence"].map(
             (key) => (
-              <div key={key}>
-                <span>{key}</span>
-                <strong>{valueText(evidence[key])}</strong>
-              </div>
+              <Descriptions.Item key={key} label={key}>
+                {valueText(evidence[key])}
+              </Descriptions.Item>
             )
           )}
-        </div>
-      </section>
+        </Descriptions>
+      </Card>
 
-      <section className="panel">
-        <div className="panel-heading">
-          <Check size={18} />
-          <h2>Workflow</h2>
-        </div>
-        <ol className="steps">
-          {run.workflow_steps.map((step) => (
-            <li key={step.step_id}>
-              <strong>{step.title}</strong>
-              <span>{step.summary}</span>
-            </li>
-          ))}
-        </ol>
-      </section>
+      <Card title={<Space><CheckOutlined />Workflow</Space>}>
+        <List
+          size="small"
+          dataSource={run.workflow_steps}
+          renderItem={(step) => (
+            <List.Item>
+              <List.Item.Meta title={step.title} description={step.summary} />
+            </List.Item>
+          )}
+        />
+      </Card>
 
       <ReasoningWorkspace
         paths={pathGraph.paths}
@@ -1346,62 +1393,57 @@ function RunDetailView({
         onTargetSelected={onTargetSelected}
       />
 
-      <section className="panel">
-        <h2>Linked Entities</h2>
+      <Card title="Linked Entities">
         <CompactList items={run.linked_entities} idField="link_id" labelField="selected_entity_id" />
-      </section>
+      </Card>
 
-      <section className="panel">
-        <h2>Correction Candidates</h2>
+      <Card title="Correction Candidates">
         <CompactList
           items={run.correction_candidates}
           idField="candidate_id"
           labelField="suggested_value"
         />
-      </section>
+      </Card>
 
-      <section className="panel wide review-panel">
-        <h2>Review</h2>
+      <Card className="wide review-panel" title="Review">
         <ReviewQueue
           targets={run.review_targets}
           selectedTargetKey={selectedTargetKey}
           onTargetSelected={onTargetSelected}
         />
         <div className="review-controls">
-          <select
+          <Select
             className="review-target-select"
             value={selectedTargetKey}
-            onChange={(event) => onTargetSelected(event.target.value)}
+            onChange={(value) => onTargetSelected(value)}
             disabled={!run.review_targets.length}
-          >
-            {run.review_targets.length > 0 ? (
-              run.review_targets.map((target) => (
-                <option key={target.target_key} value={target.target_key}>
-                  {target.target_type} · {shortId(target.label)}
-                </option>
-              ))
-            ) : (
-              <option value="">No review targets</option>
-            )}
-          </select>
-          <input
+            options={
+              run.review_targets.length > 0
+                ? run.review_targets.map((target) => ({
+                    value: target.target_key,
+                    label: `${target.target_type} · ${shortId(target.label)}`
+                  }))
+                : [{ value: "", label: "No review targets" }]
+            }
+          />
+          <Input
             className="review-note"
             value={reviewNote}
             onChange={(event) => onReviewNoteChanged(event.target.value)}
             placeholder="optional review note"
             disabled={!selectedTarget}
           />
-          <button onClick={() => onSubmitReview("accept")} disabled={!selectedTarget}>
-            <Check size={16} />
+          <Button onClick={() => onSubmitReview("accept")} disabled={!selectedTarget}>
+            <CheckOutlined />
             Accept
-          </button>
-          <button onClick={() => onSubmitReview("reject")} disabled={!selectedTarget}>
-            <X size={16} />
+          </Button>
+          <Button onClick={() => onSubmitReview("reject")} disabled={!selectedTarget}>
+            <CloseOutlined />
             Reject
-          </button>
-          <button onClick={() => onSubmitReview("needs_review")} disabled={!selectedTarget}>
+          </Button>
+          <Button onClick={() => onSubmitReview("needs_review")} disabled={!selectedTarget}>
             Needs review
-          </button>
+          </Button>
         </div>
         {selectedTarget ? (
           <p className="muted">Stable target key: {selectedTarget.target_key}</p>
@@ -1409,12 +1451,9 @@ function RunDetailView({
           <p className="muted">No feedback target is available for this run.</p>
         )}
         {reviewStatus && (
-          <div className="inline-status status-success" aria-live="polite">
-            <Check size={16} />
-            <span>Feedback {reviewStatus}.</span>
-          </div>
+          <Alert message={`Feedback ${reviewStatus}.`} type="success" showIcon />
         )}
-      </section>
+      </Card>
     </div>
   );
 }
@@ -1440,11 +1479,7 @@ function ReasoningWorkspace({
       : selectedPath?.edges[0];
 
   return (
-    <section className="panel wide reasoning-workspace">
-      <div className="panel-heading">
-        <GitBranch size={18} />
-        <h2>Path Graph</h2>
-      </div>
+    <Card className="wide reasoning-workspace" title={<Space><BranchesOutlined />Path Graph</Space>}>
       {paths.length > 0 && selectedPath ? (
         <div className="path-workspace-grid">
           <div className="path-picker" aria-label="Candidate path list">
@@ -1486,12 +1521,9 @@ function ReasoningWorkspace({
           <ProvenanceCard edge={selectedEdge} />
         </div>
       ) : (
-        <EmptyMessage
-          title="No path graph available"
-          body="This run returned no candidate reasoning paths. Linked entities and corrections can still be reviewed below."
-        />
+        <Empty description="This run returned no candidate reasoning paths. Linked entities and corrections can still be reviewed below." />
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -1583,7 +1615,7 @@ function ReviewQueue({
   onTargetSelected: (targetKey: string) => void;
 }) {
   if (!targets.length) {
-    return <p className="muted">No review targets are available for this run.</p>;
+    return <Empty description="No review targets are available for this run." />;
   }
   const groups = targets.reduce<Record<string, ReviewTarget[]>>((accumulator, target) => {
     accumulator[target.target_type] = accumulator[target.target_type] ?? [];
@@ -1595,17 +1627,17 @@ function ReviewQueue({
       {Object.entries(groups).map(([targetType, group]) => (
         <div className="review-group" key={targetType}>
           <strong>{targetType}</strong>
-          <div>
+          <Space wrap>
             {group.slice(0, 8).map((target) => (
-              <button
+              <Tag.CheckableTag
                 key={target.target_key}
-                className={selectedTargetKey === target.target_key ? "selected" : ""}
-                onClick={() => onTargetSelected(target.target_key)}
+                checked={selectedTargetKey === target.target_key}
+                onChange={() => onTargetSelected(target.target_key)}
               >
                 {shortId(target.label)}
-              </button>
+              </Tag.CheckableTag>
             ))}
-          </div>
+          </Space>
         </div>
       ))}
     </div>
@@ -1621,9 +1653,9 @@ function UploadModeGuidance({
 }) {
   const examples = EXAMPLE_UPLOADS[uploadMode];
   return (
-    <div className="mode-guidance">
-      <div className="mode-guidance-heading">
-        <Info size={16} />
+      <div className="mode-guidance">
+        <div className="mode-guidance-heading">
+        <InfoCircleOutlined />
         <strong>{mode?.label ?? "Upload mode"}</strong>
       </div>
       <p>{mode?.description ?? "Loading accepted file expectations from the API."}</p>
@@ -1663,15 +1695,20 @@ function CompactList({
   idField: string;
   labelField: string;
 }) {
-  if (!items.length) return <p className="muted">No items recorded.</p>;
+  if (!items.length) return <Empty description="No items recorded." />;
   return (
-    <ul className="compact-list">
-      {items.slice(0, 8).map((item, index) => (
-        <li key={String(item[idField] ?? index)}>
-          <strong>{shortId(valueText(item[idField] ?? index))}</strong>
-          <span>{valueText(item[labelField])}</span>
-        </li>
-      ))}
-    </ul>
+    <List
+      className="compact-list"
+      size="small"
+      dataSource={items.slice(0, 8)}
+      renderItem={(item, index) => (
+        <List.Item key={String(item[idField] ?? index)}>
+          <List.Item.Meta
+            title={shortId(valueText(item[idField] ?? index))}
+            description={valueText(item[labelField])}
+          />
+        </List.Item>
+      )}
+    />
   );
 }

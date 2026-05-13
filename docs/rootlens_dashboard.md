@@ -23,11 +23,13 @@ npm run dev
 ```
 
 The API runs on `http://127.0.0.1:8000`. Vite runs on
-`http://127.0.0.1:5173` and proxies `/api` to the API server.
+`http://127.0.0.1:5173` and proxies `/api` to the API server. The dashboard
+uses Ant Design for stable application components and Tailwind CSS through the
+Vite plugin for layout utilities.
 
 On first load, the dashboard opens to an Overview page rather than a single
-mixed workspace. A persistent menu/sidebar separates the demo into four focused
-pages:
+mixed workspace. A persistent top navigation separates the demo into four
+focused pages:
 
 - Overview: API/KG/run status and next actions.
 - Intake: upload modes, accepted file extensions, exact local example paths,

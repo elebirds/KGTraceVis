@@ -468,7 +468,8 @@ npm run dev
 ```
 
 The Vite dev server starts on `http://127.0.0.1:5173` and proxies `/api` to the
-local FastAPI service. To type-check and build the dashboard:
+local FastAPI service. The client uses Ant Design components with Tailwind CSS
+layout utilities. To type-check and build the dashboard:
 
 ```bash
 cd web
