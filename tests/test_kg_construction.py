@@ -384,6 +384,9 @@ def test_coverage_first_candidate_kg_covers_wm811k_patterns_and_claims() -> None
         )
 
     assert "LocDefect|HAS_PLAUSIBLE_CAUSE|GlueRemovalInsufficient|wafer" not in edge_ids
+    mechanism_nodes = [node for node in nodes if node.label in {"RootCause", "CauseCategory"}]
+    assert not [node.id for node in mechanism_nodes if node.id.endswith("Candidate")]
+    assert not [node.name for node in mechanism_nodes if "candidate" in node.name.lower()]
     assert validate_candidate_claim_boundaries(edges) == []
     assert summary["wm811k_pattern_coverage"] == [spec.pattern for spec in WAFER_PATTERNS]
 
@@ -423,25 +426,25 @@ def test_candidate_kg_adds_object_specific_mvtec_mechanisms(tmp_path: Path) -> N
     node_ids = {node.id for node in nodes}
     edge_by_id = {edge.edge_id: edge for edge in edges}
 
-    assert "CableInsulationDamageCandidate" in node_ids
-    assert "ZipperTeethAssemblyCandidate" in node_ids
+    assert "CableInsulationDamage" in node_ids
+    assert "ZipperTeethAssembly" in node_ids
     cable_edge = edge_by_id[
         "CableObject|SUGGESTS_PLAUSIBLE_MECHANISM|"
-        "CableInsulationDamageCandidate|mvtec"
+        "CableInsulationDamage|mvtec"
     ]
     zipper_edge = edge_by_id[
-        "ZipperObject|SUGGESTS_PLAUSIBLE_MECHANISM|ZipperTeethAssemblyCandidate|mvtec"
+        "ZipperObject|SUGGESTS_PLAUSIBLE_MECHANISM|ZipperTeethAssembly|mvtec"
     ]
     assert cable_edge.source == "mvtec_object_specific_visual_rule"
     assert zipper_edge.source == "mvtec_object_specific_visual_rule"
     assert "object-specific candidate investigation target" in cable_edge.evidence
     assert (
         "CutOuterInsulationDefect|HAS_PLAUSIBLE_CAUSE|"
-        "CableInsulationDamageCandidate|mvtec"
+        "CableInsulationDamage|mvtec"
         in edge_by_id
     )
     assert (
-        "PokeDefect|HAS_PLAUSIBLE_CAUSE|CapsuleShellDamageCandidate|mvtec"
+        "PokeDefect|HAS_PLAUSIBLE_CAUSE|CapsuleShellDamage|mvtec"
         not in edge_by_id
     )
     assert cable_edge.review_status == "auto"

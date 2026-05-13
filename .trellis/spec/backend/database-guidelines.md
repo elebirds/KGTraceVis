@@ -86,6 +86,24 @@ construction:
   `KnowledgeGraph.from_paths()`, so use focused tests when source-row duplicate
   detection itself matters.
 
+### Convention: Candidate Status Is Structured Metadata
+
+Mechanism node IDs and display names should describe the concept, not its review
+state. Use `CableInsulationDamage`, `ParticleContamination`, or
+`EdgeProcessIssue` rather than appending `Candidate` to the node ID/name.
+
+Candidate or plausible status belongs in edge-level fields and evidence:
+
+- `review_status=auto`
+- conservative `confidence` and matching `weight`
+- source IDs such as `mvtec_object_specific_visual_rule`
+- evidence text that states the relation is a low-confidence candidate or
+  investigation target
+
+This keeps paper/demo graph labels readable while preserving claim boundaries.
+Do not remove candidate/plausible wording from edge evidence when the source
+does not support a verified RCA claim.
+
 ## Neo4j Rules
 
 Neo4j code should remain optional for v0:

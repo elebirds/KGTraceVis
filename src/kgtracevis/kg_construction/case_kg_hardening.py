@@ -254,20 +254,20 @@ MECHANISM_NODES: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
         "Plausible compression or packaging pressure candidate",
         ("packaging pressure", "compression pressure"),
     ),
-    "AdhesiveOrResidueCandidate": (
-        "Adhesive or residue candidate",
+    "AdhesiveOrResidue": (
+        "Adhesive or residue",
         "RootCause",
         "Low-confidence candidate for glue, residue, or surface deposit evidence",
-        ("adhesive residue", "glue residue", "residue candidate"),
+        ("adhesive residue", "glue residue", "residue"),
     ),
-    "TextureIrregularityCandidate": (
-        "Texture irregularity candidate",
+    "TextureIrregularity": (
+        "Texture irregularity",
         "RootCause",
         "Low-confidence candidate for texture/thread-like visual irregularities",
         ("texture irregularity", "thread irregularity"),
     ),
-    "ComponentDamageCandidate": (
-        "Component damage candidate",
+    "ComponentDamage": (
+        "Component damage",
         "RootCause",
         "Low-confidence candidate for damaged component evidence",
         ("component damage", "damaged part"),
@@ -290,86 +290,86 @@ MECHANISM_NODES: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
         "Low-confidence wafer process nonuniformity investigation candidate",
         ("process nonuniformity", "nonuniform process"),
     ),
-    "ParticleContaminationCandidate": (
-        "Particle contamination candidate",
+    "ParticleContamination": (
+        "Particle contamination",
         "RootCause",
         "Low-confidence wafer particle or residue investigation candidate",
-        ("particle contamination", "particle candidate"),
+        ("particle contamination", "particle"),
     ),
-    "EdgeProcessIssueCandidate": (
-        "Edge process issue candidate",
+    "EdgeProcessIssue": (
+        "Edge process issue",
         "RootCause",
         "Low-confidence edge-process investigation candidate",
         ("edge process issue", "edge effect"),
     ),
-    "HandlingScratchCandidate": (
-        "Handling scratch candidate",
+    "HandlingScratch": (
+        "Handling scratch",
         "RootCause",
         "Low-confidence wafer handling scratch investigation candidate",
-        ("handling scratch", "scratch candidate"),
+        ("handling scratch", "scratch"),
     ),
-    "ToolingOrMaskPatternCandidate": (
-        "Tooling or mask pattern candidate",
+    "ToolingOrMaskPattern": (
+        "Tooling or mask pattern",
         "RootCause",
         "Low-confidence patterned process/tooling investigation candidate",
         ("tooling pattern", "mask pattern"),
     ),
-    "CableInsulationDamageCandidate": (
-        "Cable insulation damage candidate",
+    "CableInsulationDamage": (
+        "Cable insulation damage",
         "RootCause",
         "Object-specific candidate for cable insulation cuts, pokes, or exposed wires",
         ("cable insulation damage", "wire insulation issue"),
     ),
-    "CableAssemblyOmissionCandidate": (
-        "Cable assembly omission candidate",
+    "CableAssemblyOmission": (
+        "Cable assembly omission",
         "RootCause",
         "Object-specific candidate for missing cable or missing wire evidence",
         ("cable assembly omission", "missing wire assembly"),
     ),
-    "ZipperTeethAssemblyCandidate": (
-        "Zipper teeth assembly candidate",
+    "ZipperTeethAssembly": (
+        "Zipper teeth assembly",
         "RootCause",
         "Object-specific candidate for broken, split, or squeezed zipper teeth evidence",
         ("zipper teeth assembly", "zipper teeth defect"),
     ),
-    "BottleBreakageCandidate": (
-        "Bottle breakage candidate",
+    "BottleBreakage": (
+        "Bottle breakage",
         "RootCause",
         "Object-specific candidate for large or small broken bottle evidence",
         ("bottle breakage", "bottle fracture"),
     ),
-    "CapsuleShellDamageCandidate": (
-        "Capsule shell damage candidate",
+    "CapsuleShellDamage": (
+        "Capsule shell damage",
         "RootCause",
         "Object-specific candidate for capsule crack, poke, scratch, or squeeze evidence",
         ("capsule shell damage", "capsule deformation"),
     ),
-    "MetalNutSurfaceHandlingCandidate": (
-        "Metal nut surface handling candidate",
+    "MetalNutSurfaceHandling": (
+        "Metal nut surface handling",
         "RootCause",
         "Object-specific candidate for metal-nut surface scratch, color, or bent evidence",
         ("metal nut surface handling", "metal nut surface issue"),
     ),
-    "ScrewThreadOrHeadDamageCandidate": (
-        "Screw thread or head damage candidate",
+    "ScrewThreadOrHeadDamage": (
+        "Screw thread or head damage",
         "RootCause",
         "Object-specific candidate for screw thread, neck, or head evidence",
         ("screw thread damage", "screw head damage"),
     ),
-    "PillCoatingOrHandlingCandidate": (
-        "Pill coating or handling candidate",
+    "PillCoatingOrHandling": (
+        "Pill coating or handling",
         "RootCause",
         "Object-specific candidate for pill contamination, color, crack, or scratch evidence",
         ("pill coating issue", "pill handling damage"),
     ),
-    "TextureSurfaceContaminationCandidate": (
-        "Texture surface contamination candidate",
+    "TextureSurfaceContamination": (
+        "Texture surface contamination",
         "RootCause",
         "Object-specific candidate for texture surface color, glue, oil, or contamination evidence",
         ("texture surface contamination", "surface residue"),
     ),
-    "TransistorLeadAssemblyCandidate": (
-        "Transistor lead assembly candidate",
+    "TransistorLeadAssembly": (
+        "Transistor lead assembly",
         "RootCause",
         "Object-specific candidate for bent, cut, misplaced, or damaged transistor parts",
         ("transistor lead assembly", "transistor placement issue"),
@@ -399,7 +399,7 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "WaferRingMorphology",
         "Wafer ring morphology",
         ("ring", "donut", "annular"),
-        ("ToolingOrMaskPatternCandidate", "ProcessNonuniformity"),
+        ("ToolingOrMaskPattern", "ProcessNonuniformity"),
     ),
     WaferPatternSpec(
         "edge_loc",
@@ -411,7 +411,7 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "WaferClusteredMorphology",
         "Wafer clustered morphology",
         ("clustered", "edge cluster"),
-        ("EdgeProcessIssueCandidate",),
+        ("EdgeProcessIssue",),
     ),
     WaferPatternSpec(
         "edge_ring",
@@ -423,7 +423,7 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "WaferRingMorphology",
         "Wafer ring morphology",
         ("ring", "edge ring"),
-        ("EdgeProcessIssueCandidate", "ToolingOrMaskPatternCandidate"),
+        ("EdgeProcessIssue", "ToolingOrMaskPattern"),
     ),
     WaferPatternSpec(
         "loc",
@@ -447,7 +447,7 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "WaferScatteredMorphology",
         "Wafer scattered morphology",
         ("scattered", "random", "diffuse"),
-        ("ParticleContaminationCandidate", "ProcessNonuniformity"),
+        ("ParticleContamination", "ProcessNonuniformity"),
     ),
     WaferPatternSpec(
         "scratch",
@@ -459,7 +459,7 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "WaferLinearMorphology",
         "Wafer linear morphology",
         ("linear", "line", "scratch"),
-        ("HandlingScratchCandidate",),
+        ("HandlingScratch",),
     ),
     WaferPatternSpec(
         "nearfull",
@@ -471,20 +471,20 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "DenseParticles",
         "Dense particles",
         ("dense_particles", "dense particles"),
-        ("ParticleContaminationCandidate",),
+        ("ParticleContamination",),
     ),
 )
 OBJECT_SPECIFIC_MVTEC_MECHANISMS = {
-    "CableInsulationDamageCandidate",
-    "CableAssemblyOmissionCandidate",
-    "ZipperTeethAssemblyCandidate",
-    "BottleBreakageCandidate",
-    "CapsuleShellDamageCandidate",
-    "MetalNutSurfaceHandlingCandidate",
-    "ScrewThreadOrHeadDamageCandidate",
-    "PillCoatingOrHandlingCandidate",
-    "TextureSurfaceContaminationCandidate",
-    "TransistorLeadAssemblyCandidate",
+    "CableInsulationDamage",
+    "CableAssemblyOmission",
+    "ZipperTeethAssembly",
+    "BottleBreakage",
+    "CapsuleShellDamage",
+    "MetalNutSurfaceHandling",
+    "ScrewThreadOrHeadDamage",
+    "PillCoatingOrHandling",
+    "TextureSurfaceContamination",
+    "TransistorLeadAssembly",
 }
 
 
@@ -1349,7 +1349,7 @@ def _mvtec_mechanisms(label: str) -> tuple[str, ...]:
     if "bent" in token or "misplaced" in token or "manipulated" in token:
         return ("AssemblyError", "ProcessMisalignment")
     if "broken" in token or "damaged" in token or "split" in token:
-        return ("ComponentDamageCandidate", "HandlingDamage")
+        return ("ComponentDamage", "HandlingDamage")
     if "missing" in token:
         return ("MissingComponent", "AssemblyError")
     if "contamination" in token or "dirt" in token or "oil" in token or "liquid" in token:
@@ -1357,9 +1357,9 @@ def _mvtec_mechanisms(label: str) -> tuple[str, ...]:
     if "squeeze" in token:
         return ("PackagingPressure", "HandlingDamage")
     if "glue" in token:
-        return ("AdhesiveOrResidueCandidate",)
+        return ("AdhesiveOrResidue",)
     if "thread" in token or "rough" in token or "color" in token or "print" in token:
-        return ("TextureIrregularityCandidate", "GenericVisualDefectMechanism")
+        return ("TextureIrregularity", "GenericVisualDefectMechanism")
     if "hole" in token:
         return ("MechanicalContact", "MaterialDefect")
     return ("GenericVisualDefectMechanism", "VisualInspectionReviewNeeded")
@@ -1370,40 +1370,40 @@ def _mvtec_object_mechanisms(object_id: str, label: str) -> tuple[str, ...]:
     label_token = _alias_token(label)
     if object_token == "cable":
         if "missing" in label_token:
-            return ("CableAssemblyOmissionCandidate",)
+            return ("CableAssemblyOmission",)
         if any(part in label_token for part in ("cut", "poke", "bent")):
-            return ("CableInsulationDamageCandidate",)
+            return ("CableInsulationDamage",)
     if object_token == "zipper" and any(
         part in label_token for part in ("teeth", "squeeze", "broken", "split")
     ):
-        return ("ZipperTeethAssemblyCandidate",)
+        return ("ZipperTeethAssembly",)
     if object_token == "bottle" and "broken" in label_token:
-        return ("BottleBreakageCandidate",)
+        return ("BottleBreakage",)
     if object_token == "capsule" and any(
         part in label_token for part in ("crack", "poke", "scratch", "squeeze")
     ):
-        return ("CapsuleShellDamageCandidate",)
+        return ("CapsuleShellDamage",)
     if object_token == "metalnut" and any(
         part in label_token for part in ("scratch", "color", "bent")
     ):
-        return ("MetalNutSurfaceHandlingCandidate",)
+        return ("MetalNutSurfaceHandling",)
     if object_token == "screw" and any(
         part in label_token for part in ("thread", "scratch", "manipulated")
     ):
-        return ("ScrewThreadOrHeadDamageCandidate",)
+        return ("ScrewThreadOrHeadDamage",)
     if object_token == "pill" and any(
         part in label_token for part in ("contamination", "color", "crack", "scratch")
     ):
-        return ("PillCoatingOrHandlingCandidate",)
+        return ("PillCoatingOrHandling",)
     if object_token in {"carpet", "grid", "leather", "tile", "wood"} and any(
         part in label_token
         for part in ("color", "glue", "oil", "contamination", "thread", "rough", "liquid")
     ):
-        return ("TextureSurfaceContaminationCandidate",)
+        return ("TextureSurfaceContamination",)
     if object_token == "transistor" and any(
         part in label_token for part in ("lead", "misplaced", "damaged")
     ):
-        return ("TransistorLeadAssemblyCandidate",)
+        return ("TransistorLeadAssembly",)
     return ()
 
 
