@@ -382,6 +382,11 @@ def test_coverage_first_candidate_kg_covers_wm811k_patterns_and_claims() -> None
         assert (
             f"WaferObject|HAS_ANOMALY|{spec.node_id}|wafer" in edge_ids | graph_edge_ids
         )
+        assert spec.signature_id in node_ids
+        assert (
+            f"{spec.node_id}|HAS_SPATIAL_SIGNATURE|{spec.signature_id}|wafer"
+            in edge_ids
+        )
 
     assert "LocDefect|HAS_PLAUSIBLE_CAUSE|GlueRemovalInsufficient|wafer" not in edge_ids
     mechanism_nodes = [node for node in nodes if node.label in {"RootCause", "CauseCategory"}]
@@ -389,6 +394,54 @@ def test_coverage_first_candidate_kg_covers_wm811k_patterns_and_claims() -> None
     assert not [node.name for node in mechanism_nodes if "candidate" in node.name.lower()]
     assert validate_candidate_claim_boundaries(edges) == []
     assert summary["wm811k_pattern_coverage"] == [spec.pattern for spec in WAFER_PATTERNS]
+
+
+def test_wafer_sop_mechanisms_are_low_confidence_and_loc_isolated() -> None:
+    """SOP-derived Nearfull mechanisms should not leak into the Loc pattern."""
+    nodes, edges, _summary = build_candidate_kg()
+    node_by_id = {node.id: node for node in nodes}
+    edge_by_id = {edge.edge_id: edge for edge in edges}
+    nearfull_targets = {
+        "WetCleanResidue",
+        "RinseFlowInsufficient",
+        "MegasonicRinseInsufficient",
+        "WaterQualityExcursion",
+        "RecipeStepSkip",
+    }
+
+    for target in nearfull_targets:
+        edge = edge_by_id[f"NearfullDefect|HAS_PLAUSIBLE_CAUSE|{target}|wafer"]
+        assert edge.source == "wafer_factory_sop_private_summary"
+        assert 0.42 <= edge.confidence <= 0.52
+        assert edge.review_status == "auto"
+        assert "Private SOP summary snippet:" in edge.evidence
+
+    loc_forbidden_targets = nearfull_targets | {"GlueRemovalInsufficient"}
+    for target in loc_forbidden_targets:
+        assert f"LocDefect|HAS_PLAUSIBLE_CAUSE|{target}|wafer" not in edge_by_id
+        assert (
+            f"LocalClusterSignature|SUGGESTS_PLAUSIBLE_MECHANISM|{target}|wafer"
+            not in edge_by_id
+        )
+    loc_process_edge = edge_by_id[
+        "LocalClusterSignature|SUGGESTS_PLAUSIBLE_MECHANISM|ProcessNonuniformity|wafer"
+    ]
+    assert loc_process_edge.source == "wm811k_low_confidence_investigation_rule"
+
+    nearfull_signature_edge = edge_by_id[
+        "NearFullDenseSignature|SUGGESTS_PLAUSIBLE_MECHANISM|WaterQualityExcursion|wafer"
+    ]
+    assert nearfull_signature_edge.source == "wafer_factory_sop_private_summary"
+
+    for node_id in nearfull_targets | {
+        "ResistStripInsufficient",
+        "ProcessInterruption",
+        "WaferTransferMisalignment",
+        "ChamberContamination",
+    }:
+        assert node_id in node_by_id
+        assert "Candidate" not in node_id
+        assert "candidate" not in node_by_id[node_id].name.lower()
 
 
 def test_candidate_kg_adds_object_specific_mvtec_mechanisms(tmp_path: Path) -> None:
@@ -464,6 +517,11 @@ def test_candidate_kg_overlay_loads_and_keeps_loc_separate(tmp_path: Path) -> No
     )
     candidates = graph.candidates("loc", scenario="wafer", top_k=3)
 
+    assert graph.has_edge(
+        "NearfullDefect",
+        "HAS_SPATIAL_SIGNATURE",
+        "NearFullDenseSignature",
+    )
     assert candidates
     assert candidates[0].entity_id == "LocDefect"
     assert candidates[0].entity_id != "NearfullDefect"

@@ -5,6 +5,11 @@ large copyrighted PDFs or raw datasets.
 
 ## Coverage-First Candidate KG Sources
 
+- `caption_mask_stats`: development reference descriptors derived from captions
+  and mask geometry. Used only for visual morphology constraints, not RCA.
+- `manual_curation`: manually curated development KG rows for plausible visual
+  mechanism and reference-layer edges. These are not native MVTec factory
+  root-cause labels.
 - `mvtec_calibrated_source_label`: local calibrated MVTec producer records under
   `runs/mvtec_calibrated_pipeline/mvtec_calibrated_records.jsonl`. Used for
   object and defect-label coverage. These labels are observed/source labels, not

@@ -169,6 +169,9 @@ class WaferPatternSpec:
     pattern: str
     node_id: str
     aliases: tuple[str, ...]
+    signature_id: str
+    signature_name: str
+    signature_aliases: tuple[str, ...]
     location_id: str
     location_name: str
     location_aliases: tuple[str, ...]
@@ -314,6 +317,60 @@ MECHANISM_NODES: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
         "Low-confidence patterned process/tooling investigation candidate",
         ("tooling pattern", "mask pattern"),
     ),
+    "WaterQualityExcursion": (
+        "Water quality excursion",
+        "RootCause",
+        "Low-confidence private-SOP investigation mechanism for water resistivity excursions",
+        ("water quality excursion", "water resistivity excursion", "water quality alarm"),
+    ),
+    "RinseFlowInsufficient": (
+        "Rinse flow insufficient",
+        "RootCause",
+        "Low-confidence private-SOP investigation mechanism for insufficient rinse flow",
+        ("rinse flow insufficient", "pure water not opened", "fixed water not opened"),
+    ),
+    "MegasonicRinseInsufficient": (
+        "Megasonic rinse insufficient",
+        "RootCause",
+        "Low-confidence private-SOP investigation mechanism for missing megasonic rinse",
+        ("megasonic rinse insufficient", "megasonic water not opened"),
+    ),
+    "WetCleanResidue": (
+        "Wet clean residue",
+        "RootCause",
+        "Low-confidence private-SOP investigation mechanism for post-clean surface residue",
+        ("wet clean residue", "surface residue", "cleaning residue"),
+    ),
+    "ResistStripInsufficient": (
+        "Resist strip insufficient",
+        "RootCause",
+        "Low-confidence private-SOP investigation mechanism for incomplete resist stripping",
+        ("resist strip insufficient", "photoresist stripping insufficient"),
+    ),
+    "ProcessInterruption": (
+        "Process interruption",
+        "RootCause",
+        "Low-confidence private-SOP investigation mechanism for process stoppage or interruption",
+        ("process interruption", "unexpected shutdown", "process stop"),
+    ),
+    "RecipeStepSkip": (
+        "Recipe step skip",
+        "RootCause",
+        "Low-confidence private-SOP investigation mechanism for skipped recipe steps",
+        ("recipe step skip", "manual step skip", "skipped process step"),
+    ),
+    "WaferTransferMisalignment": (
+        "Wafer transfer misalignment",
+        "RootCause",
+        "Low-confidence private-SOP investigation mechanism for transfer or placement offset",
+        ("wafer transfer misalignment", "wafer position offset", "transfer path error"),
+    ),
+    "ChamberContamination": (
+        "Chamber contamination",
+        "RootCause",
+        "Low-confidence private-SOP investigation mechanism for contamination inside a chamber",
+        ("chamber contamination", "chamber pollution", "contaminated chamber"),
+    ),
     "CableInsulationDamage": (
         "Cable insulation damage",
         "RootCause",
@@ -381,6 +438,9 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "center",
         "CenterDefect",
         ("center", "centre", "center defect"),
+        "CenterClusterSignature",
+        "Center cluster signature",
+        ("center cluster", "central cluster signature"),
         "WaferCenterLocation",
         "Wafer center",
         ("center", "wafer center"),
@@ -393,6 +453,9 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "donut",
         "DonutDefect",
         ("donut", "donut defect"),
+        "AnnularRingSignature",
+        "Annular ring signature",
+        ("annular ring", "donut ring signature"),
         "WaferCenterLocation",
         "Wafer center",
         ("center", "wafer center"),
@@ -405,6 +468,9 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "edge_loc",
         "EdgeLocDefect",
         ("edge_loc", "edge-loc", "edge loc", "edge location"),
+        "EdgeLocalizedSignature",
+        "Edge localized signature",
+        ("edge localized", "edge cluster signature"),
         "WaferEdgeLocation",
         "Wafer edge",
         ("edge", "wafer edge"),
@@ -417,6 +483,9 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "edge_ring",
         "EdgeRingDefect",
         ("edge_ring", "edge-ring", "edge ring"),
+        "EdgeRingSignature",
+        "Edge ring signature",
+        ("edge ring", "peripheral ring signature"),
         "WaferEdgeLocation",
         "Wafer edge",
         ("edge", "wafer edge"),
@@ -429,6 +498,9 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "loc",
         "LocDefect",
         ("loc", "local", "localized", "local defect"),
+        "LocalClusterSignature",
+        "Local cluster signature",
+        ("local cluster", "localized cluster signature"),
         "WaferLocalLocation",
         "Wafer local region",
         ("local", "localized", "wafer local"),
@@ -441,6 +513,9 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "random",
         "RandomDefect",
         ("random", "random defect"),
+        "RandomScatteredSignature",
+        "Random scattered signature",
+        ("random scattered", "diffuse scattered signature"),
         "WaferSurface",
         "Wafer surface",
         ("wafer_surface", "wafer surface"),
@@ -453,6 +528,9 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "scratch",
         "WaferScratchDefect",
         ("scratch", "scratch defect", "wafer scratch"),
+        "LinearScratchSignature",
+        "Linear scratch signature",
+        ("linear scratch", "scratch line signature"),
         "WaferSurface",
         "Wafer surface",
         ("wafer_surface", "wafer surface"),
@@ -465,6 +543,9 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         "nearfull",
         "NearfullDefect",
         ("nearfull", "near-full", "near full", "full contamination"),
+        "NearFullDenseSignature",
+        "Near-full dense signature",
+        ("near-full dense", "dense full-wafer signature"),
         "WaferSurface",
         "Wafer surface",
         ("wafer_surface", "wafer surface"),
@@ -474,6 +555,65 @@ WAFER_PATTERNS: tuple[WaferPatternSpec, ...] = (
         ("ParticleContamination",),
     ),
 )
+WAFER_SIGNATURE_MECHANISMS: dict[str, tuple[str, ...]] = {
+    "CenterClusterSignature": ("ProcessNonuniformity", "ProcessInterruption"),
+    "AnnularRingSignature": (
+        "ToolingOrMaskPattern",
+        "ProcessNonuniformity",
+        "ResistStripInsufficient",
+        "WetCleanResidue",
+    ),
+    "EdgeLocalizedSignature": ("EdgeProcessIssue", "ChamberContamination"),
+    "EdgeRingSignature": (
+        "EdgeProcessIssue",
+        "ToolingOrMaskPattern",
+        "ResistStripInsufficient",
+        "WetCleanResidue",
+    ),
+    "LocalClusterSignature": ("ProcessNonuniformity",),
+    "RandomScatteredSignature": (
+        "ParticleContamination",
+        "ProcessNonuniformity",
+        "ChamberContamination",
+    ),
+    "LinearScratchSignature": ("HandlingScratch", "WaferTransferMisalignment"),
+    "NearFullDenseSignature": (
+        "ParticleContamination",
+        "WetCleanResidue",
+        "RinseFlowInsufficient",
+        "MegasonicRinseInsufficient",
+        "WaterQualityExcursion",
+        "RecipeStepSkip",
+    ),
+}
+SOP_DERIVED_PATTERN_MECHANISMS: dict[str, tuple[tuple[str, float, str], ...]] = {
+    "center": (
+        ("ProcessInterruption", 0.43, "软件异常会导致...中心圆缺陷"),
+        ("ProcessNonuniformity", 0.42, "意外关机可能导致...中心圆缺陷"),
+    ),
+    "donut": (
+        ("ResistStripInsufficient", 0.49, "去胶不彻底会在晶圆中心形成类似甜甜圈形状的残留物"),
+        ("WetCleanResidue", 0.46, "甜甜圈缺陷：去胶不彻底...残留物"),
+    ),
+    "edge_ring": (
+        ("ResistStripInsufficient", 0.50, "去胶不完全会在晶圆边缘形成环状残留物"),
+        ("WetCleanResidue", 0.47, "去胶不充分导致边缘环缺陷"),
+    ),
+    "random": (
+        ("ChamberContamination", 0.44, "腔门未正常关闭会导致腔内污染"),
+    ),
+    "scratch": (
+        ("WaferTransferMisalignment", 0.50, "定位不精确...晶圆表面出现划痕缺陷"),
+        ("HandlingScratch", 0.46, "掉片导致晶圆划痕缺陷"),
+    ),
+    "nearfull": (
+        ("WetCleanResidue", 0.52, "晶圆表面残留物过多，形成near full缺陷"),
+        ("RinseFlowInsufficient", 0.49, "未开启纯水会导致nearfull缺陷"),
+        ("MegasonicRinseInsufficient", 0.48, "未开启兆声水会导致nearfull缺陷"),
+        ("WaterQualityExcursion", 0.46, "水阻率异常导致晶圆near full缺陷"),
+        ("RecipeStepSkip", 0.44, "跳步操作会导致near full缺陷"),
+    ),
+}
 OBJECT_SPECIFIC_MVTEC_MECHANISMS = {
     "CableInsulationDamage",
     "CableAssemblyOmission",
@@ -845,7 +985,12 @@ def _edge_review_row(edge: KGEdge) -> dict[str, object]:
 def _edge_layer(edge: KGEdge) -> str:
     if edge.relation == "HAS_ANOMALY":
         return "observed_evidence"
-    if edge.relation in {"HAS_MORPHOLOGY", "OCCURS_ON", "HAS_LOCATION"}:
+    if edge.relation in {
+        "HAS_MORPHOLOGY",
+        "OCCURS_ON",
+        "HAS_LOCATION",
+        "HAS_SPATIAL_SIGNATURE",
+    }:
         return "semantic_constraint"
     return "candidate_mechanism"
 
@@ -1198,6 +1343,18 @@ def _add_wafer_candidate_rows(
                 description="Wafer-map morphology for WM811K evidence",
             ),
         )
+        _add_node(
+            nodes,
+            existing_node_ids,
+            KGNode(
+                id=spec.signature_id,
+                name=spec.signature_name,
+                label="SpatialSignature",
+                scenario="wafer",
+                aliases=spec.signature_aliases,
+                description="Task-oriented WM811K spatial signature for candidate KG paths",
+            ),
+        )
         _add_edge(
             edges,
             existing_edge_ids,
@@ -1231,6 +1388,20 @@ def _add_wafer_candidate_rows(
             f"WM811K {spec.pattern} pattern is represented at {spec.location_name}.",
             0.8,
         )
+        _add_edge(
+            edges,
+            existing_edge_ids,
+            spec.node_id,
+            "HAS_SPATIAL_SIGNATURE",
+            spec.signature_id,
+            "wafer",
+            "wm811k_pattern_semantics",
+            (
+                f"WM811K {spec.pattern} pattern maps to the "
+                f"{spec.signature_name} descriptor; this is observed spatial evidence."
+            ),
+            0.84,
+        )
         for mechanism_id in spec.mechanism_ids:
             _add_mechanism_node(nodes, existing_node_ids, mechanism_id, scenario="wafer")
             confidence = 0.6 if spec.pattern in observed_patterns else 0.55
@@ -1246,6 +1417,40 @@ def _add_wafer_candidate_rows(
                     f"WM811K {spec.pattern} pattern maps to {MECHANISM_NODES[mechanism_id][0]} "
                     "as a low-confidence candidate investigation path, not verified process RCA."
                 ),
+                confidence,
+            )
+        for mechanism_id in WAFER_SIGNATURE_MECHANISMS[spec.signature_id]:
+            _add_mechanism_node(nodes, existing_node_ids, mechanism_id, scenario="wafer")
+            source = (
+                "wafer_factory_sop_private_summary"
+                if mechanism_id in _pattern_sop_mechanism_ids(spec.pattern)
+                else "wm811k_low_confidence_investigation_rule"
+            )
+            confidence = 0.48 if source == "wafer_factory_sop_private_summary" else 0.54
+            _add_edge(
+                edges,
+                existing_edge_ids,
+                spec.signature_id,
+                "SUGGESTS_PLAUSIBLE_MECHANISM",
+                mechanism_id,
+                "wafer",
+                source,
+                _wafer_signature_mechanism_evidence(spec, mechanism_id),
+                confidence,
+            )
+        for mechanism_id, confidence, snippet in SOP_DERIVED_PATTERN_MECHANISMS.get(
+            spec.pattern, ()
+        ):
+            _add_mechanism_node(nodes, existing_node_ids, mechanism_id, scenario="wafer")
+            _add_edge(
+                edges,
+                existing_edge_ids,
+                spec.node_id,
+                "HAS_PLAUSIBLE_CAUSE",
+                mechanism_id,
+                "wafer",
+                "wafer_factory_sop_private_summary",
+                _wafer_sop_pattern_evidence(spec.pattern, mechanism_id, snippet),
                 confidence,
             )
 
@@ -1287,6 +1492,41 @@ def _add_mechanism_node(
             aliases=aliases,
             description=description,
         ),
+    )
+
+
+def _pattern_sop_mechanism_ids(pattern: str) -> set[str]:
+    return {
+        mechanism_id
+        for mechanism_id, _confidence, _snippet in SOP_DERIVED_PATTERN_MECHANISMS.get(
+            pattern, ()
+        )
+    }
+
+
+def _wafer_signature_mechanism_evidence(
+    spec: WaferPatternSpec,
+    mechanism_id: str,
+) -> str:
+    mechanism_name = MECHANISM_NODES[mechanism_id][0]
+    if mechanism_id in _pattern_sop_mechanism_ids(spec.pattern):
+        return (
+            f"Private SOP summary supports {mechanism_name} as a low-confidence "
+            f"investigation target for the {spec.pattern} pattern and "
+            f"{spec.signature_name}; "
+            f"{CLAIM_BOUNDARY}."
+        )
+    return (
+        f"WM811K {spec.signature_name} maps to {mechanism_name} as a low-confidence "
+        f"candidate investigation path; {CLAIM_BOUNDARY}."
+    )
+
+
+def _wafer_sop_pattern_evidence(pattern: str, mechanism_id: str, snippet: str) -> str:
+    mechanism_name = MECHANISM_NODES[mechanism_id][0]
+    return (
+        f"Private SOP summary snippet: {snippet}. WM811K {pattern} may use "
+        f"{mechanism_name} as a low-confidence investigation target; {CLAIM_BOUNDARY}."
     )
 
 

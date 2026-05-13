@@ -104,6 +104,22 @@ This keeps paper/demo graph labels readable while preserving claim boundaries.
 Do not remove candidate/plausible wording from edge evidence when the source
 does not support a verified RCA claim.
 
+### Convention: Private Source Provenance Must Stay Pattern-Scoped
+
+Private factory summaries, SOPs, logs, and recipe files may support
+low-confidence candidate edges, but their provenance must not leak through
+shared mechanism nodes. Attach a private source ID only to the exact
+pattern/mechanism relation supported by the private summary.
+
+For example, if a wet-clean SOP mentions `nearfull` residue or rinse issues,
+`NearfullDefect -> RinseFlowInsufficient` can use the private SOP source with
+`review_status=auto` and low confidence. A shared semantic edge such as
+`LocalClusterSignature -> ProcessNonuniformity` should keep a generic project
+rule source unless the private source explicitly mentions `Loc`.
+
+Tests for private-source KG extensions should assert both the positive edge and
+the absence of leakage onto nearby/shared classes.
+
 ## Neo4j Rules
 
 Neo4j code should remain optional for v0:
