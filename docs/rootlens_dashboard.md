@@ -26,7 +26,8 @@ The API runs on `http://127.0.0.1:8000`. Vite runs on
 `http://127.0.0.1:5173` and proxies `/api` to the API server.
 
 On first load, the dashboard opens to an Overview page rather than a single
-mixed workspace. Navigation separates the demo into four focused pages:
+mixed workspace. A persistent menu/sidebar separates the demo into four focused
+pages:
 
 - Overview: API/KG/run status and next actions.
 - Intake: upload modes, accepted file extensions, exact local example paths,

@@ -301,24 +301,46 @@ export function App() {
 
   const presets = state.bootstrap?.mvtec_model_presets.presets ?? [];
   const apiConnected = state.bootstrap?.status === "ok";
+  const activePageInfo =
+    DASHBOARD_PAGES.find((item) => item.page === state.activePage) ?? DASHBOARD_PAGES[0];
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">RootLens</p>
-          <h1>Evidence Analysis Workspace</h1>
+      <aside className="app-sidebar">
+        <div className="brand-block">
+          <div className="brand-mark">RL</div>
+          <div>
+            <p className="eyebrow">RootLens</p>
+            <strong>Traceability Studio</strong>
+          </div>
         </div>
-        <div className="topbar-actions">
-          <span className={`connection-pill ${apiConnected ? "connected" : "disconnected"}`}>
-            <Circle size={10} fill="currentColor" />
-            {apiConnected ? `API ${state.bootstrap?.api_version}` : "API connecting"}
-          </span>
-          <button className="icon-button" onClick={() => void loadBootstrap()} title="Refresh">
-            <RefreshCw className={state.loading ? "spin" : ""} size={18} />
-          </button>
+        <DashboardNav
+          activePage={state.activePage}
+          onPageSelected={(page) => dispatch({ type: "pageSelected", page })}
+        />
+        <div className="sidebar-note">
+          <Info size={16} />
+          <span>{state.bootstrap?.claim_boundary ?? "Candidate explanations only."}</span>
         </div>
-      </header>
+      </aside>
+
+      <section className="app-main">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">Workspace</p>
+            <h1>{activePageInfo.label}</h1>
+            <span className="page-description">{activePageInfo.description}</span>
+          </div>
+          <div className="topbar-actions">
+            <span className={`connection-pill ${apiConnected ? "connected" : "disconnected"}`}>
+              <Circle size={10} fill="currentColor" />
+              {apiConnected ? `API ${state.bootstrap?.api_version}` : "API connecting"}
+            </span>
+            <button className="icon-button" onClick={() => void loadBootstrap()} title="Refresh">
+              <RefreshCw className={state.loading ? "spin" : ""} size={18} />
+            </button>
+          </div>
+        </header>
 
       {state.loading && (
         <div className="status status-info" aria-live="polite">
@@ -334,12 +356,7 @@ export function App() {
         </div>
       )}
 
-      <DashboardNav
-        activePage={state.activePage}
-        onPageSelected={(page) => dispatch({ type: "pageSelected", page })}
-      />
-
-      <section className={`workspace-grid page-${state.activePage}`}>
+        <section className={`workspace-grid page-${state.activePage}`}>
         <section className="overview-region">
           <OverviewPage
             bootstrapStatus={state.bootstrap?.status ?? "connecting"}
@@ -586,6 +603,7 @@ export function App() {
             }
             onGenerateSourceDraft={() => void generateSourceDraft()}
           />
+        </section>
         </section>
       </section>
     </main>
