@@ -1,0 +1,16 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "AGENTS.md", "reason": "Project invariants, KG/evidence/feedback contracts, and visual analytics rules"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend pre-development checklist and quality gates"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Layering and reusable-logic placement"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "API/service ambiguity and validation behavior"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required verification commands"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Dashboard feature spans API, service data, and frontend"}
+{"file": "src/kgtracevis/service/api.py", "reason": "Existing FastAPI app, run detail, upload, and feedback routes"}
+{"file": "src/kgtracevis/service/dashboard.py", "reason": "Dashboard bootstrap and run detail presentation models"}
+{"file": "web/src/App.tsx", "reason": "Current dashboard UI workflow and run detail components"}
+{"file": "web/src/types.ts", "reason": "Frontend API type contracts"}
+{"file": "web/src/api.ts", "reason": "Frontend API client"}
+{"file": "web/src/state.ts", "reason": "Frontend copy and upload mode guidance"}
+{"file": "web/src/styles.css", "reason": "Dashboard layout and responsive styling"}
+{"file": "scripts/smoke_rootlens_dashboard.py", "reason": "Existing dashboard smoke test to extend"}
+{"file": "docs/rootlens_dashboard.md", "reason": "User-facing dashboard documentation"}

@@ -96,6 +96,7 @@ class RunDetail(BaseModel):
     linked_entities: list[dict[str, Any]] = Field(default_factory=list)
     correction_candidates: list[dict[str, Any]] = Field(default_factory=list)
     top_k_paths: list[dict[str, Any]] = Field(default_factory=list)
+    path_graph: dict[str, Any] = Field(default_factory=dict)
     source_edge_provenance: list[dict[str, Any]] = Field(default_factory=list)
     review_targets: list[dict[str, Any]] = Field(default_factory=list)
     artifacts: dict[str, str] = Field(default_factory=dict)
@@ -133,7 +134,10 @@ def get_run_detail(
     for base in _run_store_dirs(runs_dir):
         manifest_path = base / run_id / "manifest.json"
         if manifest_path.is_file():
-            return RunDetail.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+            detail = RunDetail.model_validate_json(
+                manifest_path.read_text(encoding="utf-8")
+            )
+            return _enrich_run_detail(detail)
     raise ValueError(f"unknown run session: {run_id}")
 
 
@@ -711,6 +715,7 @@ def _dashboard_fields_from_analysis(
         "linked_entities": linked_entities,
         "correction_candidates": correction_candidates,
         "top_k_paths": top_k_paths,
+        "path_graph": _path_graph_from_paths(top_k_paths),
         "source_edge_provenance": source_edges,
         "review_targets": _review_targets(
             linked_entities=linked_entities,
@@ -719,6 +724,36 @@ def _dashboard_fields_from_analysis(
             source_edges=source_edges,
         ),
     }
+
+
+def _enrich_run_detail(detail: RunDetail) -> RunDetail:
+    """Backfill derived dashboard fields for older persisted run manifests."""
+    changed = False
+    path_graph = detail.path_graph
+    if not path_graph and detail.top_k_paths:
+        path_graph = _path_graph_from_paths(detail.top_k_paths)
+        changed = True
+    review_targets = detail.review_targets
+    if any("target_key" not in target for target in review_targets):
+        review_targets = [
+            {
+                **target,
+                "target_key": _review_target_key(
+                    str(target.get("target_type", "target")),
+                    target.get("target_id", ""),
+                ),
+            }
+            for target in review_targets
+        ]
+        changed = True
+    if not changed:
+        return detail
+    return detail.model_copy(
+        update={
+            "path_graph": path_graph,
+            "review_targets": review_targets,
+        }
+    )
 
 
 def _dashboard_fields_from_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
@@ -745,6 +780,7 @@ def _dashboard_fields_from_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
         "linked_entities": linked_entities,
         "correction_candidates": correction_candidates,
         "top_k_paths": top_k_paths,
+        "path_graph": _path_graph_from_paths(top_k_paths),
         "source_edge_provenance": source_edges,
         "review_targets": _review_targets(
             linked_entities=linked_entities,
@@ -778,6 +814,86 @@ def _unique_source_edges(top_k_paths: list[dict[str, Any]]) -> list[dict[str, An
             if edge_id:
                 edges_by_id.setdefault(edge_id, edge)
     return [edges_by_id[edge_id] for edge_id in sorted(edges_by_id)]
+
+
+def _path_graph_from_paths(top_k_paths: list[dict[str, Any]]) -> dict[str, Any]:
+    paths: list[dict[str, Any]] = []
+    edge_ids: set[str] = set()
+    node_ids: set[str] = set()
+    for index, path in enumerate(top_k_paths):
+        path_id = str(path.get("path_id") or f"path_{index}")
+        nodes = [str(node) for node in path.get("nodes", []) if node is not None]
+        node_names = [str(name) for name in path.get("node_names", []) if name is not None]
+        relations = [
+            str(relation)
+            for relation in path.get("relations", [])
+            if relation is not None
+        ]
+        source_edges = _list_of_dicts(path.get("source_edges"))
+        graph_nodes = []
+        for node_index, node_id in enumerate(nodes):
+            node_ids.add(node_id)
+            graph_nodes.append(
+                {
+                    "node_id": node_id,
+                    "label": node_names[node_index] if node_index < len(node_names) else node_id,
+                    "role": _path_node_role(node_index, len(nodes)),
+                }
+            )
+        graph_edges = []
+        for edge_index, relation in enumerate(relations):
+            edge = source_edges[edge_index] if edge_index < len(source_edges) else {}
+            edge_id = str(
+                edge.get("edge_id")
+                or _fallback_edge_id(nodes, edge_index, relation, path_id)
+            )
+            edge_ids.add(edge_id)
+            graph_edges.append(
+                {
+                    "edge_id": edge_id,
+                    "target_key": _review_target_key("edge", edge_id),
+                    "source_node_id": nodes[edge_index] if edge_index < len(nodes) else "",
+                    "target_node_id": nodes[edge_index + 1] if edge_index + 1 < len(nodes) else "",
+                    "relation": relation,
+                    "source": edge.get("source"),
+                    "evidence": edge.get("evidence"),
+                    "confidence": edge.get("confidence"),
+                    "review_status": edge.get("review_status"),
+                }
+            )
+        paths.append(
+            {
+                "path_id": path_id,
+                "target_key": _review_target_key("path", path_id),
+                "source_entity_id": path.get("source_entity_id"),
+                "target_entity_id": path.get("target_entity_id"),
+                "score": path.get("score"),
+                "confidence": path.get("confidence"),
+                "supporting_evidence": path.get("supporting_evidence", []),
+                "nodes": graph_nodes,
+                "edges": graph_edges,
+            }
+        )
+    return {
+        "paths": paths,
+        "path_count": len(paths),
+        "node_count": len(node_ids),
+        "edge_count": len(edge_ids),
+    }
+
+
+def _path_node_role(node_index: int, node_count: int) -> str:
+    if node_index == 0:
+        return "source"
+    if node_index == node_count - 1:
+        return "target"
+    return "intermediate"
+
+
+def _fallback_edge_id(nodes: list[str], edge_index: int, relation: str, path_id: str) -> str:
+    head = nodes[edge_index] if edge_index < len(nodes) else path_id
+    tail = nodes[edge_index + 1] if edge_index + 1 < len(nodes) else f"step_{edge_index}"
+    return f"{head}|{relation}|{tail}|derived"
 
 
 def _review_targets(

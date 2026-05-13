@@ -105,9 +105,18 @@ def _run_smoke(example_path: Path, *, run_dir: Path, feedback_path: Path, top_k:
     run_detail = upload.json()
     run_id = run_detail["run"]["run_id"]
     _require(run_detail["run"]["case_count"] > 0, "upload created no cases")
-    _require(run_detail["workflow_steps"], "upload returned no workflow steps")
-    _require(run_detail["top_k_paths"], "upload returned no candidate paths")
-    _require(run_detail["review_targets"], "upload returned no review targets")
+    _require(len(run_detail["workflow_steps"]) > 0, "upload returned no workflow steps")
+    _require(len(run_detail["top_k_paths"]) > 0, "upload returned no candidate paths")
+    _require(len(run_detail["path_graph"]["paths"]) > 0, "upload returned no path graph")
+    _require(
+        len(run_detail["path_graph"]["paths"][0]["edges"]) > 0,
+        "first path graph entry has no provenance edges",
+    )
+    _require(len(run_detail["review_targets"]) > 0, "upload returned no review targets")
+    _require(
+        all("target_key" in target for target in run_detail["review_targets"]),
+        "review targets are missing stable keys",
+    )
 
     runs = client.get("/api/runs")
     _require(runs.status_code == 200, "run history route failed")
@@ -115,7 +124,19 @@ def _run_smoke(example_path: Path, *, run_dir: Path, feedback_path: Path, top_k:
 
     detail = client.get(f"/api/runs/{run_id}")
     _require(detail.status_code == 200, "run detail route failed")
-    target = detail.json()["review_targets"][0]
+    detail_payload = detail.json()
+    target = detail_payload["review_targets"][0]
+    edge_targets = [
+        target
+        for target in detail_payload["review_targets"]
+        if target["target_type"] == "edge"
+    ]
+    _require(len(edge_targets) > 0, "run detail returned no edge review targets")
+    first_graph_edge = detail_payload["path_graph"]["paths"][0]["edges"][0]
+    _require(
+        first_graph_edge["target_key"] in {target["target_key"] for target in edge_targets},
+        "path graph edge target key does not match review queue",
+    )
     feedback = client.post(
         "/api/feedback",
         json={

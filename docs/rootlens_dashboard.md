@@ -3,7 +3,7 @@
 RootLens v1 is a foundation-first dashboard boundary for KGTraceVis. It keeps
 analysis logic in `src/kgtracevis/`, uses the FastAPI service as the dashboard
 contract, and keeps the React client under `web/` focused on upload, run
-history, evidence/path inspection, provenance, and review feedback.
+history, evidence/path inspection, path graph provenance, and review feedback.
 
 ## Local Development
 
@@ -60,8 +60,8 @@ the baseline dashboard smoke.
 - `GET /api/runs` lists persisted run summaries from `runs/rootlens_sessions/`
   and legacy `runs/web_sessions/`.
 - `GET /api/runs/{run_id}` returns a run detail with workflow steps, evidence
-  summary, linked entities, correction candidates, top-k paths, source edge
-  provenance, and review targets. Each review target includes a stable
+  summary, linked entities, correction candidates, top-k paths, a derived
+  `path_graph`, source edge provenance, and review targets. Each review target includes a stable
   `target_key` in addition to `target_type` and `target_id` so UI state can
   distinguish different target categories with similar IDs.
 - `POST /api/feedback` appends review feedback records with `target_type`,
@@ -71,10 +71,15 @@ the baseline dashboard smoke.
 Review feedback is append-only history under `runs/web_feedback/feedback.jsonl`.
 It does not promote or mutate KG CSV edges.
 
-The dashboard displays the stable `target_key` for the selected review target
-and submits it in feedback metadata. This is only a review affordance; RootLens
-v1 does not implement a full KG editor, KG mutation workflow, or LLM
-source-to-KG construction UI.
+The run detail view includes a Path Graph workspace. Candidate reasoning paths
+are rendered as compact node-edge chains; selecting a path changes the current
+review target, and selecting an edge exposes the KG edge source, confidence,
+review status, and evidence text. The Review panel groups available path, edge,
+entity-link, and correction targets into a queue and submits the stable
+`target_key` in feedback metadata.
+
+This is only a review affordance; RootLens v1 does not implement a full KG
+editor, KG mutation workflow, or LLM source-to-KG construction UI.
 
 ## Checks
 
@@ -101,9 +106,9 @@ uv run python scripts/smoke_rootlens_dashboard.py
 
 The smoke uses FastAPI `TestClient` instead of launching a browser. It exercises
 the same API path used by the Vite client: bootstrap, producer-record upload,
-run history, run detail, and review feedback. By default it stores run and
-feedback artifacts in a temporary directory; pass this if you want to inspect
-the generated manifest afterward:
+run history, run detail, path graph/review target linkage, and review feedback.
+By default it stores run and feedback artifacts in a temporary directory; pass
+this if you want to inspect the generated manifest afterward:
 
 ```bash
 uv run python scripts/smoke_rootlens_dashboard.py --persist-runs runs/rootlens_smoke

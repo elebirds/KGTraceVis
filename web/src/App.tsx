@@ -19,6 +19,8 @@ import type {
   ReviewAction,
   ReviewTarget,
   RunDetail,
+  PathGraphEdge,
+  PathGraphPath,
   UploadMode,
   UploadModeInfo
 } from "./types";
@@ -426,6 +428,12 @@ function RunDetailView({
   onSubmitReview
 }: RunDetailProps) {
   const evidence = run.evidence_summary ?? {};
+  const pathGraph = run.path_graph ?? {
+    paths: [],
+    path_count: 0,
+    node_count: 0,
+    edge_count: 0
+  };
   return (
     <div className="detail-grid">
       <section className="panel">
@@ -461,42 +469,11 @@ function RunDetailView({
         </ol>
       </section>
 
-      <section className="panel wide">
-        <div className="panel-heading">
-          <GitBranch size={18} />
-          <h2>Candidate Paths</h2>
-        </div>
-        <div className="table-shell">
-          <table>
-            <thead>
-              <tr>
-                <th>Path</th>
-                <th>Target</th>
-                <th>Score</th>
-                <th>Relations</th>
-                <th>Edges</th>
-              </tr>
-            </thead>
-            <tbody>
-              {run.top_k_paths.length > 0 ? (
-                run.top_k_paths.map((path) => (
-                  <tr key={String(path.path_id)}>
-                    <td>{shortId(String(path.path_id))}</td>
-                    <td>{valueText(path.target_entity_id)}</td>
-                    <td>{valueText(path.score)}</td>
-                    <td>{valueText(path.relations)}</td>
-                    <td>{valueText(path.source_edge_ids)}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5}>No candidate paths were returned for this run.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <ReasoningWorkspace
+        paths={pathGraph.paths}
+        selectedTarget={selectedTarget}
+        onTargetSelected={onTargetSelected}
+      />
 
       <section className="panel">
         <h2>Linked Entities</h2>
@@ -512,13 +489,13 @@ function RunDetailView({
         />
       </section>
 
-      <section className="panel wide">
-        <h2>Source Edge Provenance</h2>
-        <CompactList items={run.source_edge_provenance} idField="edge_id" labelField="evidence" />
-      </section>
-
       <section className="panel wide review-panel">
         <h2>Review</h2>
+        <ReviewQueue
+          targets={run.review_targets}
+          selectedTargetKey={selectedTargetKey}
+          onTargetSelected={onTargetSelected}
+        />
         <div className="review-controls">
           <select
             className="review-target-select"
@@ -567,6 +544,199 @@ function RunDetailView({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function ReasoningWorkspace({
+  paths,
+  selectedTarget,
+  onTargetSelected
+}: {
+  paths: PathGraphPath[];
+  selectedTarget: ReviewTarget | undefined;
+  onTargetSelected: (targetKey: string) => void;
+}) {
+  const selectedPath =
+    paths.find((path) => path.target_key === selectedTarget?.target_key) ??
+    paths.find((path) =>
+      path.edges.some((edge) => edge.target_key === selectedTarget?.target_key)
+    ) ??
+    paths[0];
+  const selectedEdge =
+    selectedTarget?.target_type === "edge"
+      ? selectedPath?.edges.find((edge) => edge.target_key === selectedTarget.target_key)
+      : selectedPath?.edges[0];
+
+  return (
+    <section className="panel wide reasoning-workspace">
+      <div className="panel-heading">
+        <GitBranch size={18} />
+        <h2>Path Graph</h2>
+      </div>
+      {paths.length > 0 && selectedPath ? (
+        <div className="path-workspace-grid">
+          <div className="path-picker" aria-label="Candidate path list">
+            {paths.slice(0, 8).map((path, index) => (
+              <button
+                key={path.path_id}
+                className={`path-card ${selectedPath.path_id === path.path_id ? "selected" : ""}`}
+                onClick={() => onTargetSelected(path.target_key)}
+              >
+                <span className="path-card-rank">#{index + 1}</span>
+                <span>
+                  <strong>{valueText(path.target_entity_id)}</strong>
+                  <small>
+                    score {valueText(path.score)} · confidence {valueText(path.confidence)}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="path-graph-panel">
+            <PathNodeChain
+              path={selectedPath}
+              selectedTargetKey={selectedTarget?.target_key ?? ""}
+              onTargetSelected={onTargetSelected}
+            />
+            <div className="supporting-evidence">
+              <strong>Supporting Evidence</strong>
+              {selectedPath.supporting_evidence.length > 0 ? (
+                <ul>
+                  {selectedPath.supporting_evidence.slice(0, 4).map((item, index) => (
+                    <li key={`${selectedPath.path_id}-support-${index}`}>{valueText(item)}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">No supporting evidence text attached to this path.</p>
+              )}
+            </div>
+          </div>
+          <ProvenanceCard edge={selectedEdge} />
+        </div>
+      ) : (
+        <EmptyMessage
+          title="No path graph available"
+          body="This run returned no candidate reasoning paths. Linked entities and corrections can still be reviewed below."
+        />
+      )}
+    </section>
+  );
+}
+
+function PathNodeChain({
+  path,
+  selectedTargetKey,
+  onTargetSelected
+}: {
+  path: PathGraphPath;
+  selectedTargetKey: string;
+  onTargetSelected: (targetKey: string) => void;
+}) {
+  return (
+    <div className="node-chain" aria-label={`Selected path ${path.path_id}`}>
+      {path.nodes.map((node, index) => {
+        const edge = path.edges[index];
+        return (
+          <div className="node-chain-step" key={`${path.path_id}-${node.node_id}-${index}`}>
+            <button className={`graph-node ${node.role}`}>
+              <span>{node.label}</span>
+              <small>{node.node_id}</small>
+            </button>
+            {edge && (
+              <button
+                className={`graph-edge ${selectedTargetKey === edge.target_key ? "selected" : ""}`}
+                onClick={() => onTargetSelected(edge.target_key)}
+                title={edge.evidence ?? edge.edge_id}
+              >
+                <span>{edge.relation}</span>
+                <small>{valueText(edge.confidence)}</small>
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProvenanceCard({ edge }: { edge: PathGraphEdge | undefined }) {
+  if (!edge) {
+    return (
+      <div className="provenance-card">
+        <strong>Provenance</strong>
+        <p className="muted">Select a path edge to inspect source evidence.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="provenance-card">
+      <strong>Provenance</strong>
+      <dl>
+        <div>
+          <dt>edge</dt>
+          <dd>{shortId(edge.edge_id)}</dd>
+        </div>
+        <div>
+          <dt>relation</dt>
+          <dd>{edge.relation}</dd>
+        </div>
+        <div>
+          <dt>source</dt>
+          <dd>{valueText(edge.source)}</dd>
+        </div>
+        <div>
+          <dt>confidence</dt>
+          <dd>{valueText(edge.confidence)}</dd>
+        </div>
+        <div>
+          <dt>review</dt>
+          <dd>{valueText(edge.review_status)}</dd>
+        </div>
+        <div className="provenance-evidence">
+          <dt>evidence</dt>
+          <dd>{valueText(edge.evidence)}</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+function ReviewQueue({
+  targets,
+  selectedTargetKey,
+  onTargetSelected
+}: {
+  targets: ReviewTarget[];
+  selectedTargetKey: string;
+  onTargetSelected: (targetKey: string) => void;
+}) {
+  if (!targets.length) {
+    return <p className="muted">No review targets are available for this run.</p>;
+  }
+  const groups = targets.reduce<Record<string, ReviewTarget[]>>((accumulator, target) => {
+    accumulator[target.target_type] = accumulator[target.target_type] ?? [];
+    accumulator[target.target_type].push(target);
+    return accumulator;
+  }, {});
+  return (
+    <div className="review-queue" aria-label="Review target queue">
+      {Object.entries(groups).map(([targetType, group]) => (
+        <div className="review-group" key={targetType}>
+          <strong>{targetType}</strong>
+          <div>
+            {group.slice(0, 8).map((target) => (
+              <button
+                key={target.target_key}
+                className={selectedTargetKey === target.target_key ? "selected" : ""}
+                onClick={() => onTargetSelected(target.target_key)}
+              >
+                {shortId(target.label)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -47,6 +47,43 @@ export interface ReviewTarget {
   label: string;
 }
 
+export interface PathGraphNode {
+  node_id: string;
+  label: string;
+  role: "source" | "intermediate" | "target" | string;
+}
+
+export interface PathGraphEdge {
+  edge_id: string;
+  target_key: string;
+  source_node_id: string;
+  target_node_id: string;
+  relation: string;
+  source?: string | null;
+  evidence?: string | null;
+  confidence?: number | null;
+  review_status?: string | null;
+}
+
+export interface PathGraphPath {
+  path_id: string;
+  target_key: string;
+  source_entity_id?: string | null;
+  target_entity_id?: string | null;
+  score?: number | null;
+  confidence?: number | null;
+  supporting_evidence: unknown[];
+  nodes: PathGraphNode[];
+  edges: PathGraphEdge[];
+}
+
+export interface PathGraph {
+  paths: PathGraphPath[];
+  path_count: number;
+  node_count: number;
+  edge_count: number;
+}
+
 export interface RunDetail {
   run: RunSummary;
   workflow_steps: WorkflowStep[];
@@ -60,6 +97,7 @@ export interface RunDetail {
   linked_entities: Array<Record<string, unknown>>;
   correction_candidates: Array<Record<string, unknown>>;
   top_k_paths: Array<Record<string, unknown>>;
+  path_graph: PathGraph;
   source_edge_provenance: Array<Record<string, unknown>>;
   review_targets: ReviewTarget[];
   artifacts: Record<string, string>;

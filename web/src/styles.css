@@ -416,6 +416,272 @@ th {
   white-space: nowrap;
 }
 
+.reasoning-workspace {
+  min-width: 0;
+}
+
+.path-workspace-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 230px) minmax(0, 1fr) minmax(220px, 280px);
+}
+
+.path-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.path-card {
+  align-items: flex-start;
+  background: #ffffff;
+  border: 1px solid #dce3e6;
+  border-radius: 8px;
+  color: #243139;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 34px 1fr;
+  padding: 9px;
+  text-align: left;
+}
+
+.path-card.selected {
+  background: #eef8fb;
+  border-color: #155e75;
+}
+
+.path-card-rank {
+  align-items: center;
+  background: #155e75;
+  border-radius: 999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.path-card strong,
+.path-card small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.path-card small {
+  color: #647179;
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.path-graph-panel {
+  background: #f8fafb;
+  border: 1px solid #dce3e6;
+  border-radius: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.node-chain {
+  align-items: stretch;
+  display: flex;
+  gap: 8px;
+  min-height: 104px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.node-chain-step {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.graph-node,
+.graph-edge {
+  border: 1px solid #b9c7cd;
+  border-radius: 8px;
+  color: #1c2428;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+  min-height: 76px;
+  padding: 8px;
+  text-align: center;
+}
+
+.graph-node {
+  background: #ffffff;
+  min-width: 130px;
+}
+
+.graph-node.source {
+  border-color: #67e8f9;
+}
+
+.graph-node.target {
+  border-color: #86efac;
+}
+
+.graph-node span,
+.graph-edge span {
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.graph-node small,
+.graph-edge small {
+  color: #647179;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.graph-edge {
+  background: #fff7ed;
+  border-style: dashed;
+  max-width: 140px;
+  min-width: 112px;
+  position: relative;
+}
+
+.graph-edge::before,
+.graph-edge::after {
+  background: #b9c7cd;
+  content: "";
+  height: 1px;
+  position: absolute;
+  top: 50%;
+  width: 8px;
+}
+
+.graph-edge::before {
+  left: -9px;
+}
+
+.graph-edge::after {
+  right: -9px;
+}
+
+.graph-edge.selected {
+  background: #ecfdf3;
+  border-color: #16a34a;
+  border-style: solid;
+}
+
+.supporting-evidence {
+  border-top: 1px solid #dce3e6;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.supporting-evidence strong {
+  font-size: 12px;
+}
+
+.supporting-evidence ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.supporting-evidence li {
+  color: #52616a;
+  font-size: 12px;
+  line-height: 1.45;
+  margin-bottom: 5px;
+  overflow-wrap: anywhere;
+}
+
+.provenance-card {
+  background: #ffffff;
+  border: 1px solid #dce3e6;
+  border-radius: 8px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.provenance-card > strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.provenance-card dl {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+
+.provenance-card dt {
+  color: #647179;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.provenance-card dd {
+  font-size: 12px;
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.provenance-evidence dd {
+  background: #f8fafb;
+  border-radius: 6px;
+  line-height: 1.45;
+  padding: 8px;
+}
+
+.review-queue {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin-top: 10px;
+}
+
+.review-group {
+  background: #f8fafb;
+  border: 1px solid #dce3e6;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.review-group strong {
+  color: #344148;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.review-group div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.review-group button {
+  background: #ffffff;
+  border: 1px solid #cbd6da;
+  border-radius: 999px;
+  color: #344148;
+  font-size: 11px;
+  max-width: 100%;
+  min-height: 28px;
+  overflow-wrap: anywhere;
+  padding: 5px 8px;
+}
+
+.review-group button.selected {
+  background: #155e75;
+  border-color: #155e75;
+  color: #ffffff;
+}
+
 .status {
   align-items: center;
   border-radius: 8px;
@@ -494,6 +760,10 @@ th {
 }
 
 @media (max-width: 940px) {
+  .path-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
   .review-controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
