@@ -31,6 +31,11 @@ export interface AppState {
   reviewStatus: string | null;
   kgReviewNote: string;
   kgReviewStatus: string | null;
+  kgDraftAction: "keep" | "revise" | "reject" | "promote_later";
+  kgDraftRelation: string;
+  kgDraftEvidence: string;
+  kgDraftConfidence: string;
+  kgDraftStatus: string | null;
 }
 
 export type AppAction =
@@ -47,6 +52,16 @@ export type AppAction =
   | { type: "kgReviewNoteChanged"; note: string }
   | { type: "reviewRecorded"; status: string }
   | { type: "kgReviewRecorded"; status: string }
+  | {
+      type: "kgDraftChanged";
+      patch: Partial<
+        Pick<
+          AppState,
+          "kgDraftAction" | "kgDraftRelation" | "kgDraftEvidence" | "kgDraftConfidence"
+        >
+      >;
+    }
+  | { type: "kgDraftRecorded"; status: string }
   | { type: "loading"; value: boolean }
   | { type: "error"; error: string | null };
 
@@ -72,7 +87,12 @@ export const initialState: AppState = {
   reviewNote: "",
   reviewStatus: null,
   kgReviewNote: "",
-  kgReviewStatus: null
+  kgReviewStatus: null,
+  kgDraftAction: "revise",
+  kgDraftRelation: "",
+  kgDraftEvidence: "",
+  kgDraftConfidence: "",
+  kgDraftStatus: null
 };
 
 export function reducer(state: AppState, action: AppAction): AppState {
@@ -122,7 +142,12 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case "targetSelected":
       return { ...state, selectedTargetKey: action.targetKey, reviewStatus: null };
     case "kgEdgeSelected":
-      return { ...state, selectedKGEdgeKey: action.targetKey, kgReviewStatus: null };
+      return {
+        ...state,
+        selectedKGEdgeKey: action.targetKey,
+        kgReviewStatus: null,
+        kgDraftStatus: null
+      };
     case "reviewNoteChanged":
       return { ...state, reviewNote: action.note };
     case "kgReviewNoteChanged":
@@ -131,6 +156,16 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, reviewStatus: action.status, reviewNote: "" };
     case "kgReviewRecorded":
       return { ...state, kgReviewStatus: action.status, kgReviewNote: "" };
+    case "kgDraftChanged":
+      return { ...state, ...action.patch, kgDraftStatus: null };
+    case "kgDraftRecorded":
+      return {
+        ...state,
+        kgDraftStatus: action.status,
+        kgDraftEvidence: "",
+        kgDraftConfidence: "",
+        kgDraftRelation: ""
+      };
     case "loading":
       return { ...state, loading: action.value };
     case "error":

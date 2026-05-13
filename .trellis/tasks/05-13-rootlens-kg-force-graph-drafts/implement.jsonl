@@ -1,0 +1,15 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "AGENTS.md", "reason": "Project boundaries and append-only feedback rules"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Layering"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Validation behavior"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gates"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "API/frontend flow"}
+{"file": "src/kgtracevis/service/api.py", "reason": "API routes"}
+{"file": "src/kgtracevis/service/kg_studio.py", "reason": "KG Studio payload"}
+{"file": "web/src/App.tsx", "reason": "KG Studio UI"}
+{"file": "web/src/types.ts", "reason": "Frontend types"}
+{"file": "web/src/api.ts", "reason": "API client"}
+{"file": "web/src/state.ts", "reason": "Frontend state"}
+{"file": "web/src/styles.css", "reason": "Styling"}
+{"file": "scripts/smoke_rootlens_dashboard.py", "reason": "Smoke test"}

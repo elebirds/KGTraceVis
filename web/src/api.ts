@@ -1,5 +1,6 @@
 import type {
   DashboardBootstrap,
+  KGDraftRequest,
   KGStudioPayload,
   ReviewRequest,
   RunDetail,
@@ -39,6 +40,12 @@ export const api = {
   },
   submitReview: (request: ReviewRequest) =>
     requestJson<{ status: string; record: Record<string, unknown> }>("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request)
+    }),
+  submitKGDraft: (request: KGDraftRequest) =>
+    requestJson<{ status: string; record: Record<string, unknown> }>("/api/kg/drafts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request)

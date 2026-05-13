@@ -216,3 +216,19 @@ export interface ReviewRequest {
   source: string;
   metadata?: Record<string, unknown>;
 }
+
+export type KGDraftAction = "keep" | "revise" | "reject" | "promote_later";
+
+export interface KGDraftRequest {
+  target_type: "edge";
+  target_id: string;
+  target_key?: string;
+  draft_action: KGDraftAction;
+  proposed_relation?: string;
+  proposed_evidence?: string;
+  proposed_confidence?: number;
+  note?: string;
+  reviewer?: string;
+  source: string;
+  metadata?: Record<string, unknown>;
+}

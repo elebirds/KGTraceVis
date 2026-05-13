@@ -12,14 +12,25 @@ import {
   Send,
   X
 } from "lucide-react";
+import {
+  forceCenter,
+  forceCollide,
+  forceLink,
+  forceManyBody,
+  forceSimulation,
+  type SimulationLinkDatum,
+  type SimulationNodeDatum
+} from "d3-force";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useReducer } from "react";
 
 import { api } from "./api";
 import { initialState, reducer } from "./state";
 import type {
   ReviewAction,
+  KGDraftAction,
   ReviewTarget,
   KGStudioGraphEdge,
+  KGStudioGraphNode,
   KGStudioPayload,
   KGStudioReviewTarget,
   KGStudioSource,
@@ -207,6 +218,42 @@ export function App() {
       });
       dispatch({
         type: "kgReviewRecorded",
+        status: `${response.status} for ${selectedKGTarget.target_key}`
+      });
+    } catch (error) {
+      dispatch({ type: "error", error: (error as Error).message });
+    } finally {
+      dispatch({ type: "loading", value: false });
+    }
+  }
+
+  async function submitKGDraft() {
+    if (!selectedKGTarget) return;
+    const confidenceText = state.kgDraftConfidence.trim();
+    const proposedConfidence = confidenceText ? Number(confidenceText) : undefined;
+    if (proposedConfidence !== undefined && Number.isNaN(proposedConfidence)) {
+      dispatch({ type: "error", error: "Draft confidence must be a number between 0 and 1." });
+      return;
+    }
+    dispatch({ type: "loading", value: true });
+    try {
+      const response = await api.submitKGDraft({
+        target_type: "edge",
+        target_id: selectedKGTarget.target_id,
+        target_key: selectedKGTarget.target_key,
+        draft_action: state.kgDraftAction,
+        proposed_relation: state.kgDraftRelation || undefined,
+        proposed_evidence: state.kgDraftEvidence || undefined,
+        proposed_confidence: proposedConfidence,
+        note: state.kgReviewNote || undefined,
+        source: "rootlens-kg-studio",
+        metadata: {
+          candidate_dir: state.kgStudio?.candidate_dir,
+          source_registry_path: state.kgStudio?.source_registry_path
+        }
+      });
+      dispatch({
+        type: "kgDraftRecorded",
         status: `${response.status} for ${selectedKGTarget.target_key}`
       });
     } catch (error) {
@@ -459,6 +506,11 @@ export function App() {
             selectedTargetKey={state.selectedKGEdgeKey}
             reviewNote={state.kgReviewNote}
             reviewStatus={state.kgReviewStatus}
+            draftAction={state.kgDraftAction}
+            draftRelation={state.kgDraftRelation}
+            draftEvidence={state.kgDraftEvidence}
+            draftConfidence={state.kgDraftConfidence}
+            draftStatus={state.kgDraftStatus}
             onRefresh={() => void loadKGStudio()}
             onTargetSelected={(targetKey) =>
               dispatch({ type: "kgEdgeSelected", targetKey })
@@ -467,6 +519,10 @@ export function App() {
               dispatch({ type: "kgReviewNoteChanged", note })
             }
             onSubmitReview={(action) => void submitKGReview(action)}
+            onDraftChanged={(patch) =>
+              dispatch({ type: "kgDraftChanged", patch })
+            }
+            onSubmitDraft={() => void submitKGDraft()}
           />
         </section>
       </section>
@@ -480,20 +536,41 @@ function KGStudioPanel({
   selectedTargetKey,
   reviewNote,
   reviewStatus,
+  draftAction,
+  draftRelation,
+  draftEvidence,
+  draftConfidence,
+  draftStatus,
   onRefresh,
   onTargetSelected,
   onReviewNoteChanged,
-  onSubmitReview
+  onSubmitReview,
+  onDraftChanged,
+  onSubmitDraft
 }: {
   payload: KGStudioPayload | null;
   selectedTarget: KGStudioReviewTarget | undefined;
   selectedTargetKey: string;
   reviewNote: string;
   reviewStatus: string | null;
+  draftAction: KGDraftAction;
+  draftRelation: string;
+  draftEvidence: string;
+  draftConfidence: string;
+  draftStatus: string | null;
   onRefresh: () => void;
   onTargetSelected: (targetKey: string) => void;
   onReviewNoteChanged: (note: string) => void;
   onSubmitReview: (action: ReviewAction) => void;
+  onDraftChanged: (
+    patch: Partial<{
+      kgDraftAction: KGDraftAction;
+      kgDraftRelation: string;
+      kgDraftEvidence: string;
+      kgDraftConfidence: string;
+    }>
+  ) => void;
+  onSubmitDraft: () => void;
 }) {
   const selectedEdge = payload?.graph_edges.find(
     (edge) => edge.target_key === selectedTargetKey
@@ -532,6 +609,12 @@ function KGStudioPanel({
             </section>
             <section>
               <h3>Candidate Edge Graph</h3>
+              <KGForceGraph
+                nodes={payload.graph_nodes}
+                edges={payload.graph_edges}
+                selectedTargetKey={selectedTargetKey}
+                onTargetSelected={onTargetSelected}
+              />
               <KGEdgePreview
                 edges={payload.graph_edges}
                 selectedTargetKey={selectedTargetKey}
@@ -541,6 +624,16 @@ function KGStudioPanel({
             <section>
               <h3>Edge Provenance</h3>
               <KGEdgeInspector edge={selectedEdge} />
+              <KGDraftForm
+                selectedTarget={selectedTarget}
+                draftAction={draftAction}
+                draftRelation={draftRelation}
+                draftEvidence={draftEvidence}
+                draftConfidence={draftConfidence}
+                draftStatus={draftStatus}
+                onDraftChanged={onDraftChanged}
+                onSubmitDraft={onSubmitDraft}
+              />
               <div className="kg-review-box">
                 <select
                   value={selectedTargetKey}
@@ -629,6 +722,214 @@ function KGSourceDocumentList({ documents }: { documents: KGStudioSourceDocument
         </li>
       ))}
     </ul>
+  );
+}
+
+interface ForceNode extends SimulationNodeDatum {
+  id: string;
+  label: string;
+  nodeType: string;
+  scenario: string;
+}
+
+interface ForceLink extends SimulationLinkDatum<ForceNode> {
+  edge: KGStudioGraphEdge;
+}
+
+function KGForceGraph({
+  nodes,
+  edges,
+  selectedTargetKey,
+  onTargetSelected
+}: {
+  nodes: KGStudioGraphNode[];
+  edges: KGStudioGraphEdge[];
+  selectedTargetKey: string;
+  onTargetSelected: (targetKey: string) => void;
+}) {
+  const layout = useMemo(() => buildForceLayout(nodes, edges), [nodes, edges]);
+  if (!layout.nodes.length || !layout.links.length) {
+    return null;
+  }
+  const nodeById = new Map(layout.nodes.map((node) => [node.id, node]));
+  return (
+    <svg className="kg-force-graph" viewBox="0 0 760 360" role="img" aria-label="Candidate KG force graph">
+      <g>
+        {layout.links.map((link) => {
+          const source = forceNode(link.source, nodeById);
+          const target = forceNode(link.target, nodeById);
+          if (!source || !target) return null;
+          const selected = selectedTargetKey === link.edge.target_key;
+          return (
+            <g key={link.edge.edge_id}>
+              <line
+                className={selected ? "selected" : ""}
+                x1={source.x}
+                y1={source.y}
+                x2={target.x}
+                y2={target.y}
+              />
+              <circle
+                className="svg-edge-hit"
+                cx={((source.x ?? 0) + (target.x ?? 0)) / 2}
+                cy={((source.y ?? 0) + (target.y ?? 0)) / 2}
+                r={selected ? 8 : 5}
+                onClick={() => onTargetSelected(link.edge.target_key)}
+              />
+            </g>
+          );
+        })}
+      </g>
+      <g>
+        {layout.nodes.map((node) => (
+          <g key={node.id} transform={`translate(${node.x ?? 0}, ${node.y ?? 0})`}>
+            <circle
+              className={`kg-node-dot ${node.nodeType}`}
+              r={node.nodeType === "RootCause" ? 16 : 13}
+            />
+            <text y={-20}>{shortId(node.label)}</text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+function buildForceLayout(
+  graphNodes: KGStudioGraphNode[],
+  graphEdges: KGStudioGraphEdge[]
+): { nodes: ForceNode[]; links: ForceLink[] } {
+  const edgeSlice = graphEdges.slice(0, 60);
+  const nodeRows = new Map(graphNodes.map((node) => [node.node_id, node]));
+  for (const edge of edgeSlice) {
+    if (!nodeRows.has(edge.head)) {
+      nodeRows.set(edge.head, {
+        node_id: edge.head,
+        label: edge.head,
+        node_type: "Unknown",
+        scenario: edge.scenario,
+        description: ""
+      });
+    }
+    if (!nodeRows.has(edge.tail)) {
+      nodeRows.set(edge.tail, {
+        node_id: edge.tail,
+        label: edge.tail,
+        node_type: "Unknown",
+        scenario: edge.scenario,
+        description: ""
+      });
+    }
+  }
+  const nodes: ForceNode[] = Array.from(nodeRows.values())
+    .slice(0, 80)
+    .map((node) => ({
+      id: node.node_id,
+      label: node.label,
+      nodeType: node.node_type,
+      scenario: node.scenario
+    }));
+  const available = new Set(nodes.map((node) => node.id));
+  const links: ForceLink[] = edgeSlice
+    .filter((edge) => available.has(edge.head) && available.has(edge.tail))
+    .map((edge) => ({
+      source: edge.head,
+      target: edge.tail,
+      edge
+    }));
+  forceSimulation(nodes)
+    .force(
+      "link",
+      forceLink<ForceNode, ForceLink>(links)
+        .id((node) => node.id)
+        .distance(96)
+        .strength(0.45)
+    )
+    .force("charge", forceManyBody().strength(-210))
+    .force("collide", forceCollide<ForceNode>().radius(35))
+    .force("center", forceCenter(380, 180))
+    .stop()
+    .tick(140);
+  for (const node of nodes) {
+    node.x = Math.min(725, Math.max(35, node.x ?? 380));
+    node.y = Math.min(330, Math.max(35, node.y ?? 180));
+  }
+  return { nodes, links };
+}
+
+function forceNode(
+  value: string | number | ForceNode | undefined,
+  nodes: Map<string, ForceNode>
+): ForceNode | undefined {
+  if (typeof value === "object" && value !== null) return value;
+  if (value === undefined) return undefined;
+  return nodes.get(String(value));
+}
+
+function KGDraftForm({
+  selectedTarget,
+  draftAction,
+  draftRelation,
+  draftEvidence,
+  draftConfidence,
+  draftStatus,
+  onDraftChanged,
+  onSubmitDraft
+}: {
+  selectedTarget: KGStudioReviewTarget | undefined;
+  draftAction: KGDraftAction;
+  draftRelation: string;
+  draftEvidence: string;
+  draftConfidence: string;
+  draftStatus: string | null;
+  onDraftChanged: (
+    patch: Partial<{
+      kgDraftAction: KGDraftAction;
+      kgDraftRelation: string;
+      kgDraftEvidence: string;
+      kgDraftConfidence: string;
+    }>
+  ) => void;
+  onSubmitDraft: () => void;
+}) {
+  return (
+    <div className="kg-draft-form">
+      <strong>Draft Adjustment</strong>
+      <select
+        value={draftAction}
+        onChange={(event) =>
+          onDraftChanged({ kgDraftAction: event.target.value as KGDraftAction })
+        }
+        disabled={!selectedTarget}
+      >
+        <option value="revise">revise</option>
+        <option value="keep">keep</option>
+        <option value="reject">reject</option>
+        <option value="promote_later">promote later</option>
+      </select>
+      <input
+        value={draftRelation}
+        onChange={(event) => onDraftChanged({ kgDraftRelation: event.target.value })}
+        placeholder="proposed relation"
+        disabled={!selectedTarget}
+      />
+      <input
+        value={draftConfidence}
+        onChange={(event) => onDraftChanged({ kgDraftConfidence: event.target.value })}
+        placeholder="proposed confidence 0-1"
+        disabled={!selectedTarget}
+      />
+      <textarea
+        value={draftEvidence}
+        onChange={(event) => onDraftChanged({ kgDraftEvidence: event.target.value })}
+        placeholder="proposed evidence or adjustment rationale"
+        disabled={!selectedTarget}
+      />
+      <button onClick={onSubmitDraft} disabled={!selectedTarget}>
+        Save draft
+      </button>
+      {draftStatus && <p className="muted">Draft {draftStatus}.</p>}
+    </div>
   );
 }
 

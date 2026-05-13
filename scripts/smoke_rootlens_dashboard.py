@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from kgtracevis.service import api as service_api
 from kgtracevis.service import handlers as service_handlers
+from kgtracevis.service import kg_drafts as service_kg_drafts
 from kgtracevis.service import runs as service_runs
 
 DEFAULT_EXAMPLE = Path("data/examples/records/mvtec_records.jsonl")
@@ -51,6 +52,7 @@ def main() -> None:
             args.example,
             run_dir=args.persist_runs,
             feedback_path=feedback_path,
+            draft_path=args.persist_runs / "kg_drafts.jsonl",
             top_k=args.top_k,
         )
         return
@@ -61,11 +63,19 @@ def main() -> None:
             args.example,
             run_dir=temp_path / "runs",
             feedback_path=args.feedback_path or temp_path / "feedback.jsonl",
+            draft_path=temp_path / "kg_drafts.jsonl",
             top_k=args.top_k,
         )
 
 
-def _run_smoke(example_path: Path, *, run_dir: Path, feedback_path: Path, top_k: int) -> None:
+def _run_smoke(
+    example_path: Path,
+    *,
+    run_dir: Path,
+    feedback_path: Path,
+    draft_path: Path,
+    top_k: int,
+) -> None:
     if not example_path.is_file():
         raise FileNotFoundError(f"example upload file not found: {example_path}")
     if top_k < 1:
@@ -80,7 +90,13 @@ def _run_smoke(example_path: Path, *, run_dir: Path, feedback_path: Path, top_k:
     ) -> dict[str, Any]:
         return service_handlers.record_feedback(request, output_path=feedback_path)
 
+    def record_kg_draft_to_smoke_path(
+        request: service_kg_drafts.KGDraftRequest,
+    ) -> dict[str, object]:
+        return service_kg_drafts.record_kg_draft(request, output_path=draft_path)
+
     service_api.record_feedback = record_feedback_to_smoke_path
+    service_api.record_kg_draft = record_kg_draft_to_smoke_path
 
     client = TestClient(service_api.create_app())
     _require(client.get("/api/health").json()["status"] == "ok", "health route failed")
@@ -107,6 +123,22 @@ def _run_smoke(example_path: Path, *, run_dir: Path, feedback_path: Path, top_k:
             len(kg_studio_payload["review_targets"]) > 0,
             "KG Studio returned no review targets",
         )
+        kg_target = kg_studio_payload["review_targets"][0]
+        kg_draft = client.post(
+            "/api/kg/drafts",
+            json={
+                "target_type": "edge",
+                "target_id": kg_target["target_id"],
+                "target_key": kg_target["target_key"],
+                "draft_action": "revise",
+                "proposed_confidence": 0.5,
+                "note": "dashboard smoke KG draft",
+                "source": "rootlens-dashboard-smoke",
+            },
+        )
+        _require(kg_draft.status_code == 200, f"KG draft submit failed: {kg_draft.text}")
+        _require(kg_draft.json()["status"] == "recorded", "KG draft was not recorded")
+        _require(draft_path.is_file(), "KG draft JSONL was not written")
 
     with example_path.open("rb") as handle:
         upload = client.post(

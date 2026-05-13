@@ -95,10 +95,16 @@ present, the panel stays in an empty state and still shows any available source
 registry/source document metadata.
 
 The panel is intentionally non-mutating. It previews candidate KG edges, shows
-source/evidence/confidence/review status, and submits edge review feedback via
-the same append-only `/api/feedback` route used by case reasoning. Accepted or
-rejected feedback does not update candidate CSVs or tracked `data/kg/` files in
-this foundation version.
+source/evidence/confidence/review status, and includes a force-directed SVG
+graph preview for visual edge selection. It submits edge review feedback via the
+same append-only `/api/feedback` route used by case reasoning.
+
+The Draft Adjustment form writes append-only JSONL records through
+`POST /api/kg/drafts` into `runs/kg_studio_drafts/drafts.jsonl`. Draft actions
+can mark an edge as keep/revise/reject/promote-later and optionally propose a
+weaker relation, evidence wording, or confidence. Accepted feedback and draft
+records do not update candidate CSVs or tracked `data/kg/` files in this
+foundation version.
 
 ## Checks
 
@@ -127,7 +133,8 @@ The smoke uses FastAPI `TestClient` instead of launching a browser. It exercises
 the same API path used by the Vite client: bootstrap, producer-record upload,
 run history, run detail, path graph/review target linkage, and review feedback.
 It also exercises the KG Studio route and verifies candidate edge review targets
-when local candidate KG artifacts are available.
+plus append-only draft submission when local candidate KG artifacts are
+available.
 By default it stores run and feedback artifacts in a temporary directory; pass
 this if you want to inspect the generated manifest afterward:
 
