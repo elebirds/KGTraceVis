@@ -21,6 +21,10 @@ from kgtracevis.service.handlers import (
     what_if_request,
 )
 from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
+from kgtracevis.service.kg_source_drafts import (
+    KGSourceDraftRequest,
+    generate_source_kg_draft,
+)
 from kgtracevis.service.kg_studio import kg_studio_payload
 from kgtracevis.service.runs import (
     create_run_from_upload,
@@ -119,6 +123,10 @@ def create_app() -> FastAPI:
     @app.post("/api/kg/drafts")
     def kg_draft(request: KGDraftRequest) -> dict[str, object]:
         return record_kg_draft(request)
+
+    @app.post("/api/kg/source-draft")
+    def kg_source_draft(request: KGSourceDraftRequest) -> dict[str, object]:
+        return generate_source_kg_draft(request).model_dump(mode="json")
 
     @app.post("/api/runs/upload")
     async def upload_run(

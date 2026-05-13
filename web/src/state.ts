@@ -1,6 +1,7 @@
 import type {
   DashboardBootstrap,
   KGStudioPayload,
+  KGSourceDraftResponse,
   RunDetail,
   RunSummary,
   UploadMode
@@ -36,6 +37,11 @@ export interface AppState {
   kgDraftEvidence: string;
   kgDraftConfidence: string;
   kgDraftStatus: string | null;
+  sourceDraftText: string;
+  sourceDraftSourceId: string;
+  sourceDraftScenario: string;
+  sourceDraftConfidence: string;
+  sourceDraftResult: KGSourceDraftResponse | null;
 }
 
 export type AppAction =
@@ -62,6 +68,19 @@ export type AppAction =
       >;
     }
   | { type: "kgDraftRecorded"; status: string }
+  | {
+      type: "sourceDraftChanged";
+      patch: Partial<
+        Pick<
+          AppState,
+          | "sourceDraftText"
+          | "sourceDraftSourceId"
+          | "sourceDraftScenario"
+          | "sourceDraftConfidence"
+        >
+      >;
+    }
+  | { type: "sourceDraftGenerated"; result: KGSourceDraftResponse }
   | { type: "loading"; value: boolean }
   | { type: "error"; error: string | null };
 
@@ -92,7 +111,13 @@ export const initialState: AppState = {
   kgDraftRelation: "",
   kgDraftEvidence: "",
   kgDraftConfidence: "",
-  kgDraftStatus: null
+  kgDraftStatus: null,
+  sourceDraftText:
+    "ScratchDefect,SUGGESTS_PLAUSIBLE_MECHANISM,MechanicalContact,mvtec,Scratch source wording supports a candidate contact mechanism.",
+  sourceDraftSourceId: "dashboard_source",
+  sourceDraftScenario: "mvtec",
+  sourceDraftConfidence: "0.55",
+  sourceDraftResult: null
 };
 
 export function reducer(state: AppState, action: AppAction): AppState {
@@ -166,6 +191,10 @@ export function reducer(state: AppState, action: AppAction): AppState {
         kgDraftConfidence: "",
         kgDraftRelation: ""
       };
+    case "sourceDraftChanged":
+      return { ...state, ...action.patch };
+    case "sourceDraftGenerated":
+      return { ...state, sourceDraftResult: action.result, error: null };
     case "loading":
       return { ...state, loading: action.value };
     case "error":

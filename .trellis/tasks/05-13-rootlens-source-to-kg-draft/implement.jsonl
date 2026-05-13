@@ -1,0 +1,12 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": "AGENTS.md", "reason": "KG generation boundaries"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "KG CSV required fields"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gates"}
+{"file": "src/kgtracevis/kg_construction/candidate_triple_extractor.py", "reason": "Candidate triple contract"}
+{"file": "src/kgtracevis/kg_construction/confidence_assigner.py", "reason": "Confidence rules"}
+{"file": "src/kgtracevis/service/api.py", "reason": "API route patterns"}
+{"file": "web/src/App.tsx", "reason": "KG Studio UI"}
+{"file": "web/src/types.ts", "reason": "Frontend types"}
+{"file": "web/src/api.ts", "reason": "API client"}
+{"file": "scripts/smoke_rootlens_dashboard.py", "reason": "Smoke test"}

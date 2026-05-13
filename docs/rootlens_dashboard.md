@@ -69,6 +69,9 @@ the baseline dashboard smoke.
   rows, local source documents, the selected candidate KG artifact directory,
   node/edge counts, validation summary, bounded graph preview, and edge review
   targets.
+- `POST /api/kg/source-draft` converts structured source lines into
+  schema-compatible candidate edge drafts. The default `heuristic` provider runs
+  without external LLM credentials and keeps all generated rows review-only.
 - `POST /api/feedback` appends review feedback records with `target_type`,
   `target_id`, `action`, optional note/reviewer/source metadata, and run/case
   context.
@@ -106,6 +109,23 @@ weaker relation, evidence wording, or confidence. Accepted feedback and draft
 records do not update candidate CSVs or tracked `data/kg/` files in this
 foundation version.
 
+The Source-to-KG Draft form accepts structured lines in this format:
+
+```text
+head,relation,tail,scenario,evidence
+```
+
+For example:
+
+```text
+ScratchDefect,SUGGESTS_PLAUSIBLE_MECHANISM,MechanicalContact,mvtec,Scratch wording supports a candidate contact mechanism.
+```
+
+The endpoint returns candidate edges with source, evidence, confidence, weight,
+and `review_status=auto`; it does not call a remote LLM or write KG CSV files in
+this foundation version. A future LLM provider can reuse the same response
+contract.
+
 ## Checks
 
 Backend:
@@ -134,7 +154,7 @@ the same API path used by the Vite client: bootstrap, producer-record upload,
 run history, run detail, path graph/review target linkage, and review feedback.
 It also exercises the KG Studio route and verifies candidate edge review targets
 plus append-only draft submission when local candidate KG artifacts are
-available.
+available. It always exercises source-to-KG draft generation.
 By default it stores run and feedback artifacts in a temporary directory; pass
 this if you want to inspect the generated manifest afterward:
 

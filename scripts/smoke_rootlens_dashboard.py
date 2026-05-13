@@ -139,6 +139,27 @@ def _run_smoke(
         _require(kg_draft.status_code == 200, f"KG draft submit failed: {kg_draft.text}")
         _require(kg_draft.json()["status"] == "recorded", "KG draft was not recorded")
         _require(draft_path.is_file(), "KG draft JSONL was not written")
+    source_draft = client.post(
+        "/api/kg/source-draft",
+        json={
+            "source_id": "smoke_source",
+            "source_text": (
+                "ScratchDefect,SUGGESTS_PLAUSIBLE_MECHANISM,"
+                "MechanicalContact,mvtec,smoke evidence"
+            ),
+            "provider": "heuristic",
+            "default_scenario": "mvtec",
+            "confidence": 0.55,
+        },
+    )
+    _require(
+        source_draft.status_code == 200,
+        f"source-to-KG draft failed: {source_draft.text}",
+    )
+    _require(
+        len(source_draft.json()["candidate_edges"]) == 1,
+        "source-to-KG draft returned no candidates",
+    )
 
     with example_path.open("rb") as handle:
         upload = client.post(

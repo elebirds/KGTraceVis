@@ -35,6 +35,7 @@ import type {
   KGStudioReviewTarget,
   KGStudioSource,
   KGStudioSourceDocument,
+  KGSourceDraftResponse,
   RunDetail,
   PathGraphEdge,
   PathGraphPath,
@@ -256,6 +257,29 @@ export function App() {
         type: "kgDraftRecorded",
         status: `${response.status} for ${selectedKGTarget.target_key}`
       });
+    } catch (error) {
+      dispatch({ type: "error", error: (error as Error).message });
+    } finally {
+      dispatch({ type: "loading", value: false });
+    }
+  }
+
+  async function generateSourceDraft() {
+    const confidence = Number(state.sourceDraftConfidence);
+    if (Number.isNaN(confidence)) {
+      dispatch({ type: "error", error: "Source draft confidence must be numeric." });
+      return;
+    }
+    dispatch({ type: "loading", value: true });
+    try {
+      const result = await api.generateKGSourceDraft({
+        source_id: state.sourceDraftSourceId || "dashboard_source",
+        source_text: state.sourceDraftText,
+        provider: "heuristic",
+        default_scenario: state.sourceDraftScenario || "shared",
+        confidence
+      });
+      dispatch({ type: "sourceDraftGenerated", result });
     } catch (error) {
       dispatch({ type: "error", error: (error as Error).message });
     } finally {
@@ -511,6 +535,11 @@ export function App() {
             draftEvidence={state.kgDraftEvidence}
             draftConfidence={state.kgDraftConfidence}
             draftStatus={state.kgDraftStatus}
+            sourceDraftText={state.sourceDraftText}
+            sourceDraftSourceId={state.sourceDraftSourceId}
+            sourceDraftScenario={state.sourceDraftScenario}
+            sourceDraftConfidence={state.sourceDraftConfidence}
+            sourceDraftResult={state.sourceDraftResult}
             onRefresh={() => void loadKGStudio()}
             onTargetSelected={(targetKey) =>
               dispatch({ type: "kgEdgeSelected", targetKey })
@@ -523,6 +552,10 @@ export function App() {
               dispatch({ type: "kgDraftChanged", patch })
             }
             onSubmitDraft={() => void submitKGDraft()}
+            onSourceDraftChanged={(patch) =>
+              dispatch({ type: "sourceDraftChanged", patch })
+            }
+            onGenerateSourceDraft={() => void generateSourceDraft()}
           />
         </section>
       </section>
@@ -541,12 +574,19 @@ function KGStudioPanel({
   draftEvidence,
   draftConfidence,
   draftStatus,
+  sourceDraftText,
+  sourceDraftSourceId,
+  sourceDraftScenario,
+  sourceDraftConfidence,
+  sourceDraftResult,
   onRefresh,
   onTargetSelected,
   onReviewNoteChanged,
   onSubmitReview,
   onDraftChanged,
-  onSubmitDraft
+  onSubmitDraft,
+  onSourceDraftChanged,
+  onGenerateSourceDraft
 }: {
   payload: KGStudioPayload | null;
   selectedTarget: KGStudioReviewTarget | undefined;
@@ -558,6 +598,11 @@ function KGStudioPanel({
   draftEvidence: string;
   draftConfidence: string;
   draftStatus: string | null;
+  sourceDraftText: string;
+  sourceDraftSourceId: string;
+  sourceDraftScenario: string;
+  sourceDraftConfidence: string;
+  sourceDraftResult: KGSourceDraftResponse | null;
   onRefresh: () => void;
   onTargetSelected: (targetKey: string) => void;
   onReviewNoteChanged: (note: string) => void;
@@ -571,6 +616,15 @@ function KGStudioPanel({
     }>
   ) => void;
   onSubmitDraft: () => void;
+  onSourceDraftChanged: (
+    patch: Partial<{
+      sourceDraftText: string;
+      sourceDraftSourceId: string;
+      sourceDraftScenario: string;
+      sourceDraftConfidence: string;
+    }>
+  ) => void;
+  onGenerateSourceDraft: () => void;
 }) {
   const selectedEdge = payload?.graph_edges.find(
     (edge) => edge.target_key === selectedTargetKey
@@ -603,6 +657,15 @@ function KGStudioPanel({
           <div className="kg-studio-grid">
             <section>
               <h3>Sources</h3>
+              <SourceToKGDraftForm
+                sourceText={sourceDraftText}
+                sourceId={sourceDraftSourceId}
+                scenario={sourceDraftScenario}
+                confidence={sourceDraftConfidence}
+                result={sourceDraftResult}
+                onChanged={onSourceDraftChanged}
+                onGenerate={onGenerateSourceDraft}
+              />
               <KGSourceList sources={payload.sources} />
               <h3>Documents</h3>
               <KGSourceDocumentList documents={payload.source_documents} />
@@ -708,6 +771,68 @@ function KGSourceList({ sources }: { sources: KGStudioSource[] }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function SourceToKGDraftForm({
+  sourceText,
+  sourceId,
+  scenario,
+  confidence,
+  result,
+  onChanged,
+  onGenerate
+}: {
+  sourceText: string;
+  sourceId: string;
+  scenario: string;
+  confidence: string;
+  result: KGSourceDraftResponse | null;
+  onChanged: (
+    patch: Partial<{
+      sourceDraftText: string;
+      sourceDraftSourceId: string;
+      sourceDraftScenario: string;
+      sourceDraftConfidence: string;
+    }>
+  ) => void;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="source-draft-box">
+      <strong>Source-to-KG Draft</strong>
+      <div className="source-draft-fields">
+        <input
+          value={sourceId}
+          onChange={(event) => onChanged({ sourceDraftSourceId: event.target.value })}
+          placeholder="source id"
+        />
+        <input
+          value={scenario}
+          onChange={(event) => onChanged({ sourceDraftScenario: event.target.value })}
+          placeholder="scenario"
+        />
+        <input
+          value={confidence}
+          onChange={(event) => onChanged({ sourceDraftConfidence: event.target.value })}
+          placeholder="confidence"
+        />
+      </div>
+      <textarea
+        value={sourceText}
+        onChange={(event) => onChanged({ sourceDraftText: event.target.value })}
+        placeholder="head,relation,tail,scenario,evidence"
+      />
+      <button onClick={onGenerate}>Generate candidates</button>
+      {result && (
+        <div className="source-draft-results">
+          <span>{result.candidate_edges.length} candidate edge(s)</span>
+          {result.candidate_edges.slice(0, 4).map((edge) => (
+            <code key={edge.edge_id}>{edge.edge_id}</code>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

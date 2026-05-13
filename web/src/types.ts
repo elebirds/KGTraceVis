@@ -232,3 +232,32 @@ export interface KGDraftRequest {
   source: string;
   metadata?: Record<string, unknown>;
 }
+
+export interface KGSourceDraftRequest {
+  source_id: string;
+  source_text: string;
+  provider: "heuristic";
+  default_scenario: string;
+  confidence: number;
+}
+
+export interface KGSourceDraftEdge {
+  edge_id: string;
+  head: string;
+  relation: string;
+  tail: string;
+  scenario: string;
+  source: string;
+  evidence: string;
+  confidence: number;
+  weight: number;
+  review_status: string;
+}
+
+export interface KGSourceDraftResponse {
+  provider: "heuristic";
+  source_id: string;
+  claim_boundary: string;
+  candidate_edges: KGSourceDraftEdge[];
+  note: string;
+}
