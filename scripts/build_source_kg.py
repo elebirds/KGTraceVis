@@ -7,11 +7,11 @@ import json
 from pathlib import Path
 
 from kgtracevis.kg_construction import (
-    ExtractorRegistry,
     KGConstructionSource,
-    TepSemanticLiftExtractor,
-    TepVariableMappingExtractor,
-    run_kg_construction,
+)
+from kgtracevis.workflows.source_kg_construction import (
+    SourceKGConstructionWorkflowConfig,
+    run_source_kg_construction_workflow,
 )
 
 
@@ -61,36 +61,17 @@ def main() -> None:
             "--tep-semantic-nodes/--tep-semantic-edges, or --tep-variable-mapping."
         )
 
-    output_dir = Path(args.output_dir)
-    _ensure_output_dir(output_dir, overwrite=bool(args.overwrite))
-    registry = ExtractorRegistry([TepSemanticLiftExtractor(), TepVariableMappingExtractor()])
-    result = run_kg_construction(sources, registry=registry)
-    nodes_path, edges_path = result.export_csv(output_dir)
-    summary_path = output_dir / "kg_construction_summary.json"
-    manifest_path = output_dir / "kg_construction_manifest.json"
-    summary = {
-        **result.summary,
-        "output": {
-            "nodes": str(nodes_path),
-            "edges": str(edges_path),
-            "summary": str(summary_path),
-            "manifest": str(manifest_path),
-        },
-    }
-    summary_path.write_text(
-        json.dumps(summary, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    result.write_manifest(
-        manifest_path,
-        artifact_paths={
-            "nodes": nodes_path,
-            "edges": edges_path,
-            "summary": summary_path,
-            "manifest": manifest_path,
-        },
-    )
-    print(json.dumps(summary, indent=2, sort_keys=True))
+    try:
+        result = run_source_kg_construction_workflow(
+            SourceKGConstructionWorkflowConfig(
+                output_dir=Path(args.output_dir),
+                sources=tuple(sources),
+                overwrite=bool(args.overwrite),
+            )
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(result.summary, indent=2, sort_keys=True))
 
 
 def _build_sources(args: argparse.Namespace) -> list[KGConstructionSource]:
@@ -130,20 +111,6 @@ def _build_sources(args: argparse.Namespace) -> list[KGConstructionSource]:
             )
         )
     return sources
-
-
-def _ensure_output_dir(output_dir: Path, *, overwrite: bool) -> None:
-    outputs = [
-        output_dir / "nodes.csv",
-        output_dir / "edges.csv",
-        output_dir / "kg_construction_summary.json",
-        output_dir / "kg_construction_manifest.json",
-    ]
-    existing = [path for path in outputs if path.exists()]
-    if existing and not overwrite:
-        paths = ", ".join(str(path) for path in existing)
-        raise SystemExit(f"Output files already exist; pass --overwrite to replace: {paths}")
-    output_dir.mkdir(parents=True, exist_ok=True)
 
 
 if __name__ == "__main__":

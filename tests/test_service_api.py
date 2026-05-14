@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from kgtracevis.producers.backends import AMAZON_PATCHCORE_BACKEND, ANOMALIB_ENGINE_BACKEND
 from kgtracevis.service import api as service_api
 from kgtracevis.service import dashboard as service_dashboard
+from kgtracevis.service import kg_construction as service_kg_construction
 from kgtracevis.service import runs as service_runs
 from kgtracevis.service.api import app
 from kgtracevis.service.handlers import (
@@ -196,6 +197,69 @@ def test_upload_run_validates_missing_tep_artifact_provider_path(
             top_k=2,
             tep_rca_provider="artifact",
         )
+
+
+def test_kg_construction_build_route_writes_runtime_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The API should trigger a narrow source-to-KG build and return artifact paths."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "unit_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_api_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "built"
+    assert payload["run_id"] == "kgbuild_api_unit"
+    assert payload["summary"]["node_count"] == 2
+    assert payload["summary"]["edge_count"] == 1
+    assert Path(payload["nodes_path"]).is_file()
+    assert Path(payload["edges_path"]).is_file()
+    assert Path(payload["summary_path"]).is_file()
+    assert Path(payload["manifest_path"]).is_file()
+
+
+def test_kg_construction_build_route_rejects_missing_tep_paths() -> None:
+    """TEP runtime construction inputs should require explicit local artifacts."""
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "sources": [
+                {
+                    "source_id": "tep_semantic_unit",
+                    "source_type": "tep_semantic_lift",
+                    "scenario": "tep",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+    assert "tep_semantic_lift requires path" in response.text
 
 
 def test_upload_run_prepares_visual_evidence_artifacts(
@@ -791,3 +855,15 @@ def test_fastapi_routes_are_wired() -> None:
     assert case.json()["case"]["case_id"] == "mvtec_0001"
     assert analysis.status_code == 200
     assert analysis.json()["analysis"]["case_id"] == "mvtec_0001"
+
+
+def _manual_source_csv() -> str:
+    return "\n".join(
+        [
+            "id,name,label,head,relation,tail,scenario,evidence,confidence",
+            "ApiManualSource,API manual source,Variable,,,,tep,manual source row,0.71",
+            "ApiManualTarget,API manual target,ProcessUnit,,,,tep,manual target row,0.71",
+            ",,,ApiManualSource,BELONGS_TO,ApiManualTarget,tep,explicit API row,0.71",
+            "",
+        ]
+    )

@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development checklist and quality gate for service/workflow changes."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Confirms reusable workflow logic belongs under src/kgtracevis and scripts/services are clients."}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Defines workflow/use-case layer contracts and script/service boundaries."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Defines KG construction, overlay, manifest, Neo4j, Postgres, and review decision contracts."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required verification commands and traceability constraints."}
+{"file": "docs/source_to_kg_construction_system.md", "reason": "Methodology and lifecycle for source-to-KG construction runtime workflow."}
+{"file": "docs/kg_construction.md", "reason": "User-facing KG construction commands and artifact expectations."}

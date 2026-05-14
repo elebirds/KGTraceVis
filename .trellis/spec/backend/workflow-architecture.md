@@ -62,6 +62,10 @@ def run_noise_experiment(
 def run_real_model_pipeline(
     config: RealModelPipelineConfig,
 ) -> RealModelPipelineResult: ...
+
+def run_source_kg_construction_workflow(
+    config: SourceKGConstructionWorkflowConfig,
+) -> SourceKGConstructionWorkflowResult: ...
 ```
 
 CLI modules may re-export moved helper functions briefly for backward
@@ -141,6 +145,9 @@ Rules:
 | API receives expected workflow `ValueError` | map to a structured 4xx response |
 | Runtime KG provider is unavailable for an analysis path | fail with configuration guidance unless an explicit test graph was supplied |
 | A workflow needs KG construction output | accept explicit paths/provider/version; do not run hidden extraction by default |
+| Source-to-KG workflow receives no sources | raise `ValueError` before writing artifacts |
+| Source-to-KG workflow output files already exist | raise `ValueError` unless overwrite is explicit |
+| Source-to-KG API receives unsupported source shape | reject with a structured 4xx response |
 | Root-cause provider accepts `graph` | pass the runtime `KnowledgeGraph` snapshot |
 | Root-cause provider lacks `graph` parameter | call it with the legacy provider signature |
 | Native TEP provider sees non-TEP edges in a mixed graph | ignore them for TEP support-path ranking |
@@ -176,6 +183,20 @@ Bad:
 analysis = analyze_and_rebuild_kg(request.evidence)
 ```
 
+Good:
+
+```python
+config = SourceKGConstructionWorkflowConfig(...)
+result = run_source_kg_construction_workflow(config)
+```
+
+Bad:
+
+```python
+# FastAPI route writes KG construction CSVs directly.
+export_kg_csv(nodes, edges, nodes_path=..., edges_path=...)
+```
+
 ### 7. Tests Required
 
 For each extraction:
@@ -199,5 +220,17 @@ uv run --extra dev pytest tests/test_record_producers.py \
   tests/test_noise_experiment_workflow.py \
   tests/test_real_model_pipeline_workflow.py
 uv run --extra dev ruff check src/kgtracevis/workflows scripts
+uv run --extra dev mypy src tests scripts
+```
+
+For source-to-KG construction workflow changes:
+
+```bash
+uv run --extra dev pytest tests/test_source_kg_construction_workflow.py \
+  tests/test_kg_construction_pipeline.py \
+  tests/test_kg_studio.py \
+  tests/test_service_api.py
+uv run --extra dev ruff check src/kgtracevis/workflows/source_kg_construction.py \
+  src/kgtracevis/service/kg_construction.py scripts/build_source_kg.py
 uv run --extra dev mypy src tests scripts
 ```

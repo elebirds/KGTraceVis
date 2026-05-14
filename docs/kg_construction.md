@@ -90,6 +90,20 @@ counts, and artifact paths. KG Studio can inspect both legacy candidate
 directories (`nodes_candidate.csv` / `edges_candidate.csv`) and these newer
 source-to-KG build directories (`nodes.csv` / `edges.csv` plus the manifest).
 
+The reusable runtime workflow lives in
+`kgtracevis.workflows.source_kg_construction`. It is also exposed through the
+local API:
+
+```http
+POST /api/kg/construction/build
+```
+
+The API intentionally accepts only explicit structured/manual source records or
+explicit TEP semantic-lift / variable-mapping artifact paths. It writes the same
+candidate `nodes.csv`, `edges.csv`, `kg_construction_summary.json`, and
+`kg_construction_manifest.json` files under `runs/source_kg_build/<output_name>`.
+It does not call live LLM extractors, parse source code, or publish to Neo4j.
+
 For TEP-specific graph construction, the external `TEP_KG` implementation should
 be merged through extractor/import adapters rather than copied directly. See
 [`tep_kg_merge_assessment.md`](tep_kg_merge_assessment.md) for the recommended

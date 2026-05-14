@@ -21,6 +21,10 @@ from kgtracevis.service.handlers import (
     record_feedback,
     what_if_request,
 )
+from kgtracevis.service.kg_construction import (
+    KGConstructionBuildRequest,
+    run_kg_construction_build,
+)
 from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
 from kgtracevis.service.kg_source_drafts import (
     KGSourceDraftRequest,
@@ -136,6 +140,13 @@ def create_app() -> FastAPI:
     @app.post("/api/kg/source-draft")
     def kg_source_draft(request: KGSourceDraftRequest) -> dict[str, object]:
         return generate_source_kg_draft(request).model_dump(mode="json")
+
+    @app.post("/api/kg/construction/build")
+    def kg_construction_build(request: KGConstructionBuildRequest) -> dict[str, object]:
+        try:
+            return run_kg_construction_build(request).model_dump(mode="json")
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/runs/upload")
     async def upload_run(

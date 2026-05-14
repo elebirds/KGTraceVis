@@ -215,6 +215,95 @@ def test_kg_studio_payload_reads_source_kg_build_artifacts(tmp_path: Path) -> No
     )
 
 
+def test_kg_studio_payload_discovers_runtime_source_kg_child_build(
+    tmp_path: Path,
+) -> None:
+    """KG Studio should find workflow build directories under a configured root."""
+    build_root = tmp_path / "source_kg_build"
+    candidate_dir = build_root / "unit_runtime"
+    candidate_dir.mkdir(parents=True)
+    _write_csv(
+        candidate_dir / "nodes.csv",
+        ["id", "name", "label", "scenario", "aliases", "description"],
+        [
+            {
+                "id": "ManualSource",
+                "name": "Manual source",
+                "label": "Variable",
+                "scenario": "tep",
+                "aliases": "",
+                "description": "manual runtime node",
+            },
+            {
+                "id": "ManualTarget",
+                "name": "Manual target",
+                "label": "ProcessUnit",
+                "scenario": "tep",
+                "aliases": "",
+                "description": "manual runtime node",
+            },
+        ],
+    )
+    _write_csv(
+        candidate_dir / "edges.csv",
+        [
+            "head",
+            "relation",
+            "tail",
+            "scenario",
+            "source",
+            "evidence",
+            "confidence",
+            "weight",
+            "review_status",
+            "feedback_count",
+            "accepted_count",
+            "rejected_count",
+        ],
+        [
+            {
+                "head": "ManualSource",
+                "relation": "BELONGS_TO",
+                "tail": "ManualTarget",
+                "scenario": "tep",
+                "source": "manual_unit",
+                "evidence": "explicit source row",
+                "confidence": "0.71",
+                "weight": "0.29",
+                "review_status": "auto",
+                "feedback_count": "0",
+                "accepted_count": "0",
+                "rejected_count": "0",
+            }
+        ],
+    )
+    (candidate_dir / "kg_construction_manifest.json").write_text(
+        json.dumps(
+            {
+                "artifact_type": "source_to_kg_construction_manifest_v1",
+                "run": {"run_id": "kgbuild_runtime_child"},
+                "summary": {"node_count": 2, "edge_count": 1},
+                "sources": [],
+                "artifacts": {},
+                "draft_rows": [],
+                "review_decisions": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload = kg_studio_payload(
+        candidate_dirs=(build_root,),
+        source_registry_path=tmp_path / "missing_sources.csv",
+        source_docs_dir=tmp_path / "missing_docs",
+    )
+
+    assert payload.status == "ok"
+    assert payload.candidate_dir and payload.candidate_dir.endswith("unit_runtime")
+    assert payload.construction_manifest is not None
+    assert payload.construction_manifest["run"]["run_id"] == "kgbuild_runtime_child"
+
+
 def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)

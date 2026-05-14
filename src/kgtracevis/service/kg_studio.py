@@ -18,6 +18,8 @@ DEFAULT_SOURCE_DOCS_DIR = Path("docs/sources")
 DEFAULT_CANDIDATE_KG_DIRS = (
     Path("runs/paper_case_kg"),
     Path("runs/end_to_end_interpretability_audit/candidate_kg"),
+    Path("runs/source_kg_build/runtime"),
+    Path("runs/source_kg_build"),
 )
 GRAPH_PREVIEW_EDGE_LIMIT = 80
 
@@ -190,25 +192,55 @@ def kg_studio_payload(
 
 def _first_candidate_artifacts(candidate_dirs: tuple[Path, ...]) -> _CandidateArtifacts | None:
     for candidate_dir in candidate_dirs:
-        if (
-            (candidate_dir / "nodes_candidate.csv").is_file()
-            and (candidate_dir / "edges_candidate.csv").is_file()
-        ):
-            return _CandidateArtifacts(
-                candidate_dir=candidate_dir,
-                nodes_path=candidate_dir / "nodes_candidate.csv",
-                edges_path=candidate_dir / "edges_candidate.csv",
-                summary_path=candidate_dir / "validation_report.json",
-                manifest_path=None,
-            )
-        if (candidate_dir / "nodes.csv").is_file() and (candidate_dir / "edges.csv").is_file():
-            return _CandidateArtifacts(
-                candidate_dir=candidate_dir,
-                nodes_path=candidate_dir / "nodes.csv",
-                edges_path=candidate_dir / "edges.csv",
-                summary_path=candidate_dir / "kg_construction_summary.json",
-                manifest_path=candidate_dir / "kg_construction_manifest.json",
-            )
+        for artifact_dir in _candidate_artifact_dirs(candidate_dir):
+            if candidate := _candidate_artifacts_from_dir(artifact_dir):
+                return candidate
+    return None
+
+
+def _candidate_artifact_dirs(candidate_dir: Path) -> list[Path]:
+    if not candidate_dir.is_dir():
+        return [candidate_dir]
+    children = [
+        child
+        for child in candidate_dir.iterdir()
+        if child.is_dir()
+        and (
+            (child / "nodes_candidate.csv").is_file()
+            or (child / "nodes.csv").is_file()
+        )
+    ]
+    children.sort(key=_candidate_dir_mtime, reverse=True)
+    return [candidate_dir, *children]
+
+
+def _candidate_dir_mtime(path: Path) -> float:
+    manifest_path = path / "kg_construction_manifest.json"
+    if manifest_path.is_file():
+        return manifest_path.stat().st_mtime
+    return path.stat().st_mtime
+
+
+def _candidate_artifacts_from_dir(candidate_dir: Path) -> _CandidateArtifacts | None:
+    if (
+        (candidate_dir / "nodes_candidate.csv").is_file()
+        and (candidate_dir / "edges_candidate.csv").is_file()
+    ):
+        return _CandidateArtifacts(
+            candidate_dir=candidate_dir,
+            nodes_path=candidate_dir / "nodes_candidate.csv",
+            edges_path=candidate_dir / "edges_candidate.csv",
+            summary_path=candidate_dir / "validation_report.json",
+            manifest_path=None,
+        )
+    if (candidate_dir / "nodes.csv").is_file() and (candidate_dir / "edges.csv").is_file():
+        return _CandidateArtifacts(
+            candidate_dir=candidate_dir,
+            nodes_path=candidate_dir / "nodes.csv",
+            edges_path=candidate_dir / "edges.csv",
+            summary_path=candidate_dir / "kg_construction_summary.json",
+            manifest_path=candidate_dir / "kg_construction_manifest.json",
+        )
     return None
 
 
