@@ -134,6 +134,52 @@ Rules:
 - TEP-native support path search must stay scoped to `tep` and `shared` nodes
   and edges.
 
+#### TEP Root-KGD Runtime Contract
+
+TEP native RCA means the Root-KGD runtime provider, not an artifact bridge and
+not the legacy direct-support fallback.
+
+Signatures and entry points:
+
+```python
+def build_root_cause_reasoner(
+    config: RootCauseProviderSelectionConfig | None = None,
+) -> RcaReasoner | None: ...
+
+def run_tep_rca_evaluation(
+    config: TepRcaEvaluationConfig,
+) -> TepRcaEvaluationOutput: ...
+```
+
+Runtime contracts:
+
+- `tep_rca_provider="native"` builds `TepRootKgdRcaProvider`.
+- `run_adapter_pipeline(..., dataset="tep")` defaults to native Root-KGD unless
+  a caller supplies an explicit pipeline.
+- `TepRootKgdRcaProvider` loads static model assets from
+  `data/kg/tep_root_kgd/`.
+- Runtime scoring reads the current `Evidence` payload:
+  `raw_evidence.variable_contributions`, `raw_evidence.extra.graph_contributions`,
+  `raw_evidence.extra.channel_contributions`, and
+  `raw_evidence.extra.root_kgd_dynamic_features`.
+- Runtime scoring must not read TEP_KG per-scenario ranking outputs such as
+  `baseline_root_scores.csv`, `topk_subgraphs`, `root_kgd_rankings.jsonl`, or
+  `rbc_contributions.jsonl`.
+- Fault numbers may appear in evaluation summaries as benchmark references,
+  but must not be used as scoring inputs.
+- `ranked_root_causes[*].explanation_paths` must be a subset of returned
+  `top_k_paths`, so visual review and feedback IDs stay aligned.
+
+Validation:
+
+| Condition | Behavior |
+|---|---|
+| TEP Evidence has no Root-KGD contributions | return empty RCA result, not artifact fallback |
+| public CLI/API asks for artifact provider | reject or omit that option; artifact bridge is not public runtime |
+| Root-KGD asset file is missing | fail fast with the missing file name |
+| non-TEP Evidence reaches Root-KGD provider | return empty RCA result |
+| explanation path is not returned in `top_k_paths` | test failure; candidate paths must be reviewable |
+
 ### 5. Validation & Error Matrix
 
 | Condition | Behavior |
