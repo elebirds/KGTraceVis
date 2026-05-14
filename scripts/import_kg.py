@@ -30,6 +30,14 @@ def parse_args() -> argparse.Namespace:
         dest="edge_paths",
         help="Edge CSV path. Repeat to import multiple edge layers.",
     )
+    parser.add_argument(
+        "--include-defaults",
+        action="store_true",
+        help=(
+            "When custom --nodes/--edges are provided, append them to the "
+            "project default KG layers instead of replacing the defaults."
+        ),
+    )
     parser.add_argument("--config", default="configs/neo4j.example.yaml")
     parser.add_argument("--uri")
     parser.add_argument("--user")
@@ -43,17 +51,35 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_graph(node_paths: list[str] | None, edge_paths: list[str] | None) -> KnowledgeGraph:
+def load_graph(
+    node_paths: list[str] | None,
+    edge_paths: list[str] | None,
+    *,
+    include_defaults: bool = False,
+) -> KnowledgeGraph:
     """Load validated KG rows from requested paths or project defaults."""
-    nodes = [Path(path) for path in node_paths] if node_paths else list(DEFAULT_NODE_PATHS)
-    edges = [Path(path) for path in edge_paths] if edge_paths else list(DEFAULT_EDGE_PATHS)
+    custom_nodes = [Path(path) for path in node_paths or []]
+    custom_edges = [Path(path) for path in edge_paths or []]
+    has_custom_paths = bool(custom_nodes or custom_edges)
+    if include_defaults or not has_custom_paths:
+        nodes = [*DEFAULT_NODE_PATHS, *custom_nodes]
+    else:
+        nodes = custom_nodes
+    if include_defaults or not has_custom_paths:
+        edges = [*DEFAULT_EDGE_PATHS, *custom_edges]
+    else:
+        edges = custom_edges
     return KnowledgeGraph.from_paths(nodes, edges, skip_missing=True)
 
 
 def main() -> None:
     """Import the configured KG into Neo4j, or perform a dry run."""
     args = parse_args()
-    graph = load_graph(args.node_paths, args.edge_paths)
+    graph = load_graph(
+        args.node_paths,
+        args.edge_paths,
+        include_defaults=args.include_defaults,
+    )
 
     if args.dry_run:
         summary = dry_run_import(graph)

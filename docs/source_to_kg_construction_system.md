@@ -121,6 +121,19 @@ TEP code-file extraction is intentionally deferred until RootLens merge work,
 but the methodology reserves it as a first-class source type. This is why the
 extractor layer must be pluggable rather than LLM-only.
 
+The external `/Users/hhm/code/TEP_KG` project has a more mature TEP-specific
+graph builder with a three-layer design:
+
+```text
+Full KG
+-> Semantic Lift Layer
+-> RCA Graph
+```
+
+KGTraceVis should absorb this as a scenario-specific implementation pattern,
+not as a replacement global schema. The detailed merge assessment is recorded
+in [`tep_kg_merge_assessment.md`](tep_kg_merge_assessment.md).
+
 ## Extraction Layer
 
 Extractors convert sources into candidate knowledge. They do not publish KG
@@ -198,6 +211,60 @@ published   written to the runtime KG
 
 This draft layer is the main decoupling point between source extraction,
 front-end review, CSV snapshots, and Neo4j publication.
+
+The backend MVP for this IR lives under `src/kgtracevis/kg_construction/`:
+
+```text
+draft.py       DraftEntity, DraftRelation, DraftKG, KGConstructionSource
+extractors.py  KGSourceExtractor protocol and extractor registry
+models.py      construction run, draft-row, review-decision, summary, manifest DTOs
+pipeline.py    source-to-draft-to-KG construction runner
+tep_import.py  TEP semantic-lift and variable-mapping import extractors
+```
+
+These modules intentionally stop before frontend review and database
+persistence. They provide the reusable construction core those later layers
+should call.
+
+The CLI entry point is:
+
+```bash
+uv run python scripts/build_source_kg.py
+```
+
+It currently supports TEP_KG semantic-lift and variable-mapping inputs and writes
+candidate `nodes.csv`, `edges.csv`, `kg_construction_summary.json`, and
+`kg_construction_manifest.json` artifacts.
+
+The manifest is the bridge between scripts, review UI, and future persistence.
+It records the construction run, sources, flattened draft rows, reviewable KG
+payloads, summary counts, and artifact paths. Review actions from KG Studio are
+represented as append-only construction review decisions; they do not mutate KG
+CSV files directly.
+
+The candidate artifacts are designed to enter the reasoning and publication
+path as an overlay first:
+
+```bash
+uv run python scripts/run_examples.py \
+  --kg-node-path runs/source_kg_build/tep_candidate/nodes.csv \
+  --kg-edge-path runs/source_kg_build/tep_candidate/edges.csv
+
+uv run python scripts/import_kg.py \
+  --include-defaults \
+  --nodes runs/source_kg_build/tep_candidate/nodes.csv \
+  --edges runs/source_kg_build/tep_candidate/edges.csv \
+  --dry-run
+```
+
+This keeps review and publication reversible: a candidate layer can be tested
+against `KGTracePipeline`, validated against the Neo4j import contract, and only
+then promoted into the runtime KG.
+
+KG Studio should read source-to-KG build directories directly when they contain
+`nodes.csv`, `edges.csv`, and `kg_construction_manifest.json`. Legacy candidate
+directories with `nodes_candidate.csv` and `edges_candidate.csv` remain
+supported for older hardening/audit outputs.
 
 ## Construction Lifecycle
 
@@ -385,6 +452,16 @@ published Neo4j KG
   -> record kg_build_id and source/extractor versions
 ```
 
+During construction, candidate snapshots should first be appended to the seed KG
+as an overlay and dry-run through the importer. In the current scripts this is:
+
+```bash
+uv run python scripts/import_kg.py --include-defaults --nodes <candidate_nodes.csv> --edges <candidate_edges.csv> --dry-run
+```
+
+If the dry run passes and the review policy allows publication, the same overlay
+paths can be passed without `--dry-run` to write the merged graph into Neo4j.
+
 ## KG Versioning
 
 Every published KG build should record:
@@ -506,3 +583,5 @@ Deferred:
 
 8. **RootLens/TEP extensions**
    Add AST/code extraction and RootLens-specific source types after merge work.
+   The TEP merge starts with channel mapping and semantic-lift import extractors
+   before any Root-KGD ranking logic is merged.

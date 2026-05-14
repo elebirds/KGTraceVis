@@ -155,6 +155,90 @@ rule source unless the private source explicitly mentions `Loc`.
 Tests for private-source KG extensions should assert both the positive edge and
 the absence of leakage onto nearby/shared classes.
 
+## Scenario: Candidate KG Overlay Validation
+
+### 1. Scope / Trigger
+
+Use this when a source-to-KG construction run produces candidate `nodes.csv` and
+`edges.csv` artifacts that should be tested with the reasoning pipeline or
+prepared for Neo4j publication.
+
+### 2. Signatures
+
+- Build candidate CSVs: `uv run python scripts/build_source_kg.py ...`
+- Run examples with candidate overlay:
+  `uv run python scripts/run_examples.py --kg-node-path <nodes.csv> --kg-edge-path <edges.csv>`
+- Validate import overlay:
+  `uv run python scripts/import_kg.py --include-defaults --nodes <nodes.csv> --edges <edges.csv> --dry-run`
+- Construction manifest:
+  `kg_construction_manifest.json` with `artifact_type=source_to_kg_construction_manifest_v1`
+
+### 3. Contracts
+
+- Candidate CSVs must obey the existing KG node and edge contracts.
+- Source-to-KG builds write `nodes.csv`, `edges.csv`,
+  `kg_construction_summary.json`, and `kg_construction_manifest.json`.
+- The construction manifest must include run metadata, source payloads,
+  flattened draft rows, summary counts, artifact paths, and append-only review
+  decisions when available.
+- Candidate layers are appended after `DEFAULT_NODE_PATHS` and
+  `DEFAULT_EDGE_PATHS` when `--include-defaults` or example overlay flags are
+  used.
+- `run_examples.py` reports `kg_backend=explicit_seed_overlay` when explicit KG
+  CSV paths are supplied.
+- TEP semantic-lift `full_kg_entity_ids` are entity-resolution cluster members,
+  not KGTraceVis node aliases. Do not import them into `aliases` unless the
+  alias-review and endpoint-rewrite logic explicitly supports that behavior.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|---|---|
+| Candidate edge head/tail missing from constructed nodes | construction runner raises `ValueError` before CSV export |
+| Candidate overlay conflicts with a reviewed default edge | graph merge raises unless overwrite is explicitly allowed |
+| Custom import paths without `--include-defaults` | import only those custom paths |
+| Custom import paths with `--include-defaults` | append custom paths to default KG layers |
+| KG Studio sees `nodes.csv` / `edges.csv` with a manifest | expose manifest path and payload in the Studio bootstrap response |
+| KG Studio review action is submitted | persist an append-only review decision; do not mutate KG CSV files |
+| TEP cluster member imported as alias and collapses an `ALIGNS_TO` node | treat as a construction bug; keep cluster members in metadata/evidence instead |
+
+### 5. Good/Base/Bad Cases
+
+- Good: build a TEP candidate layer, run examples with the overlay, then dry-run
+  import with `--include-defaults`.
+- Base: `scripts/import_kg.py --dry-run` validates the tracked seed KG only.
+- Bad: publish candidate CSVs to Neo4j before confirming all edge endpoints
+  exist in the merged graph.
+
+### 6. Tests Required
+
+- Construction tests assert candidate edge endpoints exist after node cleaning.
+- TEP importer tests assert `full_kg_entity_ids` do not collapse explicit
+  `ALIGNS_TO` alias nodes.
+- CLI tests assert `import_kg.py --include-defaults` increases row counts over
+  overlay-only import.
+- CLI tests assert `run_examples.py --kg-node-path ... --kg-edge-path ...`
+  reports `explicit_seed_overlay`.
+- Manifest tests assert source-to-KG builds write
+  `kg_construction_manifest.json` with draft rows and artifact paths.
+- KG Studio tests assert both legacy candidate CSV names and source-to-KG build
+  artifact names are readable.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```text
+semantic_lift.full_kg_entity_ids -> KGNode.aliases
+```
+
+Correct:
+
+```text
+semantic_lift.node_id/entity_id/tep_channel -> KGNode.aliases
+semantic_lift.full_kg_entity_ids -> draft metadata or evidence only
+```
+
 ## Scenario: Neo4j + Postgres Runtime Foundation
 
 ### 1. Scope / Trigger

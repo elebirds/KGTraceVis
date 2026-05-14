@@ -10,6 +10,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from kgtracevis.kg_construction.models import (
+    KGConstructionReviewAction,
+    KGConstructionReviewDecision,
+    review_decision_for_edge,
+)
+
 DEFAULT_KG_DRAFT_PATH = Path("runs/kg_studio_drafts/drafts.jsonl")
 KGDraftAction = Literal["keep", "revise", "reject", "promote_later"]
 
@@ -50,6 +56,7 @@ class KGDraftRecord(BaseModel):
     reviewer: str | None
     source: str
     metadata: dict[str, Any]
+    review_decision: KGConstructionReviewDecision
 
 
 def record_kg_draft(
@@ -61,6 +68,16 @@ def record_kg_draft(
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     target_key = request.target_key or f"{request.target_type}:{request.target_id}"
+    review_decision = review_decision_for_edge(
+        target_id=request.target_id,
+        target_key=target_key,
+        action=_review_action(request.draft_action),
+        reviewer=request.reviewer,
+        note=request.note,
+        source=request.source,
+        proposed_payload=_proposed_payload(request),
+        metadata=request.metadata,
+    )
     record = KGDraftRecord(
         draft_id=f"kgdraft_{uuid.uuid4().hex[:12]}",
         created_at=datetime.now(timezone.utc).isoformat(),
@@ -75,8 +92,29 @@ def record_kg_draft(
         reviewer=request.reviewer,
         source=request.source,
         metadata=request.metadata,
+        review_decision=review_decision,
     )
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record.model_dump(mode="json"), ensure_ascii=False) + "\n")
     return {"status": "recorded", "record": record.model_dump(mode="json")}
 
+
+def _review_action(action: KGDraftAction) -> KGConstructionReviewAction:
+    actions: dict[KGDraftAction, KGConstructionReviewAction] = {
+        "keep": "keep",
+        "revise": "revise",
+        "reject": "reject",
+        "promote_later": "promote_later",
+    }
+    return actions[action]
+
+
+def _proposed_payload(request: KGDraftRequest) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if request.proposed_relation is not None:
+        payload["relation"] = request.proposed_relation
+    if request.proposed_evidence is not None:
+        payload["evidence"] = request.proposed_evidence
+    if request.proposed_confidence is not None:
+        payload["confidence"] = request.proposed_confidence
+    return payload

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -116,6 +118,33 @@ def test_dry_run_import_does_not_need_driver() -> None:
     assert summary.node_count == 2
     assert summary.edge_count == 1
     assert summary.dry_run is True
+
+
+def test_import_script_load_graph_can_append_to_default_layers(tmp_path: Path) -> None:
+    """The import CLI helper should support candidate KG overlays."""
+    nodes_path, edges_path = _write_overlay_csv(tmp_path)
+
+    overlay_only = _run_import_dry_run(nodes_path, edges_path)
+    with_defaults = _run_import_dry_run(nodes_path, edges_path, include_defaults=True)
+
+    assert _int_payload_value(overlay_only, "node_count") == 2
+    assert _int_payload_value(overlay_only, "edge_count") == 1
+    assert _int_payload_value(with_defaults, "node_count") > _int_payload_value(
+        overlay_only, "node_count"
+    )
+    assert _int_payload_value(with_defaults, "edge_count") > _int_payload_value(
+        overlay_only, "edge_count"
+    )
+
+
+def test_import_script_custom_paths_without_defaults_are_custom_only(tmp_path: Path) -> None:
+    """Partial custom imports should not pull default layers unless requested."""
+    nodes_path, _edges_path = _write_overlay_csv(tmp_path)
+
+    payload = _run_import_dry_run(nodes_path=nodes_path, edges_path=None)
+
+    assert _int_payload_value(payload, "node_count") == 2
+    assert _int_payload_value(payload, "edge_count") == 0
 
 
 def test_import_knowledge_graph_runs_node_and_edge_cypher() -> None:
@@ -321,3 +350,58 @@ def _node(
         aliases=aliases,
         description="test node",
     )
+
+
+def _write_overlay_csv(tmp_path: Path) -> tuple[Path, Path]:
+    nodes_path = tmp_path / "overlay_nodes.csv"
+    edges_path = tmp_path / "overlay_edges.csv"
+    nodes_path.write_text(
+        "\n".join(
+            [
+                "id,name,label,scenario,aliases,description",
+                "OverlaySensor,Overlay Sensor,Variable,tep,overlay_sensor,test sensor",
+                "OverlayUnit,Overlay Unit,Equipment,tep,overlay_unit,test equipment",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    edges_path.write_text(
+        "\n".join(
+            [
+                "head,relation,tail,scenario,source,evidence,confidence,weight,"
+                "review_status,feedback_count,accepted_count,rejected_count",
+                "OverlaySensor,OBSERVED_BY,OverlayUnit,tep,test_source,"
+                "test source row,0.8,0.2,auto,0,0,0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return nodes_path, edges_path
+
+
+def _run_import_dry_run(
+    nodes_path: Path | None,
+    edges_path: Path | None,
+    *,
+    include_defaults: bool = False,
+) -> dict[str, object]:
+    command = [
+        sys.executable,
+        "scripts/import_kg.py",
+        "--dry-run",
+    ]
+    if nodes_path is not None:
+        command.extend(["--nodes", str(nodes_path)])
+    if edges_path is not None:
+        command.extend(["--edges", str(edges_path)])
+    if include_defaults:
+        command.insert(2, "--include-defaults")
+    result = subprocess.run(command, check=True, capture_output=True, text=True)
+    payload = json.loads(result.stdout)
+    return dict(payload)
+
+
+def _int_payload_value(payload: Mapping[str, object], key: str) -> int:
+    value = payload[key]
+    assert isinstance(value, int)
+    return value

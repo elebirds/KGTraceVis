@@ -46,6 +46,56 @@ Supported or planned source classes include:
 All source types should converge to the same candidate entity/relation
 intermediate representation before cleaning, review, and publication.
 
+The reusable backend MVP is implemented under `src/kgtracevis/kg_construction/`:
+
+- `draft.py` defines the draft KG intermediate representation;
+- `extractors.py` defines the extractor protocol and registry;
+- `models.py` defines construction run, draft-row, review-decision, summary,
+  and manifest DTOs;
+- `pipeline.py` runs registered extractors and validates KG rows;
+- `tep_import.py` adapts TEP semantic-lift outputs into `scenario=tep` drafts.
+
+Use the maintained CLI entry point to materialize candidate CSV artifacts:
+
+```bash
+uv run python scripts/build_source_kg.py \
+  --tep-semantic-lift-dir /Users/hhm/code/TEP_KG/data/processed/kg \
+  --tep-variable-mapping /Users/hhm/code/TEP_KG/outputs/kg/tep_variable_mapping.csv \
+  --output-dir runs/source_kg_build/tep_candidate \
+  --overwrite
+```
+
+Candidate CSVs can then be consumed as an overlay without changing the tracked
+seed KG:
+
+```bash
+uv run python scripts/run_examples.py \
+  --kg-node-path runs/source_kg_build/tep_candidate/nodes.csv \
+  --kg-edge-path runs/source_kg_build/tep_candidate/edges.csv
+```
+
+Before publishing to Neo4j, validate the merged default KG plus candidate layer:
+
+```bash
+uv run python scripts/import_kg.py \
+  --include-defaults \
+  --nodes runs/source_kg_build/tep_candidate/nodes.csv \
+  --edges runs/source_kg_build/tep_candidate/edges.csv \
+  --dry-run
+```
+
+The same build writes `kg_construction_manifest.json`, which ties together the
+construction run ID, source records, draft rows, reviewable KG payloads, summary
+counts, and artifact paths. KG Studio can inspect both legacy candidate
+directories (`nodes_candidate.csv` / `edges_candidate.csv`) and these newer
+source-to-KG build directories (`nodes.csv` / `edges.csv` plus the manifest).
+
+For TEP-specific graph construction, the external `TEP_KG` implementation should
+be merged through extractor/import adapters rather than copied directly. See
+[`tep_kg_merge_assessment.md`](tep_kg_merge_assessment.md) for the recommended
+mapping from its `Full KG -> Semantic Lift Layer -> RCA Graph` approach into
+KGTraceVis's source-to-KG pipeline.
+
 ## User Control
 
 Review is recommended but not mandatory. Users may publish unreviewed candidate

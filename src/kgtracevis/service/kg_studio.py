@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,15 @@ DEFAULT_CANDIDATE_KG_DIRS = (
     Path("runs/end_to_end_interpretability_audit/candidate_kg"),
 )
 GRAPH_PREVIEW_EDGE_LIMIT = 80
+
+
+@dataclass(frozen=True)
+class _CandidateArtifacts:
+    candidate_dir: Path
+    nodes_path: Path
+    edges_path: Path
+    summary_path: Path | None
+    manifest_path: Path | None
 
 
 class KGStudioSource(BaseModel):
@@ -98,6 +108,8 @@ class KGStudioPayload(BaseModel):
     candidate_dir: str | None
     nodes_path: str | None
     edges_path: str | None
+    summary_path: str | None = None
+    manifest_path: str | None = None
     source_registry_path: str
     node_count: int
     edge_count: int
@@ -106,6 +118,7 @@ class KGStudioPayload(BaseModel):
     source_counts: dict[str, int] = Field(default_factory=dict)
     confidence_summary: dict[str, float | int | None] = Field(default_factory=dict)
     validation_summary: dict[str, Any] | None = None
+    construction_manifest: dict[str, Any] | None = None
     sources: list[KGStudioSource] = Field(default_factory=list)
     source_documents: list[KGStudioSourceDocument] = Field(default_factory=list)
     graph_nodes: list[KGStudioGraphNode] = Field(default_factory=list)
@@ -125,10 +138,10 @@ def kg_studio_payload(
     graph_edge_limit: int = GRAPH_PREVIEW_EDGE_LIMIT,
 ) -> KGStudioPayload:
     """Build the read-only KG Studio payload for dashboard clients."""
-    candidate_dir = _first_candidate_dir(candidate_dirs)
+    artifacts = _first_candidate_artifacts(candidate_dirs)
     sources = _load_source_registry(source_registry_path)
     source_documents = _load_source_documents(source_docs_dir)
-    if candidate_dir is None:
+    if artifacts is None:
         return KGStudioPayload(
             status="empty",
             claim_boundary=_claim_boundary(),
@@ -142,19 +155,22 @@ def kg_studio_payload(
             source_documents=source_documents,
         )
 
-    nodes_path = candidate_dir / "nodes_candidate.csv"
-    edges_path = candidate_dir / "edges_candidate.csv"
+    nodes_path = artifacts.nodes_path
+    edges_path = artifacts.edges_path
     node_rows = _read_csv_rows(nodes_path, required_columns=REQUIRED_NODE_COLUMNS)
     edge_rows = _read_csv_rows(edges_path, required_columns=REQUIRED_EDGE_COLUMNS)
     graph_nodes, graph_edges = _graph_preview(node_rows, edge_rows, limit=graph_edge_limit)
-    validation_summary = _validation_summary(candidate_dir / "validation_report.json")
+    validation_summary = _validation_summary(artifacts.summary_path)
+    construction_manifest = _construction_manifest(artifacts.manifest_path)
 
     return KGStudioPayload(
         status="ok",
         claim_boundary=_claim_boundary(),
-        candidate_dir=str(candidate_dir),
+        candidate_dir=str(artifacts.candidate_dir),
         nodes_path=str(nodes_path),
         edges_path=str(edges_path),
+        summary_path=str(artifacts.summary_path) if artifacts.summary_path else None,
+        manifest_path=str(artifacts.manifest_path) if artifacts.manifest_path else None,
         source_registry_path=str(source_registry_path),
         node_count=len(node_rows),
         edge_count=len(edge_rows),
@@ -163,6 +179,7 @@ def kg_studio_payload(
         source_counts=_count_field(edge_rows, "source"),
         confidence_summary=_confidence_summary(edge_rows),
         validation_summary=validation_summary,
+        construction_manifest=construction_manifest,
         sources=sources,
         source_documents=source_documents,
         graph_nodes=graph_nodes,
@@ -171,13 +188,27 @@ def kg_studio_payload(
     )
 
 
-def _first_candidate_dir(candidate_dirs: tuple[Path, ...]) -> Path | None:
+def _first_candidate_artifacts(candidate_dirs: tuple[Path, ...]) -> _CandidateArtifacts | None:
     for candidate_dir in candidate_dirs:
         if (
             (candidate_dir / "nodes_candidate.csv").is_file()
             and (candidate_dir / "edges_candidate.csv").is_file()
         ):
-            return candidate_dir
+            return _CandidateArtifacts(
+                candidate_dir=candidate_dir,
+                nodes_path=candidate_dir / "nodes_candidate.csv",
+                edges_path=candidate_dir / "edges_candidate.csv",
+                summary_path=candidate_dir / "validation_report.json",
+                manifest_path=None,
+            )
+        if (candidate_dir / "nodes.csv").is_file() and (candidate_dir / "edges.csv").is_file():
+            return _CandidateArtifacts(
+                candidate_dir=candidate_dir,
+                nodes_path=candidate_dir / "nodes.csv",
+                edges_path=candidate_dir / "edges.csv",
+                summary_path=candidate_dir / "kg_construction_summary.json",
+                manifest_path=candidate_dir / "kg_construction_manifest.json",
+            )
     return None
 
 
@@ -297,12 +328,19 @@ def _edge_review_targets(edges: list[KGStudioGraphEdge]) -> list[KGStudioReviewT
     ]
 
 
-def _validation_summary(path: Path) -> dict[str, Any] | None:
-    if not path.is_file():
+def _validation_summary(path: Path | None) -> dict[str, Any] | None:
+    if path is None or not path.is_file():
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
     summary = payload.get("summary")
     return summary if isinstance(summary, dict) else None
+
+
+def _construction_manifest(path: Path | None) -> dict[str, Any] | None:
+    if path is None or not path.is_file():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return payload if isinstance(payload, dict) else None
 
 
 def _confidence_summary(edge_rows: list[dict[str, str]]) -> dict[str, float | int | None]:
