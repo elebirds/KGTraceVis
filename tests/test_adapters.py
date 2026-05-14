@@ -199,6 +199,61 @@ def test_adapter_observation_ids_remain_unique_for_repeated_values() -> None:
     ]
 
 
+def test_adapters_filter_forbidden_reasoning_outputs_recursively() -> None:
+    """Adapters should not preserve KG reasoning outputs as raw observed evidence."""
+    forbidden_payload = {
+        "root_cause": "leaked_root",
+        "root_causes": ["leaked_root"],
+        "candidate_root_cause": "leaked_candidate",
+        "candidate_root_causes": ["leaked_candidate"],
+        "ranked_causes": [{"cause": "leaked_ranked"}],
+        "ranked_root_causes": [{"cause": "leaked_ranked_root"}],
+        "top_k_paths": [{"path_id": "leaked_path"}],
+        "kg_analysis": {"ranked_root_causes": [{"cause": "leaked_analysis"}]},
+        "extra": {
+            "safe_note": "preserve me",
+            "nested": {
+                "ranked_root_causes": [{"cause": "nested_leak"}],
+                "top_k_paths": [{"path_id": "nested_path"}],
+            },
+            "items": [
+                {"safe": 1, "candidate_root_causes": ["nested_list_leak"]},
+                {"ranked_causes": [{"cause": "nested_ranked"}]},
+            ],
+        },
+    }
+    cases = [
+        (
+            evidence_from_mvtec_record,
+            {
+                "case_id": "mvtec_forbidden",
+                "object": "bottle",
+                "defect_type": "scratch",
+            },
+        ),
+        (
+            evidence_from_tep_record,
+            {"case_id": "tep_forbidden", "fault_type": "process_fault"},
+        ),
+        (
+            evidence_from_wafer_record,
+            {"case_id": "wafer_forbidden", "defect_class": "nearfull"},
+        ),
+        (
+            evidence_from_wm811k_record,
+            {"case_id": "wm811k_forbidden", "failure_pattern": "Near-full"},
+        ),
+    ]
+
+    for adapter, base_record in cases:
+        evidence = adapter({**base_record, **forbidden_payload})
+
+        assert evidence.raw_evidence.extra["safe_note"] == "preserve me"
+        assert "kg_analysis" not in evidence.raw_evidence.extra
+        assert _root_cause_keys(evidence) == []
+        assert evidence.kg_analysis.model_dump() == _empty_kg_analysis()
+
+
 def test_mask_feature_helpers_derive_stable_geometry_terms() -> None:
     """Precomputed mask geometry should deterministically derive adapter evidence fields."""
     features = summarize_mask_features(
@@ -387,6 +442,7 @@ def _root_cause_keys(evidence: Evidence) -> list[str]:
         "candidate_root_causes",
         "ranked_causes",
         "ranked_root_causes",
+        "top_k_paths",
     }
     keys: list[str] = []
 

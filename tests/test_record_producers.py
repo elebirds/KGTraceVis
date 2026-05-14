@@ -741,6 +741,29 @@ def test_tep_raw_producer_emits_adapter_compatible_rbc_records(tmp_path: Path) -
     assert selector.simulation_runs == (1,)
 
 
+def test_tep_raw_producer_accepts_compact_channel_headers(tmp_path: Path) -> None:
+    """TEP CSV aliases like xmeas1/xmv1 should still emit canonical channel names."""
+    raw_dir = _write_tiny_tep_csvs(tmp_path / "tep", compact_channel_headers=True)
+
+    records = build_tep_records(
+        raw_dir,
+        row_stride=1,
+        window_size=4,
+        faults=(1,),
+        max_runs_per_fault=1,
+        max_cases=1,
+        top_variables=2,
+        n_components=1,
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record["variables"][0] == "XMEAS_2"
+    assert set(record["extra"]["source_columns"]) == {"xmeas1", "xmeas2", "xmv1"}
+    assert "XMEAS_2" in record["variable_contributions"]
+    assert evidence_from_records(records, dataset="tep")[0].adapter is not None
+
+
 def test_dataset_record_workflow_supports_tep_raw_producer(tmp_path: Path) -> None:
     """Unified dataset-record workflow should include the native TEP producer branch."""
     raw_dir = _write_tiny_tep_csvs(tmp_path / "tep")
@@ -1051,7 +1074,11 @@ def test_producer_jsonl_writer_and_forbidden_filter_round_trip(tmp_path: Path) -
         "object": "bottle",
         "defect_type": "scratch",
         "root_cause": "not_allowed",
-        "extra": {"top_k_paths": [{"path_id": "not_allowed"}], "kept": True},
+        "extra": {
+            "ranked_root_causes": [{"candidate_id": "not_allowed"}],
+            "top_k_paths": [{"path_id": "not_allowed"}],
+            "kept": True,
+        },
     }
     output_path = write_jsonl_records([dirty_record], tmp_path / "records.jsonl")
 
@@ -1121,6 +1148,7 @@ def test_filter_forbidden_outputs_recurses_through_records() -> None:
         {
             "case_id": "x",
             "kg_analysis": {"top_k_paths": []},
+            "ranked_root_causes": [{"candidate_id": "bad"}],
             "records": [{"root_cause": "bad", "safe": "ok"}],
             "array": np.asarray([{"candidate_root_cause": "bad", "safe": "array"}], dtype=object),
         }
@@ -1133,9 +1161,14 @@ def test_filter_forbidden_outputs_recurses_through_records() -> None:
     }
 
 
-def _write_tiny_tep_csvs(root: Path) -> Path:
+def _write_tiny_tep_csvs(root: Path, *, compact_channel_headers: bool = False) -> Path:
     root.mkdir(parents=True, exist_ok=True)
-    header = ["faultNumber", "simulationRun", "sample", "xmeas_1", "xmeas_2", "xmv_1"]
+    channel_header = (
+        ["xmeas1", "xmeas2", "xmv1"]
+        if compact_channel_headers
+        else ["xmeas_1", "xmeas_2", "xmv_1"]
+    )
+    header = ["faultNumber", "simulationRun", "sample", *channel_header]
     fault_free_rows = [
         [0, 1, sample, sample, sample * 0.1, sample * 2.0]
         for sample in range(1, 21)
@@ -1211,6 +1244,7 @@ def _forbidden_keys(value: object) -> list[str]:
         "candidate_root_cause",
         "candidate_root_causes",
         "ranked_causes",
+        "ranked_root_causes",
         "top_k_paths",
         "kg_analysis",
     }

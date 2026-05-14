@@ -32,7 +32,7 @@ def generate_correction_candidates(
         if not source_id:
             continue
         for relation in FIELD_RELATION_RULES.get((source_field, target_field), ()):
-            for edge in graph.outgoing(source_id, relation):
+            for edge in graph.outgoing(source_id, relation, scenario=evidence.dataset):
                 target = graph.nodes[edge.tail]
                 key = (target_field, target.id)
                 if key in seen:

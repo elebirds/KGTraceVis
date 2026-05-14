@@ -236,30 +236,80 @@ class KnowledgeGraph:
         candidates.sort(key=lambda item: (-item.score, item.entity_id))
         return candidates[:top_k]
 
-    def outgoing(self, node_id: str, relation: str | None = None) -> list[KGEdge]:
-        """Return outgoing edges, optionally filtered by relation."""
+    def outgoing(
+        self,
+        node_id: str,
+        relation: str | None = None,
+        *,
+        scenario: str | None = None,
+    ) -> list[KGEdge]:
+        """Return outgoing edges, optionally filtered by relation and scenario."""
         edges = [edge for edge in self.edges if edge.head == node_id]
         if relation is not None:
             edges = [edge for edge in edges if edge.relation == relation]
+        if scenario is not None:
+            edges = [edge for edge in edges if self._edge_in_scope(edge, scenario)]
         return edges
 
-    def incoming(self, node_id: str, relation: str | None = None) -> list[KGEdge]:
-        """Return incoming edges, optionally filtered by relation."""
+    def incoming(
+        self,
+        node_id: str,
+        relation: str | None = None,
+        *,
+        scenario: str | None = None,
+    ) -> list[KGEdge]:
+        """Return incoming edges, optionally filtered by relation and scenario."""
         edges = [edge for edge in self.edges if edge.tail == node_id]
         if relation is not None:
             edges = [edge for edge in edges if edge.relation == relation]
+        if scenario is not None:
+            edges = [edge for edge in edges if self._edge_in_scope(edge, scenario)]
         return edges
 
-    def has_edge(self, head: str, relation: str, tail: str) -> bool:
-        """Return whether the KG contains a relation between two nodes."""
+    def has_edge(
+        self,
+        head: str,
+        relation: str,
+        tail: str,
+        *,
+        scenario: str | None = None,
+    ) -> bool:
+        """Return whether the KG contains an in-scope relation between two nodes."""
         return any(
             edge.head == head and edge.relation == relation and edge.tail == tail
+            and (scenario is None or self._edge_in_scope(edge, scenario))
             for edge in self.edges
         )
 
-    def edge_between(self, head: str, tail: str) -> list[KGEdge]:
-        """Return all edges between two nodes."""
-        return [edge for edge in self.edges if edge.head == head and edge.tail == tail]
+    def edge_between(
+        self,
+        head: str,
+        tail: str,
+        *,
+        scenario: str | None = None,
+    ) -> list[KGEdge]:
+        """Return all in-scope edges between two nodes."""
+        return [
+            edge
+            for edge in self.edges
+            if edge.head == head
+            and edge.tail == tail
+            and (scenario is None or self._edge_in_scope(edge, scenario))
+        ]
+
+    def node_in_scope(self, node_id: str, scenario: str | None) -> bool:
+        """Return whether a node belongs to the selected scenario or shared layer."""
+        if scenario is None:
+            return node_id in self.nodes
+        node = self.nodes.get(node_id)
+        return node is not None and node.scenario in {scenario, "shared"}
+
+    def _edge_in_scope(self, edge: KGEdge, scenario: str) -> bool:
+        return (
+            edge.scenario in {scenario, "shared"}
+            and self.node_in_scope(edge.head, scenario)
+            and self.node_in_scope(edge.tail, scenario)
+        )
 
 
 def _load_nodes(path: Path) -> list[KGNode]:

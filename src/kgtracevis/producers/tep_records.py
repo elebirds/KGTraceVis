@@ -20,7 +20,7 @@ FAULT_FREE_TRAINING_FILENAME = "TEP_FaultFree_Training.csv"
 FAULTY_TRAINING_FILENAME = "TEP_Faulty_Training.csv"
 DEFAULT_TEP_FAULTS = tuple(range(1, 22))
 ID_COLUMNS = ("faultNumber", "simulationRun", "sample")
-CHANNEL_PREFIXES = ("xmeas_", "xmv_")
+CHANNEL_PREFIXES = ("xmeas", "xmv")
 
 
 @dataclass(frozen=True)
@@ -383,7 +383,7 @@ def _variable_columns(path: Path) -> tuple[str, ...]:
         )
     )
     if not columns:
-        raise ValueError(f"{path} does not contain xmeas_/xmv_ variable columns")
+        raise ValueError(f"{path} does not contain xmeas/xmv variable columns")
     return columns
 
 
@@ -402,23 +402,38 @@ def _require_columns(path: Path, fieldnames: Sequence[str] | None, columns: Iter
 
 
 def _is_channel_column(name: str) -> bool:
-    lower = name.lower()
-    return any(lower.startswith(prefix) for prefix in CHANNEL_PREFIXES)
+    return _channel_parts(name) is not None
 
 
 def _channel_sort_key(name: str) -> tuple[int, int, str]:
-    lower = name.lower()
-    prefix_rank = 0 if lower.startswith("xmeas_") else 1
-    suffix = lower.rsplit("_", maxsplit=1)[-1]
-    try:
-        number = int(suffix)
-    except ValueError:
-        number = 10**6
+    lower = name.strip().lower()
+    parts = _channel_parts(lower)
+    if parts is None:
+        return (2, 10**6, lower)
+    prefix, number = parts
+    prefix_rank = 0 if prefix == "xmeas" else 1
     return (prefix_rank, number, lower)
 
 
 def _canonical_channel_name(name: str) -> str:
-    return name.strip().upper()
+    parts = _channel_parts(name)
+    if parts is None:
+        return name.strip().upper()
+    prefix, number = parts
+    return f"{prefix.upper()}_{number}"
+
+
+def _channel_parts(name: str) -> tuple[str, int] | None:
+    lower = name.strip().lower()
+    for prefix in CHANNEL_PREFIXES:
+        if not lower.startswith(prefix):
+            continue
+        suffix = lower.removeprefix(prefix)
+        if suffix.startswith("_"):
+            suffix = suffix[1:]
+        if suffix.isdigit():
+            return prefix, int(suffix)
+    return None
 
 
 def _row_values(row: dict[str, str], columns: Sequence[str]) -> list[float]:
