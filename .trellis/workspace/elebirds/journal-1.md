@@ -306,3 +306,36 @@ Verified and closed the reusable source-to-KG construction runtime workflow, inc
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: Source-to-KG construction pipeline
+
+**Date**: 2026-05-14
+**Task**: Source-to-KG construction pipeline
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Implemented the reusable source-to-KG construction pipeline methodology: source registry, extraction/draft models, TEP importers, candidate KG overlay validation, manifests, Neo4j-compatible CSV outputs, CLI integration, docs, and tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `70fb684` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
