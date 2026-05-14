@@ -27,7 +27,13 @@ from kgtracevis.producers import (
 )
 from kgtracevis.producers.mvtec_calibration import load_mvtec_threshold_config
 from kgtracevis.producers.mvtec_records import build_mvtec_records
-from kgtracevis.producers.tep_records import build_tep_records
+from kgtracevis.producers.tep_records import (
+    DEFAULT_TEP_FAULT_FREE_MAX_ROWS,
+    DEFAULT_TEP_N_COMPONENTS,
+    DEFAULT_TEP_ROW_STRIDE,
+    DEFAULT_TEP_WINDOW_SIZE,
+    build_tep_records,
+)
 from kgtracevis.producers.wm811k_records import build_wm811k_records
 
 MVTEC_BACKENDS = (
@@ -67,12 +73,12 @@ class DatasetRecordBuildConfig:
     fault_free_input: Path | None = None
     faulty_input: Path | None = None
     tep_faults: tuple[int, ...] = ()
-    tep_window_size: int = 100
-    tep_row_stride: int = 25
-    tep_fault_free_max_rows: int | None = None
+    tep_window_size: int = DEFAULT_TEP_WINDOW_SIZE
+    tep_row_stride: int = DEFAULT_TEP_ROW_STRIDE
+    tep_fault_free_max_rows: int | None = DEFAULT_TEP_FAULT_FREE_MAX_ROWS
     tep_max_runs_per_fault: int = 3
     tep_top_variables: int = 5
-    tep_n_components: int | None = None
+    tep_n_components: int | None = DEFAULT_TEP_N_COMPONENTS
 
 
 @dataclass(frozen=True)

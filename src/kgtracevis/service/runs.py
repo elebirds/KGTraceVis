@@ -30,7 +30,6 @@ from kgtracevis.producers.model_assets import ModelAsset
 from kgtracevis.producers.mvtec_models import (
     DEFAULT_MVTEC_EFFICIENTAD_CHECKPOINT,
     DEFAULT_MVTEC_PATCHCORE_CHECKPOINT,
-    DEFAULT_MVTEC_STFPM_CHECKPOINT,
     resolve_mvtec_model_selection,
 )
 from kgtracevis.schema.evidence_schema import DatasetName
@@ -62,7 +61,7 @@ from kgtracevis.workflows.root_cause_provider_selection import (
 )
 
 DEFAULT_RUNS_DIR = Path("runs/rootlens_sessions")
-DEFAULT_MVTEC_UPLOAD_CHECKPOINT = DEFAULT_MVTEC_STFPM_CHECKPOINT
+DEFAULT_MVTEC_UPLOAD_CHECKPOINT = DEFAULT_MVTEC_PATCHCORE_CHECKPOINT
 
 __all__ = [
     "RunDetail",
@@ -137,9 +136,6 @@ def create_run_from_upload(
     runs_dir: str | Path | None = None,
     pipeline: KGTracePipeline | None = None,
     tep_rca_provider: str | None = None,
-    tep_rca_artifact_dir: str | Path | None = None,
-    tep_rca_ranking_path: str | Path | None = None,
-    tep_rca_contributions_path: str | Path | None = None,
 ) -> RunDetail:
     """Persist one uploaded sample and run the applicable pipeline path."""
     if top_k < 1:
@@ -158,12 +154,12 @@ def create_run_from_upload(
     input_path.write_bytes(content)
 
     created_at = datetime.now(timezone.utc).isoformat()
+    provider = tep_rca_provider
+    if provider is None and dataset == "tep":
+        provider = "native"
     active_pipeline = pipeline or build_pipeline(
         root_cause_provider_config=root_cause_provider_config_from_env(
-            provider=tep_rca_provider,
-            artifact_dir=tep_rca_artifact_dir,
-            ranking_path=tep_rca_ranking_path,
-            contributions_path=tep_rca_contributions_path,
+            provider=provider,
         )
     )
     if mode == "evidence":
@@ -572,7 +568,7 @@ def mvtec_model_presets() -> list[dict[str, Any]]:
 
 def download_model_assets(
     *,
-    models: tuple[ModelAsset, ...] = ("mvtec-stfpm",),
+    models: tuple[ModelAsset, ...] = ("mvtec-patchcore",),
     force: bool = False,
 ) -> dict[str, Any]:
     """Download trusted default model assets for service clients."""

@@ -6,6 +6,12 @@ import argparse
 import json
 from pathlib import Path
 
+from kgtracevis.producers.tep_records import (
+    DEFAULT_TEP_FAULT_FREE_MAX_ROWS,
+    DEFAULT_TEP_N_COMPONENTS,
+    DEFAULT_TEP_ROW_STRIDE,
+    DEFAULT_TEP_WINDOW_SIZE,
+)
 from kgtracevis.workflows.tep_evaluation import (
     TepRcaEvaluationConfig,
     run_tep_rca_evaluation,
@@ -25,11 +31,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--faults", default="1,2,6")
     parser.add_argument("--max-runs-per-fault", default=2, type=int)
     parser.add_argument("--max-cases", type=int)
-    parser.add_argument("--window-size", default=100, type=int)
-    parser.add_argument("--row-stride", default=200, type=int)
-    parser.add_argument("--fault-free-max-rows", default=1000, type=int)
+    parser.add_argument("--window-size", default=DEFAULT_TEP_WINDOW_SIZE, type=int)
+    parser.add_argument("--row-stride", default=DEFAULT_TEP_ROW_STRIDE, type=int)
+    parser.add_argument(
+        "--fault-free-max-rows",
+        default=DEFAULT_TEP_FAULT_FREE_MAX_ROWS,
+        type=int,
+        help="Optional cap on sampled fault-free rows. Defaults to no cap.",
+    )
     parser.add_argument("--top-variables", default=8, type=int)
-    parser.add_argument("--n-components", default=6, type=int)
+    parser.add_argument("--n-components", default=DEFAULT_TEP_N_COMPONENTS, type=int)
     parser.add_argument("--top-k", default=5, type=int)
     parser.add_argument(
         "--kg-node-path",

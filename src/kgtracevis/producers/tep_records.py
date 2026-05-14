@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import json
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,8 +19,25 @@ TEP_RBC_BACKEND = "tep-rbc"
 FAULT_FREE_TRAINING_FILENAME = "TEP_FaultFree_Training.csv"
 FAULTY_TRAINING_FILENAME = "TEP_Faulty_Training.csv"
 DEFAULT_TEP_FAULTS = tuple(range(1, 22))
+DEFAULT_TEP_WINDOW_SIZE = 100
+DEFAULT_TEP_ROW_STRIDE = 25
+DEFAULT_TEP_N_COMPONENTS = 18
+DEFAULT_TEP_FAULT_FREE_MAX_ROWS: int | None = None
 ID_COLUMNS = ("faultNumber", "simulationRun", "sample")
 CHANNEL_PREFIXES = ("xmeas", "xmv")
+ROOT_KGD_XMV_VARIABLE_IDS = {
+    1: "variable:manipulated_variable_1_d_feed",
+    2: "variable:manipulated_variable_2_e_feed",
+    3: "variable:manipulated_variable_3_a_feed",
+    4: "variable:manipulated_variable_4_a_and_c_feed",
+    5: "variable:manipulated_variable_5_recycle",
+    6: "variable:manipulated_variable_6_purge",
+    7: "variable:manipulated_variable_7_separator",
+    8: "variable:manipulated_variable_8_stripper",
+    9: "variable:manipulated_variable_9_steam",
+    10: "variable:manipulated_variable_10_reactor_coolant",
+    11: "variable:manipulated_variable_11_condenser_coolant",
+}
 
 
 @dataclass(frozen=True)
@@ -61,14 +78,14 @@ def build_tep_records(
     *,
     fault_free_path: str | Path | None = None,
     faulty_path: str | Path | None = None,
-    row_stride: int = 25,
-    fault_free_max_rows: int | None = None,
-    window_size: int = 100,
+    row_stride: int = DEFAULT_TEP_ROW_STRIDE,
+    fault_free_max_rows: int | None = DEFAULT_TEP_FAULT_FREE_MAX_ROWS,
+    window_size: int = DEFAULT_TEP_WINDOW_SIZE,
     faults: Sequence[int] | None = None,
     max_runs_per_fault: int = 3,
     max_cases: int | None = None,
     top_variables: int = 5,
-    n_components: int | None = None,
+    n_components: int | None = DEFAULT_TEP_N_COMPONENTS,
     profile_output_path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     """Build adapter-ready TEP records from raw fault-free and faulty CSV files."""
@@ -129,9 +146,9 @@ def fit_tep_fault_free_profile(
     fault_free_path: str | Path,
     *,
     variable_columns: Sequence[str] | None = None,
-    row_stride: int = 25,
+    row_stride: int = DEFAULT_TEP_ROW_STRIDE,
     max_rows: int | None = None,
-    n_components: int | None = None,
+    n_components: int | None = DEFAULT_TEP_N_COMPONENTS,
 ) -> TepFaultFreeProfile:
     """Fit a compact fault-free TEP reconstruction profile from raw CSV rows."""
     _validate_positive("row_stride", row_stride)
@@ -344,11 +361,96 @@ def _record_from_window(
         },
         "extra": {
             "channel_contributions": contribution.channel_contributions,
+            "graph_contributions": _root_kgd_graph_contributions(
+                contribution.channel_contributions
+            ),
+            "root_kgd_dynamic_features": _root_kgd_dynamic_features(profile, window),
             "top_channels": variables,
             "source_columns": list(profile.variable_columns),
         },
     }
     return filter_forbidden_outputs(record)
+
+
+def _root_kgd_graph_contributions(
+    channel_contributions: Mapping[str, float],
+) -> dict[str, float]:
+    graph_contributions: dict[str, float] = {}
+    for channel_name, value in channel_contributions.items():
+        variable_id = _root_kgd_variable_id(channel_name)
+        if variable_id is not None:
+            graph_contributions[variable_id] = round(float(value), 8)
+    return graph_contributions
+
+
+def _root_kgd_dynamic_features(
+    profile: TepFaultFreeProfile,
+    window: TepFaultWindow,
+) -> dict[str, Any]:
+    standardized = (window.rows - profile.mean) / profile.scale
+    features: dict[str, float] = {}
+    for index, column in enumerate(profile.variable_columns):
+        channel_id = _root_kgd_channel_id(column)
+        if channel_id is None:
+            continue
+        values = standardized[:, index]
+        mean_z = float(np.mean(values))
+        slope_z = float((values[-1] - values[0]) / max(1, len(values) - 1))
+        deltas = np.diff(values)
+        oscillation = float(np.mean(np.abs(deltas))) if deltas.size else 0.0
+        std_z = float(np.std(values))
+        features[f"{channel_id}__mean"] = round(mean_z, 8)
+        features[f"{channel_id}__slope"] = round(slope_z, 8)
+        features[f"{channel_id}__osc"] = round(oscillation, 8)
+        features[f"{channel_id}__std"] = round(std_z, 8)
+    return {
+        "feature_version": "scenario_dynamic_v1",
+        "features": features,
+        "top_dynamic_features": _top_dynamic_features(features),
+    }
+
+
+def _top_dynamic_features(features: Mapping[str, float], limit: int = 6) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for feature_id, value in sorted(
+        features.items(),
+        key=lambda item: (-abs(float(item[1])), item[0]),
+    ):
+        if abs(float(value)) <= 1e-9:
+            continue
+        channel_id, _, statistic = feature_id.partition("__")
+        rows.append(
+            {
+                "feature_id": feature_id,
+                "channel_id": channel_id,
+                "statistic": statistic,
+                "value": round(float(value), 8),
+                "magnitude": round(abs(float(value)), 8),
+            }
+        )
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _root_kgd_variable_id(channel_name: str) -> str | None:
+    parts = _channel_parts(channel_name)
+    if parts is None:
+        return None
+    prefix, number = parts
+    if prefix == "xmeas":
+        return f"variable:xmeas_{number}"
+    if prefix == "xmv":
+        return ROOT_KGD_XMV_VARIABLE_IDS.get(number)
+    return None
+
+
+def _root_kgd_channel_id(channel_name: str) -> str | None:
+    parts = _channel_parts(channel_name)
+    if parts is None:
+        return None
+    prefix, number = parts
+    return f"{prefix}_{number}"
 
 
 def _resolve_tep_csv_path(

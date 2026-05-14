@@ -119,7 +119,7 @@ def create_app() -> FastAPI:
     @app.post("/api/model-assets/download")
     def download_assets(request: ModelAssetDownloadRequest) -> dict[str, object]:
         try:
-            requested = request.models or ["mvtec-stfpm"]
+            requested = request.models or ["mvtec-patchcore"]
             invalid = sorted({model for model in requested if model not in MODEL_ASSET_CHOICES})
             if invalid:
                 supported = ", ".join(MODEL_ASSET_CHOICES)
@@ -289,9 +289,6 @@ def create_app() -> FastAPI:
         defect_type: Annotated[str | None, Form()] = None,
         model_preset: Annotated[str | None, Form()] = None,
         tep_rca_provider: Annotated[str | None, Form()] = None,
-        tep_rca_artifact_dir: Annotated[str | None, Form()] = None,
-        tep_rca_ranking_path: Annotated[str | None, Form()] = None,
-        tep_rca_contributions_path: Annotated[str | None, Form()] = None,
         top_k: Annotated[int, Form()] = 5,
     ) -> dict[str, object]:
         try:
@@ -307,9 +304,6 @@ def create_app() -> FastAPI:
                 defect_type=defect_type,
                 model_preset=model_preset,
                 tep_rca_provider=tep_rca_provider,
-                tep_rca_artifact_dir=tep_rca_artifact_dir,
-                tep_rca_ranking_path=tep_rca_ranking_path,
-                tep_rca_contributions_path=tep_rca_contributions_path,
                 top_k=top_k,
             ).model_dump(mode="json")
         except (FileNotFoundError, ValueError) as exc:

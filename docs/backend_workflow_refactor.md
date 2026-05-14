@@ -184,12 +184,15 @@ path ranker, then projects those paths into `RankedRootCause` candidates when no
 scenario reasoner supplies richer rankings.
 
 Scenario-aware reasoners may override the default path search when the scenario
-has native RCA evidence. TEP native RCA is the first such case: it scores
-candidates from variable contributions and `tep`/`shared` KG support paths, and
-uses those same support paths for both output fields. TEP native scoring must
-not use fault-number labels as scoring input. Artifact-backed TEP adapters must
-also implement the unified RCA reasoner contract, even if they internally map
-artifact ranking rows into `ranked_root_causes`.
+has native RCA evidence. TEP native RCA is the first such case: the native
+provider is the Root-KGD runtime provider, which scores candidates from the
+current Evidence's TEP contributions and dynamic features using the checked-in
+Root-KGD graph/model assets under `data/kg/tep_root_kgd/`. It must not use
+fault-number labels as scoring input and must not read precomputed scenario
+ranking outputs such as `baseline_root_scores.csv`, `topk_subgraphs`, or
+`rbc_contributions` during runtime scoring. Legacy artifact-backed TEP bridges
+remain explicit compatibility paths and must still implement the unified RCA
+reasoner contract if used.
 
 Compatibility rule: `KGTracePipeline` accepts only the unified
 `reason_root_causes(...)` contract for scenario-aware RCA overrides. Older

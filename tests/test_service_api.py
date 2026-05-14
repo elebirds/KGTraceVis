@@ -183,14 +183,14 @@ def test_default_upload_run_persists_detail_to_postgres(
     assert not (Path(detail.run.run_dir) / "manifest.json").exists()
 
 
-def test_upload_run_validates_missing_tep_artifact_provider_path(
+def test_upload_run_rejects_tep_artifact_provider_selection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Service upload path should validate artifact-provider config conservatively."""
+    """Service upload should not expose precomputed TEP ranking artifacts."""
     monkeypatch.setattr(service_runs, "DEFAULT_RUNS_DIR", tmp_path / "rootlens_sessions")
 
-    with pytest.raises(ValueError, match="tep_rca_artifact_dir"):
+    with pytest.raises(ValueError, match="none, native, simple"):
         service_runs.create_run_from_upload(
             "tep_0001.json",
             Path("data/examples/tep_example.json").read_bytes(),
@@ -878,7 +878,7 @@ def test_mvtec_model_preset_route_reports_available_default(
     payload = response.json()
     assert payload["default_preset"] == "auto"
     presets = {item["preset"]: item for item in payload["presets"]}
-    assert presets["auto"]["resolved_preset"] == "efficientad"
+    assert presets["auto"]["resolved_preset"] == "patchcore"
     assert presets["efficientad"]["available"] is True
 
 
@@ -1020,7 +1020,7 @@ def test_model_asset_download_route_uses_default_asset(monkeypatch) -> None:
         return {
             "artifact_type": "model_asset_download_v0",
             "assets_root": "runs/real_model_pipeline/assets",
-            "assets": {"mvtec_stfpm": {"checkpoint": "checkpoint.xml"}},
+            "assets": {"mvtec_patchcore": {"checkpoint": "checkpoint.ckpt"}},
         }
 
     monkeypatch.setattr(service_api, "download_model_assets", _patched_download_model_assets)
@@ -1029,8 +1029,8 @@ def test_model_asset_download_route_uses_default_asset(monkeypatch) -> None:
     response = client.post("/api/model-assets/download", json={})
 
     assert response.status_code == 200
-    assert captured == {"models": ("mvtec-stfpm",), "force": False}
-    assert response.json()["assets"]["mvtec_stfpm"]["checkpoint"] == "checkpoint.xml"
+    assert captured == {"models": ("mvtec-patchcore",), "force": False}
+    assert response.json()["assets"]["mvtec_patchcore"]["checkpoint"] == "checkpoint.ckpt"
 
 
 def test_model_asset_download_route_rejects_unknown_asset() -> None:

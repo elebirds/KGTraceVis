@@ -1,0 +1,441 @@
+{
+  "anchor_count": 16,
+  "anchors": [
+    {
+      "anchor_id": "faultanchor:condenser_heat_transfer",
+      "anchor_name": "Condenser heat-transfer disturbance",
+      "diagnostic_variable_ids": [
+        "variable:xmeas_22",
+        "variable:xmeas_11",
+        "variable:xmeas_38",
+        "variable:xmeas_34",
+        "variable:xmeas_35",
+        "variable:xmeas_36"
+      ],
+      "direct_target_ids": [
+        "equipment:condenser_1",
+        "equipment:vapor_liquid_separator",
+        "stream:cws",
+        "variable:manipulated_variable_11_condenser_coolant"
+      ],
+      "rationale": "Seed discriminator for condenser heat-transfer faults using local cooling signals plus downstream product and purge composition drift.",
+      "sibling_anchor_ids": [
+        "faultanchor:separator_cooling_inlet_temperature",
+        "faultanchor:separator_coolant_valve_stiction"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:multi_valve_stiction",
+      "anchor_name": "Multi-valve stiction disturbance",
+      "diagnostic_variable_ids": [
+        "variable:manipulated_variable_5_recycle",
+        "variable:manipulated_variable_7_separator",
+        "variable:manipulated_variable_8_stripper",
+        "variable:manipulated_variable_9_steam",
+        "variable:xmeas_15",
+        "variable:xmeas_16"
+      ],
+      "direct_target_ids": [
+        "variable:manipulated_variable_5_recycle",
+        "variable:manipulated_variable_7_separator",
+        "variable:manipulated_variable_8_stripper",
+        "variable:manipulated_variable_9_steam",
+        "equipment:compressor",
+        "equipment:vapor_liquid_separator",
+        "equipment:stripper",
+        "stream:steam"
+      ],
+      "rationale": "Seed discriminator for the multi-valve stiction umbrella fault using the four affected actuators plus stripper-side response measurements.",
+      "sibling_anchor_ids": [
+        "faultanchor:condenser_heat_transfer",
+        "faultanchor:separator_coolant_valve_stiction",
+        "faultanchor:separator_cooling_inlet_temperature",
+        "faultanchor:stream_2_feed_temperature",
+        "faultanchor:stripper_heat_transfer"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:reactor_coolant_valve_stiction",
+      "anchor_name": "Reactor coolant valve stiction",
+      "diagnostic_variable_ids": [
+        "variable:manipulated_variable_10_reactor_coolant",
+        "variable:xmeas_21",
+        "variable:xmeas_7",
+        "variable:xmeas_8"
+      ],
+      "direct_target_ids": [
+        "variable:manipulated_variable_10_reactor_coolant",
+        "equipment:reactor_cooling_coil",
+        "equipment:reactor",
+        "stream:cws",
+        "stream:cwr"
+      ],
+      "rationale": "Seed discriminator for actuation-driven reactor coolant disturbances.",
+      "sibling_anchor_ids": [
+        "faultanchor:reactor_cooling_inlet_temperature",
+        "faultanchor:reactor_heat_transfer"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:reactor_cooling_inlet_temperature",
+      "anchor_name": "Reactor cooling inlet temperature disturbance",
+      "diagnostic_variable_ids": [
+        "variable:manipulated_variable_10_reactor_coolant",
+        "variable:xmeas_21",
+        "variable:xmeas_9"
+      ],
+      "direct_target_ids": [
+        "equipment:reactor_cooling_coil",
+        "equipment:reactor",
+        "stream:cws",
+        "variable:manipulated_variable_10_reactor_coolant"
+      ],
+      "rationale": "Seed discriminator for reactor cooling-loop inlet temperature faults.",
+      "sibling_anchor_ids": [
+        "faultanchor:reactor_coolant_valve_stiction",
+        "faultanchor:reactor_heat_transfer"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:reactor_heat_transfer",
+      "anchor_name": "Reactor heat-transfer disturbance",
+      "diagnostic_variable_ids": [
+        "variable:xmeas_9",
+        "variable:xmeas_21",
+        "variable:xmeas_7",
+        "variable:xmeas_8"
+      ],
+      "direct_target_ids": [
+        "equipment:reactor",
+        "equipment:reactor_cooling_coil",
+        "stream:cws",
+        "variable:manipulated_variable_10_reactor_coolant"
+      ],
+      "rationale": "Seed discriminator for reactor thermal signatures rather than inlet-only or valve-only effects.",
+      "sibling_anchor_ids": [
+        "faultanchor:reactor_cooling_inlet_temperature",
+        "faultanchor:reactor_coolant_valve_stiction"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:reactor_kinetics",
+      "anchor_name": "Reactor kinetics disturbance",
+      "diagnostic_variable_ids": [
+        "variable:xmeas_9",
+        "variable:xmeas_27",
+        "variable:xmeas_33",
+        "variable:xmeas_38"
+      ],
+      "direct_target_ids": [
+        "equipment:reactor",
+        "stream:stream_6_reactor_feed"
+      ],
+      "rationale": "Seed discriminator for composition and reactor-temperature changes associated with kinetics drift.",
+      "sibling_anchor_ids": [
+        "faultanchor:reactor_cooling_inlet_temperature",
+        "faultanchor:reactor_coolant_valve_stiction",
+        "faultanchor:reactor_heat_transfer"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:separator_coolant_valve_stiction",
+      "anchor_name": "Separator coolant valve stiction",
+      "diagnostic_variable_ids": [
+        "variable:manipulated_variable_11_condenser_coolant",
+        "variable:xmeas_11",
+        "variable:xmeas_12",
+        "variable:xmeas_13",
+        "variable:xmeas_22",
+        "variable:xmeas_14"
+      ],
+      "direct_target_ids": [
+        "variable:manipulated_variable_11_condenser_coolant",
+        "equipment:condenser_1",
+        "equipment:vapor_liquid_separator",
+        "stream:cws",
+        "stream:cwr"
+      ],
+      "rationale": "Separator coolant valve stiction directly impacts the condenser coolant valve (MV 11) and separator conditions: temperature (XMEAS_11), level (XMEAS_12), pressure (XMEAS_13), and coolant outlet temperature (XMEAS_22). Separator liquid outlet flow (XMEAS_14) reflects level control response. These variables differentiate it from reactor coolant stiction, condenser heat-transfer, and other siblings.",
+      "sibling_anchor_ids": [
+        "faultanchor:condenser_heat_transfer",
+        "faultanchor:multi_valve_stiction",
+        "faultanchor:reactor_coolant_valve_stiction",
+        "faultanchor:reactor_cooling_inlet_temperature",
+        "faultanchor:reactor_heat_transfer",
+        "faultanchor:separator_cooling_inlet_temperature"
+      ],
+      "source": "openrouter_llm_batch"
+    },
+    {
+      "anchor_id": "faultanchor:separator_cooling_inlet_temperature",
+      "anchor_name": "Separator cooling inlet temperature disturbance",
+      "diagnostic_variable_ids": [
+        "variable:xmeas_22",
+        "variable:xmeas_11",
+        "variable:xmeas_19",
+        "variable:xmeas_35",
+        "variable:xmeas_36",
+        "variable:xmeas_38"
+      ],
+      "direct_target_ids": [
+        "equipment:condenser_1",
+        "equipment:vapor_liquid_separator",
+        "stream:cws",
+        "variable:manipulated_variable_11_condenser_coolant"
+      ],
+      "rationale": "Seed discriminator for separator cooling inlet faults using local thermal evidence and downstream steam/product signatures.",
+      "sibling_anchor_ids": [
+        "faultanchor:separator_coolant_valve_stiction",
+        "faultanchor:condenser_heat_transfer"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:stream_1_a_feed_loss",
+      "anchor_name": "Stream 1 A-feed loss disturbance",
+      "diagnostic_variable_ids": [
+        "variable:manipulated_variable_3_a_feed",
+        "variable:xmeas_1",
+        "variable:xmeas_2"
+      ],
+      "direct_target_ids": [
+        "stream:stream_1_a_feed",
+        "component:component_a",
+        "variable:manipulated_variable_3_a_feed"
+      ],
+      "rationale": "We are asked to curate discriminative symptom variables for the anchor \"faultanchor:stream_1_a_feed_loss\". The anchor is about A-feed loss on stream 1. Direct targets: stream:stream_1_a_feed, component:component_a, variable:manipulated_variable_3_a_feed. So it's a loss of A feed in stream 1, which is controlled by manipulated variable 3 (A Feed). Sibling anchors: stream_4_abc_composition (disturbance in stream 4 A/B/C composition) and stream_4_ac_ratio (A/C ratio disturbance). Both involve stream 4 and components A, C, etc. So we need variables that are diagnostic for stream 1 A feed loss, and can distinguish it from stream 4 disturbances.\n\nWe need to pick 3-6 variable node ids from the catalog. The catalog includes both actuators (manipulated variables) and sensors (XMEAS). The anchor's direct target includes manipulated_variable_3_a_feed, which is the actuator for A feed. So that's a key variable. But we need diagnostic variables that would show symptoms. For a loss of A feed in stream 1, we'd expect: \n- The flow of A feed (XMEAS_1: A feed flow) to drop.\n- The manipulated variable 3 (A feed valve) might be low or show a change.\n- Since A is a reactant, its loss would affect reactor conditions: reactor pressure (XMEAS_7), reactor level (XMEAS_8), reactor temperature (XMEAS_9) might change. But these might also be affected by stream 4 disturbances. We need to distinguish from stream 4 issues. Stream 4 is A/B/C feed, so disturbances there would affect XMEAS_4 (A/B/C feed flow) and composition sensors XMEAS_23-25 (feed components A, B, C). For stream 1 A feed loss, XMEAS_1 would drop, but XMEAS_4 might remain normal. Also, the A feed composition sensor XMEAS_23 (feed component A) might drop if A feed is lost? Actually XMEAS_23 is \"进料组分 A\" (feed component A) - likely the composition of the total feed? Or maybe it's the composition of stream 1? The description says \"进料组分 A\" which could be the A component in the feed. But there are multiple feed streams. Typically in TEP, XMEAS 23-28 are feed component percentages for streams 1-3? Actually, in the standard TEP, XMEAS(23) is component A in stream 1? Let's recall: In the Tennessee Eastman process, there are four feed streams: stream 1 (A, D, E), stream 2 (D, E), stream 3 (E), stream 4 (A, B, C). The XMEAS variables: 1-3 are flow rates of streams 1, 2, 3? Actually, typical TEP: XMEAS(1) is A feed flow (stream 1), XMEAS(2) is D feed flow (stream 2), XMEAS(3) is E feed flow (stream 3), XMEAS(4) is A and C feed flow (stream 4). Then XMEAS(23-28) are feed component percentages: 23: A in stream 1? Wait, I need to check. The catalog given: \n- variable:xmeas_1 | XMEAS_1 (A 进料流量) | role=sensor -> A feed flow. That's likely stream 1 A feed.\n- variable:xmeas_2 | XMEAS_2 (D 进料流量) | role=sensor -> D feed flow (stream 2? Actually D feed is stream 2? In TEP, stream 2 is D feed? Let's see: manipulated variable 1 is D feed, so XMEAS_2 is D feed flow. So stream 2 is D feed? But there's also stream 1 A feed, stream 2 D feed, stream 3 E feed, stream 4 A/C feed. So XMEAS_1",
+      "sibling_anchor_ids": [
+        "faultanchor:stream_4_abc_composition",
+        "faultanchor:stream_4_ac_ratio"
+      ],
+      "source": "openrouter_llm"
+    },
+    {
+      "anchor_id": "faultanchor:stream_2_feed_temperature",
+      "anchor_name": "Stream 2 D-feed temperature disturbance",
+      "diagnostic_variable_ids": [
+        "variable:xmeas_2",
+        "variable:xmeas_26",
+        "variable:manipulated_variable_1_d_feed",
+        "variable:xmeas_6",
+        "variable:xmeas_9",
+        "variable:xmeas_37"
+      ],
+      "direct_target_ids": [
+        "stream:stream_2_d_feed",
+        "component:component_d",
+        "variable:manipulated_variable_1_d_feed"
+      ],
+      "rationale": "Stream 2 D-feed temperature disturbance directly affects D feed flow (XMEAS_2) and D feed composition (XMEAS_26), and the corresponding manipulated variable (MV 1). It propagates to reactor total feed (XMEAS_6), reactor temperature (XMEAS_9), and product D composition (XMEAS_37). These variables distinguish it from siblings that target other streams, valves, or heat-transfer surfaces.",
+      "sibling_anchor_ids": [
+        "faultanchor:multi_valve_stiction",
+        "faultanchor:separator_coolant_valve_stiction",
+        "faultanchor:stream_4_feed_temperature",
+        "faultanchor:stripper_heat_transfer"
+      ],
+      "source": "openrouter_llm_batch"
+    },
+    {
+      "anchor_id": "faultanchor:stream_4_abc_composition",
+      "anchor_name": "Stream 4 A/B/C composition disturbance",
+      "diagnostic_variable_ids": [
+        "variable:xmeas_23",
+        "variable:xmeas_24",
+        "variable:xmeas_25",
+        "variable:xmeas_26",
+        "variable:xmeas_27",
+        "variable:xmeas_28"
+      ],
+      "direct_target_ids": [
+        "stream:stream_4_abc_feed",
+        "component:component_a",
+        "component:component_b",
+        "component:component_c",
+        "variable:manipulated_variable_4_a_and_c_feed"
+      ],
+      "rationale": "We are asked to curate discriminative symptom variables for the anchor \"faultanchor:stream_4_abc_composition\". The anchor is about random A/B/C composition deviations in stream 4. Direct targets include stream:stream_4_abc_feed, components A, B, C, and manipulated_variable_4_a_and_c_feed. Sibling anchors are listed, each with overlapping targets. We need to select 3-6 variable node ids from the catalog that are most diagnostic for this anchor, helping distinguish it from sibling anchors when RBC contribution values are available. We must return strict JSON with keys: anchor_id, diagnostic_variable_ids, rationale.\n\nFirst, understand the anchor: Stream 4 A/B/C composition disturbance. This likely means that the composition of A, B, and C in stream 4 (the A/B/C feed stream) is varying randomly. This is different from a pure A-feed loss (stream 1), A/C ratio disturbance (stream 4), B-composition disturbance (stream 4), C-header pressure disturbance, or feed temperature disturbance. The key is that all three components A, B, C are affected in composition, not just one or two. So we need variables that reflect the composition of these components in the feed or downstream effects that are specific to combined A/B/C composition changes.\n\nThe catalog includes many XMEAS variables (sensors) and manipulated variables (actuators). We need to pick variables that are diagnostic. Since the anchor is about composition deviations in stream 4, the most direct measurements would be the feed composition sensors for A, B, C: XMEAS_23 (进料组分 A), XMEAS_24 (进料组分 B), XMEAS_25 (进料组分 C). These directly measure the composition of A, B, C in the feed. However, note that the feed composition sensors might be measuring the overall feed composition, not specifically stream 4? The description says \"进料组分 A\" etc. In the Tennessee Eastman process, there are multiple feed streams: Stream 1 (A feed), Stream 2 (D feed), Stream 3 (E feed), Stream 4 (A, B, C feed). The composition sensors XMEAS 23-28 are for the feed components. Typically, XMEAS 23 is A feed composition (maybe in stream 1?), but the label says \"进料组分 A\" which could be the composition of A in the combined feed? Actually, in the standard TE process, XMEAS(23) to XMEAS(28) are the feed component mole fractions for the reactor feed? Let's recall: The TE process has four feed streams: A, D, E, and A/B/C. The measurements XMEAS(1) is A feed flow, XMEAS(2) D feed flow, XMEAS(3) E feed flow, XMEAS(4) A/B/C feed flow. Then XMEAS(23) is component A in the feed? Actually, standard TE process: XMEAS(23) is component A in the reactor feed? Wait, I need to be careful. The catalog lists: \n- variable:xmeas_23 | XMEAS_23 (进料组分 A) | role=sensor\n- variable:xmeas_24 | XMEAS_24 (进料组分 B) | role=sensor\n- variable:xmeas_25 | XMEAS_25 (进料组分 C) | role=sensor\n- variable:xmeas_26 | XMEAS_26 (进料组分 D) | role=sensor\n- variable:xmeas_27 | XMEAS_27 (进料组分 E) | role=sensor\n- variable:xmeas_28 | XMEAS_28 (进料组分 F) | role=sensor\n\nThese are likely the composition of the reactor feed stream (combined feed). But the anchor is specifically about stream 4 composition. Stream 4 is the A/B/C feed. So the composition of A, B, C in stream 4 would directly affect the reactor feed composition of A, B, C. So XMEAS_23, 24, 25 would be directly impacted. However, sibling anchors also affect these: stream_1_a_feed_loss would affect A composition (X",
+      "sibling_anchor_ids": [
+        "faultanchor:stream_1_a_feed_loss",
+        "faultanchor:stream_4_ac_ratio",
+        "faultanchor:stream_4_b_composition",
+        "faultanchor:stream_4_c_header_pressure",
+        "faultanchor:stream_4_feed_temperature"
+      ],
+      "source": "openrouter_llm"
+    },
+    {
+      "anchor_id": "faultanchor:stream_4_ac_ratio",
+      "anchor_name": "Stream 4 A/C-ratio disturbance",
+      "diagnostic_variable_ids": [
+        "variable:xmeas_23",
+        "variable:xmeas_25",
+        "variable:xmeas_29",
+        "variable:xmeas_31",
+        "variable:manipulated_variable_4_a_and_c_feed"
+      ],
+      "direct_target_ids": [
+        "stream:stream_4_abc_feed",
+        "component:component_a",
+        "component:component_c",
+        "variable:manipulated_variable_4_a_and_c_feed"
+      ],
+      "rationale": "Seed discriminator for stream-4 A/C composition ratio changes.",
+      "sibling_anchor_ids": [
+        "faultanchor:stream_4_b_composition",
+        "faultanchor:stream_4_c_header_pressure",
+        "faultanchor:stream_4_feed_temperature"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:stream_4_b_composition",
+      "anchor_name": "Stream 4 B-composition disturbance",
+      "diagnostic_variable_ids": [
+        "variable:xmeas_24",
+        "variable:xmeas_30",
+        "variable:xmeas_4",
+        "variable:manipulated_variable_4_a_and_c_feed"
+      ],
+      "direct_target_ids": [
+        "stream:stream_4_abc_feed",
+        "component:component_b",
+        "variable:manipulated_variable_4_a_and_c_feed"
+      ],
+      "rationale": "Seed discriminator for stream-4 B-composition shifts.",
+      "sibling_anchor_ids": [
+        "faultanchor:stream_4_ac_ratio",
+        "faultanchor:stream_4_c_header_pressure",
+        "faultanchor:stream_4_feed_temperature"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:stream_4_c_header_pressure",
+      "anchor_name": "Stream 4 C-header pressure disturbance",
+      "diagnostic_variable_ids": [
+        "variable:xmeas_4",
+        "variable:xmeas_6",
+        "variable:xmeas_7",
+        "variable:xmeas_25"
+      ],
+      "direct_target_ids": [
+        "stream:stream_4_abc_feed",
+        "component:component_c",
+        "variable:manipulated_variable_4_a_and_c_feed"
+      ],
+      "rationale": "Seed discriminator for stream-4 pressure and feed-rate perturbations.",
+      "sibling_anchor_ids": [
+        "faultanchor:stream_4_ac_ratio",
+        "faultanchor:stream_4_b_composition",
+        "faultanchor:stream_4_feed_temperature"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:stream_4_feed_temperature",
+      "anchor_name": "Stream 4 feed temperature disturbance",
+      "diagnostic_variable_ids": [
+        "variable:manipulated_variable_4_a_and_c_feed",
+        "variable:xmeas_4",
+        "variable:xmeas_25",
+        "variable:xmeas_31",
+        "variable:xmeas_18",
+        "variable:xmeas_6"
+      ],
+      "direct_target_ids": [
+        "stream:stream_4_abc_feed",
+        "component:component_c",
+        "variable:manipulated_variable_4_a_and_c_feed"
+      ],
+      "rationale": "Seed discriminator for stream-4 feed temperature faults using the feed actuator plus header pressure, separator composition, and stream-4 thermal response variables.",
+      "sibling_anchor_ids": [
+        "faultanchor:stream_4_abc_composition",
+        "faultanchor:stream_4_ac_ratio",
+        "faultanchor:stream_4_b_composition",
+        "faultanchor:stream_4_c_header_pressure"
+      ],
+      "source": "seed_curated"
+    },
+    {
+      "anchor_id": "faultanchor:stripper_heat_transfer",
+      "anchor_name": "Stripper heat-transfer disturbance",
+      "diagnostic_variable_ids": [
+        "variable:manipulated_variable_9_steam",
+        "variable:xmeas_15",
+        "variable:xmeas_16",
+        "variable:xmeas_18",
+        "variable:xmeas_19"
+      ],
+      "direct_target_ids": [
+        "equipment:stripper",
+        "stream:steam",
+        "variable:manipulated_variable_9_steam"
+      ],
+      "rationale": "Seed discriminator for stripper heat-transfer faults using steam-side actuation and stripper temperature/product composition indicators.",
+      "sibling_anchor_ids": [
+        "faultanchor:multi_valve_stiction",
+        "faultanchor:separator_coolant_valve_stiction",
+        "faultanchor:stream_4_feed_temperature"
+      ],
+      "source": "seed_curated"
+    }
+  ],
+  "artifact_path": "data/processed/rca/anchor_discriminators.json",
+  "generated_at": "2026-05-08T09:14:14Z",
+  "llm_logs": [
+    {
+      "anchor_id": "__batch__",
+      "diagnostic_variable_ids": {
+        "faultanchor:separator_coolant_valve_stiction": [
+          "variable:manipulated_variable_11_condenser_coolant",
+          "variable:xmeas_11",
+          "variable:xmeas_12",
+          "variable:xmeas_13",
+          "variable:xmeas_22",
+          "variable:xmeas_14"
+        ],
+        "faultanchor:stream_2_feed_temperature": [
+          "variable:xmeas_2",
+          "variable:xmeas_26",
+          "variable:manipulated_variable_1_d_feed",
+          "variable:xmeas_6",
+          "variable:xmeas_9",
+          "variable:xmeas_37"
+        ]
+      },
+      "model": "deepseek/deepseek-v4-pro-20260423",
+      "raw_content_preview": "{\n  \"anchors\": [\n    {\n      \"anchor_id\": \"faultanchor:stream_2_feed_temperature\",\n      \"diagnostic_variable_ids\": [\n        \"variable:xmeas_2\",\n        \"variable:xmeas_26\",\n        \"variable:manipulated_variable_1_d_feed\",\n        \"variable:xmeas_6\",\n        \"variable:xmeas_9\",\n        \"variable:xmeas_37\"\n      ],\n      \"rationale\": \"Stream 2 D-feed temperature disturbance directly affects D feed flow (XMEAS_2) and D feed composition (XMEAS_26), and the corresponding manipulated variable (MV 1). It propagates to reactor total feed (XMEAS_6), reactor temperature (XMEAS_9), and product D compo",
+      "usage": {
+        "completion_tokens": 2792,
+        "completion_tokens_details": {
+          "audio_tokens": 0,
+          "image_tokens": 0,
+          "reasoning_tokens": 2401
+        },
+        "cost": 0.01006604,
+        "cost_details": {
+          "upstream_inference_completions_cost": 0.0094928,
+          "upstream_inference_cost": 0.01006604,
+          "upstream_inference_prompt_cost": 0.00057324
+        },
+        "is_byok": false,
+        "prompt_tokens": 2334,
+        "prompt_tokens_details": {
+          "audio_tokens": 0,
+          "cache_write_tokens": 0,
+          "cached_tokens": 2176,
+          "video_tokens": 0
+        },
+        "total_tokens": 5126
+      }
+    }
+  ],
+  "model": "deepseek/deepseek-v4-pro",
+  "ok": true
+}

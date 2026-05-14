@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import inspect
 import json
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import SimpleNamespace
@@ -729,6 +731,11 @@ def test_tep_raw_producer_emits_adapter_compatible_rbc_records(tmp_path: Path) -
     assert record["simulation_run"] == 1
     assert record["variables"][0] == "XMEAS_2"
     assert record["variable_contributions"]["XMEAS_2"] > 0.5
+    assert record["extra"]["graph_contributions"]["variable:xmeas_2"] > 0.5
+    dynamic_features = record["extra"]["root_kgd_dynamic_features"]
+    assert dynamic_features["feature_version"] == "scenario_dynamic_v1"
+    assert "xmeas_2__mean" in dynamic_features["features"]
+    assert "xmv_1__std" in dynamic_features["features"]
     assert record["detector"]["backend"] == TEP_RBC_BACKEND
     assert record["detector"]["produces_root_cause"] is False
     assert _forbidden_keys(record) == []
@@ -739,6 +746,46 @@ def test_tep_raw_producer_emits_adapter_compatible_rbc_records(tmp_path: Path) -
     assert evidence.adapter.name == "tep"
     assert selector.fault_numbers == (1,)
     assert selector.simulation_runs == (1,)
+
+
+def test_tep_producer_defaults_align_with_tepkg_style(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TEP producer/workflow/CLI defaults should match RootLens/TEP_KG-style runs."""
+    producer_signature = inspect.signature(build_tep_records)
+    assert producer_signature.parameters["window_size"].default == 100
+    assert producer_signature.parameters["row_stride"].default == 25
+    assert producer_signature.parameters["fault_free_max_rows"].default is None
+    assert producer_signature.parameters["n_components"].default == 18
+
+    workflow_config = dataset_record_workflow.DatasetRecordBuildConfig(
+        dataset="tep",
+        output_jsonl=Path("records.jsonl"),
+        model_backend=TEP_RBC_BACKEND,
+    )
+    assert workflow_config.tep_window_size == 100
+    assert workflow_config.tep_row_stride == 25
+    assert workflow_config.tep_fault_free_max_rows is None
+    assert workflow_config.tep_n_components == 18
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build_dataset_records.py",
+            "--dataset",
+            "tep",
+            "--input-root",
+            "data/raw/tep",
+            "--output-jsonl",
+            "records.jsonl",
+        ],
+    )
+    args = build_script.parse_args()
+    assert args.tep_window_size == 100
+    assert args.tep_row_stride == 25
+    assert args.tep_fault_free_max_rows is None
+    assert args.tep_n_components == 18
 
 
 def test_tep_raw_producer_accepts_compact_channel_headers(tmp_path: Path) -> None:
@@ -761,6 +808,9 @@ def test_tep_raw_producer_accepts_compact_channel_headers(tmp_path: Path) -> Non
     assert record["variables"][0] == "XMEAS_2"
     assert set(record["extra"]["source_columns"]) == {"xmeas1", "xmeas2", "xmv1"}
     assert "XMEAS_2" in record["variable_contributions"]
+    assert "variable:xmeas_2" in record["extra"]["graph_contributions"]
+    assert "variable:manipulated_variable_1_d_feed" in record["extra"]["graph_contributions"]
+    assert "xmeas_2__std" in record["extra"]["root_kgd_dynamic_features"]["features"]
     assert evidence_from_records(records, dataset="tep")[0].adapter is not None
 
 

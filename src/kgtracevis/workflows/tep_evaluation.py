@@ -15,7 +15,18 @@ from kgtracevis.experiments.adapter_pipeline import run_adapter_pipeline
 from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
 from kgtracevis.metrics import mean_reciprocal_rank, top_k_root_cause_accuracy
 from kgtracevis.producers import TEP_RBC_BACKEND
+from kgtracevis.producers.tep_records import (
+    DEFAULT_TEP_FAULT_FREE_MAX_ROWS,
+    DEFAULT_TEP_N_COMPONENTS,
+    DEFAULT_TEP_ROW_STRIDE,
+    DEFAULT_TEP_WINDOW_SIZE,
+)
 from kgtracevis.workflows.dataset_records import DatasetRecordBuildConfig, build_dataset_records
+from kgtracevis.workflows.root_cause_provider_selection import (
+    RootCauseProviderSelectionConfig,
+    normalize_root_cause_provider_selection,
+)
+from kgtracevis.workflows.tep_root_kgd import DEFAULT_ROOT_KGD_ASSET_DIR, load_root_kgd_assets
 
 SUMMARY_FILENAME = "tep_rca_evaluation_summary.json"
 TABLE_FILENAME = "tep_rca_evaluation_cases.csv"
@@ -36,14 +47,15 @@ class TepRcaEvaluationConfig:
     faults: tuple[int, ...] = (1, 2, 6)
     max_runs_per_fault: int = 2
     max_cases: int | None = None
-    window_size: int = 100
-    row_stride: int = 200
-    fault_free_max_rows: int | None = 1000
+    window_size: int = DEFAULT_TEP_WINDOW_SIZE
+    row_stride: int = DEFAULT_TEP_ROW_STRIDE
+    fault_free_max_rows: int | None = DEFAULT_TEP_FAULT_FREE_MAX_ROWS
     top_variables: int = 8
-    n_components: int | None = 6
+    n_components: int | None = DEFAULT_TEP_N_COMPONENTS
     top_k: int = 5
     kg_node_paths: tuple[Path, ...] = DEFAULT_TEP_NODE_PATHS
     kg_edge_paths: tuple[Path, ...] = DEFAULT_TEP_EDGE_PATHS
+    tep_rca_provider: str = "native"
     use_neo4j_runtime: bool = False
     overwrite: bool = False
 
@@ -73,6 +85,7 @@ def run_tep_rca_evaluation(config: TepRcaEvaluationConfig) -> TepRcaEvaluationOu
     records_path = _prepare_records(config)
     kg_node_paths = None if config.use_neo4j_runtime else list(config.kg_node_paths)
     kg_edge_paths = None if config.use_neo4j_runtime else list(config.kg_edge_paths)
+    root_cause_provider_config = _root_cause_provider_config(config)
     adapter_output = run_adapter_pipeline(
         records_path,
         output_dir / ADAPTER_OUTPUT_DIRNAME,
@@ -81,7 +94,7 @@ def run_tep_rca_evaluation(config: TepRcaEvaluationConfig) -> TepRcaEvaluationOu
         overwrite=config.overwrite,
         kg_node_paths=kg_node_paths,
         kg_edge_paths=kg_edge_paths,
-        tep_rca_provider="native",
+        tep_rca_provider=root_cause_provider_config.tep_rca_provider,
     )
     graph = (
         KnowledgeGraph.from_paths(
@@ -105,8 +118,8 @@ def run_tep_rca_evaluation(config: TepRcaEvaluationConfig) -> TepRcaEvaluationOu
         "artifact_type": ARTIFACT_TYPE,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "claim_boundary": (
-            "TEP fault numbers are used only as evaluation references; native RCA "
-            "scoring uses adapter evidence and source-constrained KG support paths."
+            "TEP fault numbers are used only as evaluation references; RCA scoring "
+            "uses the configured provider and does not treat labels as input causes."
         ),
         "config": _config_payload(config),
         "records_path": str(records_path),
@@ -216,6 +229,9 @@ def _aggregate_metrics(cases: Sequence[Mapping[str, Any]], *, top_k: int) -> dic
 def _expected_fault_candidate_id(fault_number: int | None, *, graph: KnowledgeGraph) -> str | None:
     if fault_number is None:
         return None
+    root_kgd_expected = _expected_root_kgd_anchor_id(fault_number)
+    if root_kgd_expected is not None:
+        return root_kgd_expected
     prefix = f"Fault{fault_number:02d}"
     candidates = sorted(
         node.id
@@ -223,6 +239,20 @@ def _expected_fault_candidate_id(fault_number: int | None, *, graph: KnowledgeGr
         if node.scenario == "tep" and node.label == "FaultType" and node.id.startswith(prefix)
     )
     return candidates[0] if candidates else prefix
+
+
+def _expected_root_kgd_anchor_id(fault_number: int) -> str | None:
+    try:
+        assets = load_root_kgd_assets(DEFAULT_ROOT_KGD_ASSET_DIR)
+    except FileNotFoundError:
+        return None
+    candidates = sorted(
+        str(node_id)
+        for node_id, node in assets.graph["nodes"].items()
+        if str(node.get("entity_type", "")) == "FaultAnchor"
+        and int(fault_number) in {int(value) for value in node.get("fault_numbers", [])}
+    )
+    return candidates[0] if candidates else None
 
 
 def _fault_number(*items: Mapping[str, Any]) -> int | None:
@@ -295,6 +325,7 @@ def _write_case_table(cases: Sequence[Mapping[str, Any]], output_path: Path) -> 
 
 
 def _config_payload(config: TepRcaEvaluationConfig) -> dict[str, Any]:
+    provider_config = _root_cause_provider_config(config)
     return {
         "raw_data_dir": str(config.raw_data_dir),
         "input_records_path": str(config.input_records_path) if config.input_records_path else None,
@@ -310,7 +341,24 @@ def _config_payload(config: TepRcaEvaluationConfig) -> dict[str, Any]:
         "kg_node_paths": [str(path) for path in config.kg_node_paths],
         "kg_edge_paths": [str(path) for path in config.kg_edge_paths],
         "use_neo4j_runtime": config.use_neo4j_runtime,
+        "root_cause_provider_config": _root_cause_provider_payload(provider_config),
     }
+
+
+def _root_cause_provider_payload(
+    config: RootCauseProviderSelectionConfig,
+) -> dict[str, Any]:
+    return {
+        "tep_rca_provider": config.tep_rca_provider,
+    }
+
+
+def _root_cause_provider_config(
+    config: TepRcaEvaluationConfig,
+) -> RootCauseProviderSelectionConfig:
+    return RootCauseProviderSelectionConfig(
+        tep_rca_provider=normalize_root_cause_provider_selection(config.tep_rca_provider),
+    )
 
 
 def _ensure_can_write(path: Path, *, overwrite: bool) -> None:

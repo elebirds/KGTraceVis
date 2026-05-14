@@ -55,8 +55,8 @@ class TepScenarioSelector(BaseModel):
     simulation_runs: tuple[int, ...] = ()
 
 
-class TepNativeRcaConfig(BaseModel):
-    """Scoring knobs for KGTraceVis-native TEP RCA ranking."""
+class TepSimpleRcaConfig(BaseModel):
+    """Scoring knobs for the legacy direct-support TEP RCA fallback."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -68,12 +68,12 @@ class TepNativeRcaConfig(BaseModel):
     max_depth: int = Field(default=4, ge=1)
     max_support_variables: int = Field(default=8, ge=1)
     min_support_contribution: float = Field(default=0.0, ge=0.0, le=1.0)
-    source_name: str = "tep_native_kg"
+    source_name: str = "tep_simple_kg"
 
 
 @dataclass(frozen=True)
 class TepVariableEvidence:
-    """One normalized TEP variable observation used by native RCA scoring."""
+    """One normalized TEP variable observation used by simple RCA scoring."""
 
     variable: str
     contribution: float
@@ -88,18 +88,18 @@ class _TepSupportPath:
     path_edges: tuple[KGEdge, ...]
 
 
-class TepNativeRcaProvider:
-    """Rank TEP root-cause candidates directly from Evidence and KGTraceVis KG."""
+class TepSimpleRcaProvider:
+    """Rank TEP root-cause candidates from KGTraceVis direct KG support."""
 
     def __init__(
         self,
         graph: KnowledgeGraph | None = None,
         *,
-        config: TepNativeRcaConfig | None = None,
+        config: TepSimpleRcaConfig | None = None,
     ) -> None:
-        """Create a native provider with an optional fixed graph."""
+        """Create a simple fallback provider with an optional fixed graph."""
         self.graph = graph
-        self.config = config or TepNativeRcaConfig()
+        self.config = config or TepSimpleRcaConfig()
 
     def reason_root_causes(
         self,
@@ -109,16 +109,16 @@ class TepNativeRcaProvider:
         linked_entities: list[dict[str, Any]],
         top_k: int = 5,
     ) -> RcaReasoningResult:
-        """Return aligned native TEP support paths and root-cause rankings."""
+        """Return aligned simple TEP support paths and root-cause rankings."""
         del linked_entities
         ranked = self.rank_root_causes(evidence, graph=graph, top_k=top_k)
         return RcaReasoningResult(
             case_id=evidence.case_id,
             top_k_paths=_native_top_k_paths_from_ranked(ranked, top_k=top_k),
             ranked_root_causes=ranked,
-            scoring_method="tep_native_kg",
+            scoring_method="tep_simple_kg",
             metadata={
-                "reasoner": "tep_native_graph",
+                "reasoner": "tep_simple_graph",
                 "scenario_scope": ["tep", "shared"],
                 "uses_fault_number_for_scoring": False,
             },
@@ -132,7 +132,7 @@ class TepNativeRcaProvider:
         top_k: int = 5,
         top_k_paths: list[dict[str, Any]] | None = None,
     ) -> list[RankedRootCause]:
-        """Return KG-backed native RCA rankings for TEP evidence."""
+        """Return KG-backed simple RCA rankings for TEP evidence."""
         if evidence.dataset != "tep":
             return []
         active_graph = graph or self.graph
@@ -500,7 +500,7 @@ def _native_root_cause_from_support(
     evidence_total: float,
     variable_count: int,
     rank: int,
-    config: TepNativeRcaConfig,
+    config: TepSimpleRcaConfig,
     top_k_paths: list[dict[str, Any]],
 ) -> RankedRootCause:
     total_contribution = sum(path.variable.contribution for path in support_paths)
@@ -542,7 +542,7 @@ def _native_root_cause_from_support(
         candidate_id=candidate.id,
         candidate_name=candidate.name,
         candidate_label=candidate.label,
-        candidate_role="native_kg_candidate",
+        candidate_role="simple_kg_candidate",
         score=round(max(0.0, score), 4),
         confidence=round(max(0.0, min(1.0, graph_confidence)), 4),
         evidence_match=round(max(0.0, min(1.0, evidence_match)), 4),
@@ -560,7 +560,7 @@ def _native_root_cause_from_support(
             }
             for path in support_paths
         ],
-        scoring_method="tep_native_kg",
+        scoring_method="tep_simple_kg",
         scoring_details={
             "formula": "alpha*evidence_match + beta*graph_confidence + "
             "delta*propagation_support - gamma*path_length",

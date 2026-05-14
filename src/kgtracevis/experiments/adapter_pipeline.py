@@ -66,9 +66,6 @@ def run_adapter_pipeline(
     kg_node_paths: list[str | Path] | None = None,
     kg_edge_paths: list[str | Path] | None = None,
     tep_rca_provider: str | None = None,
-    tep_rca_artifact_dir: str | Path | None = None,
-    tep_rca_ranking_path: str | Path | None = None,
-    tep_rca_contributions_path: str | Path | None = None,
 ) -> AdapterPipelineOutput:
     """Run records through Evidence adapters and ``KGTracePipeline``.
 
@@ -97,10 +94,8 @@ def run_adapter_pipeline(
     if pipeline is not None and (kg_node_paths or kg_edge_paths):
         raise ValueError("pass either pipeline or KG CSV overlay paths, not both")
     provider_config = _root_cause_provider_config(
+        evidence_items=evidence_items,
         tep_rca_provider=tep_rca_provider,
-        tep_rca_artifact_dir=tep_rca_artifact_dir,
-        tep_rca_ranking_path=tep_rca_ranking_path,
-        tep_rca_contributions_path=tep_rca_contributions_path,
     )
     if pipeline is not None and provider_config.tep_rca_provider != "none":
         raise ValueError("pass either pipeline or TEP RCA provider options, not both")
@@ -241,22 +236,14 @@ def _pipeline_from_kg_paths(
 
 def _root_cause_provider_config(
     *,
+    evidence_items: list[Evidence],
     tep_rca_provider: str | None,
-    tep_rca_artifact_dir: str | Path | None,
-    tep_rca_ranking_path: str | Path | None,
-    tep_rca_contributions_path: str | Path | None,
 ) -> RootCauseProviderSelectionConfig:
+    provider = tep_rca_provider
+    if provider is None and any(evidence.dataset == "tep" for evidence in evidence_items):
+        provider = "native"
     return RootCauseProviderSelectionConfig(
-        tep_rca_provider=normalize_root_cause_provider_selection(tep_rca_provider),
-        tep_rca_artifact_dir=Path(tep_rca_artifact_dir)
-        if tep_rca_artifact_dir is not None
-        else None,
-        tep_rca_ranking_path=Path(tep_rca_ranking_path)
-        if tep_rca_ranking_path is not None
-        else None,
-        tep_rca_contributions_path=Path(tep_rca_contributions_path)
-        if tep_rca_contributions_path is not None
-        else None,
+        tep_rca_provider=normalize_root_cause_provider_selection(provider),
     )
 
 
@@ -267,17 +254,6 @@ def _root_cause_provider_summary(
         return {}
     return {
         "root_cause_provider": config.tep_rca_provider,
-        "tep_rca_artifact_dir": (
-            str(config.tep_rca_artifact_dir) if config.tep_rca_artifact_dir else None
-        ),
-        "tep_rca_ranking_path": (
-            str(config.tep_rca_ranking_path) if config.tep_rca_ranking_path else None
-        ),
-        "tep_rca_contributions_path": (
-            str(config.tep_rca_contributions_path)
-            if config.tep_rca_contributions_path
-            else None
-        ),
     }
 
 

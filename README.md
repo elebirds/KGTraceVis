@@ -226,10 +226,10 @@ Validate example evidence:
 uv run python scripts/run_examples.py
 ```
 
-TEP RCA remains opt-in. Local smoke runs can select the KGTraceVis-native
-provider with `--tep-rca-provider native`; bridge-mode artifacts can be selected
-with `--tep-rca-provider artifact` plus an explicit artifact directory or
-ranking path.
+TEP RCA is computed in the pipeline with the ported Root-KGD provider whenever
+TEP records are run through the TEP evaluation workflow or adapter pipeline.
+`scripts/run_examples.py` remains a lightweight generic evidence/KG smoke and
+does not expose TEP provider mode switches.
 
 Build KG CSV files:
 
@@ -645,13 +645,12 @@ uv run python scripts/run_adapter_pipeline.py \
   --overwrite
 ```
 
-For TEP records, `scripts/run_adapter_pipeline.py` accepts the same opt-in RCA
-provider flags: `--tep-rca-provider native` uses the native TEP provider, while
-`--tep-rca-provider artifact` requires `--tep-rca-artifact-dir` or
-`--tep-rca-ranking-path`. Native TEP RCA uses TEP variable contributions and
-`tep`/`shared` KG support paths to populate both `top_k_paths` and
-`ranked_root_causes`; fault-number labels are only selector/provenance metadata,
-not scoring input.
+For TEP records, `scripts/run_adapter_pipeline.py` automatically uses the
+ported TEP Root-KGD provider. The provider consumes the current Evidence
+variable contributions plus dynamic window features, then populates both
+`top_k_paths` and `ranked_root_causes`. Precomputed TEP_KG ranking artifacts are
+not part of this runtime path, and fault-number labels are evaluation
+references only, not scoring input.
 
 To run the paper-facing TEP RCA evaluation from raw TEP CSVs:
 

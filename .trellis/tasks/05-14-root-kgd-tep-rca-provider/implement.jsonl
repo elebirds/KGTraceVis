@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Root-KGD provider and assets must live under approved backend/package paths."}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "TEP producer and Evidence adapter changes must keep reasoning outputs out of adapter records."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "RCA result shape and ranked_root_causes/top_k_paths contracts are backend-wide runtime payloads."}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "RcaReasoner integration and KGTracePipeline provider boundary are defined here."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Runtime asset loading and ambiguous/missing RCA inputs should fail or degrade explicitly."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Focused tests and lint commands are required before finishing."}

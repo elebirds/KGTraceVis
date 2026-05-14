@@ -7,6 +7,10 @@ import json
 from pathlib import Path
 
 from kgtracevis.workflows.dataset_records import (
+    DEFAULT_TEP_FAULT_FREE_MAX_ROWS,
+    DEFAULT_TEP_N_COMPONENTS,
+    DEFAULT_TEP_ROW_STRIDE,
+    DEFAULT_TEP_WINDOW_SIZE,
     MODEL_BACKENDS,
     TEP_RBC_BACKEND,
     DatasetRecordBuildConfig,
@@ -116,20 +120,24 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--tep-window-size",
-        default=100,
+        default=DEFAULT_TEP_WINDOW_SIZE,
         type=int,
         help="Number of TEP samples per fault/run window.",
     )
     parser.add_argument(
         "--tep-row-stride",
-        default=25,
+        default=DEFAULT_TEP_ROW_STRIDE,
         type=int,
         help="Stride for sampling fault-free rows when fitting the TEP profile.",
     )
     parser.add_argument(
         "--tep-fault-free-max-rows",
+        default=DEFAULT_TEP_FAULT_FREE_MAX_ROWS,
         type=int,
-        help="Optional cap on sampled fault-free rows used for the TEP profile.",
+        help=(
+            "Optional cap on sampled fault-free rows used for the TEP profile. "
+            "Defaults to no cap."
+        ),
     )
     parser.add_argument(
         "--tep-max-runs-per-fault",
@@ -145,8 +153,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--tep-n-components",
+        default=DEFAULT_TEP_N_COMPONENTS,
         type=int,
-        help="Optional PCA component count for TEP residual reconstruction.",
+        help="PCA component count for TEP residual reconstruction.",
     )
     parser.add_argument("--overwrite", action="store_true", help="Replace existing JSONL output.")
     args = parser.parse_args()
