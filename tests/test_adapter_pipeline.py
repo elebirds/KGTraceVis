@@ -158,23 +158,23 @@ def test_run_adapter_pipeline_default_kg_handles_wm811k_loc(tmp_path: Path) -> N
     assert case["top_k_paths"][0]["target_entity_id"] != "GlueRemovalInsufficient"
 
 
-def test_run_adapter_pipeline_uses_native_tep_rca_provider_by_default(
+def test_run_adapter_pipeline_uses_tep_root_kgd_reasoner(
     tmp_path: Path,
 ) -> None:
-    """TEP records should enter Root-KGD RCA without a separate artifact mode."""
+    """TEP records should use the single supported Root-KGD RCA provider."""
     records_path = _write_tep_record(tmp_path)
     nodes_path, edges_path = _write_empty_overlay_csv(tmp_path)
 
     output = run_adapter_pipeline(
         records_path,
-        tmp_path / "tep_native",
+        tmp_path / "tep_root_kgd",
         dataset="tep",
         kg_node_paths=[nodes_path],
         kg_edge_paths=[edges_path],
     )
 
     case = output.summary["cases"][0]
-    assert output.summary["pipeline"]["root_cause_provider"] == "native"
+    assert output.summary["pipeline"]["tep_rca_reasoner"] == "tep_root_kgd"
     assert case["ranked_root_causes"]
     assert case["ranked_root_causes"][0]["candidate_id"] == "faultanchor:stream_1_a_feed_loss"
     assert case["ranked_root_causes"][0]["scoring_method"] == "tep_root_kgd"
@@ -232,6 +232,39 @@ def test_run_adapter_pipeline_cli_reports_compact_result(tmp_path: Path) -> None
     assert payload["explanation_scope"] == EXPLANATION_SCOPE
     assert Path(payload["summary_path"]).is_file()
     assert Path(payload["table_path"]).is_file()
+
+
+def test_run_adapter_pipeline_cli_uses_tep_root_kgd_reasoner(
+    tmp_path: Path,
+) -> None:
+    """The generic adapter CLI should use the single TEP Root-KGD provider."""
+    records_path = _write_tep_record(tmp_path)
+    nodes_path, edges_path = _write_empty_overlay_csv(tmp_path)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_adapter_pipeline.py",
+            "--input",
+            str(records_path),
+            "--dataset",
+            "tep",
+            "--output-dir",
+            str(tmp_path / "cli_tep_native"),
+            "--kg-node-path",
+            str(nodes_path),
+            "--kg-edge-path",
+            str(edges_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    summary = json.loads(Path(payload["summary_path"]).read_text(encoding="utf-8"))
+    assert summary["pipeline"]["tep_rca_reasoner"] == "tep_root_kgd"
+    assert summary["cases"][0]["ranked_root_causes"][0]["scoring_method"] == "tep_root_kgd"
 
 
 def _read_table(path: Path) -> list[dict[str, str]]:

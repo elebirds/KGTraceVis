@@ -58,18 +58,17 @@ def test_tep_evaluation_uses_fault_number_only_as_reference(tmp_path: Path) -> N
 
 
 def test_tep_evaluation_defaults_align_with_tepkg_style(tmp_path: Path) -> None:
-    """Evaluation defaults should use the RootLens/TEP_KG-style producer settings."""
+    """The dedicated TEP evaluation workflow uses Root-KGD as its only RCA path."""
     config = TepRcaEvaluationConfig(output_dir=tmp_path / "eval")
 
     assert config.window_size == 100
     assert config.row_stride == 25
     assert config.fault_free_max_rows is None
     assert config.n_components == 18
-    assert config.tep_rca_provider == "native"
 
 
 def test_tep_evaluation_cli_uses_native_root_kgd_provider(tmp_path: Path) -> None:
-    """Evaluation CLI should use native Root-KGD without public artifact flags."""
+    """Evaluation CLI should use the single TEP Root-KGD provider."""
     records_path = _write_fault_06_record(tmp_path)
     output_dir = tmp_path / "eval_native"
 
@@ -98,8 +97,8 @@ def test_tep_evaluation_cli_uses_native_root_kgd_provider(tmp_path: Path) -> Non
     case = summary["cases"][0]
     root_cause = case["ranked_root_causes"][0]
 
-    assert summary["config"]["root_cause_provider_config"]["tep_rca_provider"] == "native"
-    assert adapter_summary["pipeline"]["root_cause_provider"] == "native"
+    assert summary["config"]["tep_rca_reasoner"] == "tep_root_kgd"
+    assert adapter_summary["pipeline"]["tep_rca_reasoner"] == "tep_root_kgd"
     assert case["expected_root_cause_id"] == "faultanchor:stream_1_a_feed_loss"
     assert case["rank"] == 1
     assert root_cause["candidate_id"] == "faultanchor:stream_1_a_feed_loss"

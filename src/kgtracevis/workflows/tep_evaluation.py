@@ -22,10 +22,6 @@ from kgtracevis.producers.tep_records import (
     DEFAULT_TEP_WINDOW_SIZE,
 )
 from kgtracevis.workflows.dataset_records import DatasetRecordBuildConfig, build_dataset_records
-from kgtracevis.workflows.root_cause_provider_selection import (
-    RootCauseProviderSelectionConfig,
-    normalize_root_cause_provider_selection,
-)
 from kgtracevis.workflows.tep_root_kgd import DEFAULT_ROOT_KGD_ASSET_DIR, load_root_kgd_assets
 
 SUMMARY_FILENAME = "tep_rca_evaluation_summary.json"
@@ -55,7 +51,6 @@ class TepRcaEvaluationConfig:
     top_k: int = 5
     kg_node_paths: tuple[Path, ...] = DEFAULT_TEP_NODE_PATHS
     kg_edge_paths: tuple[Path, ...] = DEFAULT_TEP_EDGE_PATHS
-    tep_rca_provider: str = "native"
     use_neo4j_runtime: bool = False
     overwrite: bool = False
 
@@ -85,7 +80,6 @@ def run_tep_rca_evaluation(config: TepRcaEvaluationConfig) -> TepRcaEvaluationOu
     records_path = _prepare_records(config)
     kg_node_paths = None if config.use_neo4j_runtime else list(config.kg_node_paths)
     kg_edge_paths = None if config.use_neo4j_runtime else list(config.kg_edge_paths)
-    root_cause_provider_config = _root_cause_provider_config(config)
     adapter_output = run_adapter_pipeline(
         records_path,
         output_dir / ADAPTER_OUTPUT_DIRNAME,
@@ -94,7 +88,6 @@ def run_tep_rca_evaluation(config: TepRcaEvaluationConfig) -> TepRcaEvaluationOu
         overwrite=config.overwrite,
         kg_node_paths=kg_node_paths,
         kg_edge_paths=kg_edge_paths,
-        tep_rca_provider=root_cause_provider_config.tep_rca_provider,
     )
     graph = (
         KnowledgeGraph.from_paths(
@@ -325,7 +318,6 @@ def _write_case_table(cases: Sequence[Mapping[str, Any]], output_path: Path) -> 
 
 
 def _config_payload(config: TepRcaEvaluationConfig) -> dict[str, Any]:
-    provider_config = _root_cause_provider_config(config)
     return {
         "raw_data_dir": str(config.raw_data_dir),
         "input_records_path": str(config.input_records_path) if config.input_records_path else None,
@@ -341,24 +333,8 @@ def _config_payload(config: TepRcaEvaluationConfig) -> dict[str, Any]:
         "kg_node_paths": [str(path) for path in config.kg_node_paths],
         "kg_edge_paths": [str(path) for path in config.kg_edge_paths],
         "use_neo4j_runtime": config.use_neo4j_runtime,
-        "root_cause_provider_config": _root_cause_provider_payload(provider_config),
+        "tep_rca_reasoner": "tep_root_kgd",
     }
-
-
-def _root_cause_provider_payload(
-    config: RootCauseProviderSelectionConfig,
-) -> dict[str, Any]:
-    return {
-        "tep_rca_provider": config.tep_rca_provider,
-    }
-
-
-def _root_cause_provider_config(
-    config: TepRcaEvaluationConfig,
-) -> RootCauseProviderSelectionConfig:
-    return RootCauseProviderSelectionConfig(
-        tep_rca_provider=normalize_root_cause_provider_selection(config.tep_rca_provider),
-    )
 
 
 def _ensure_can_write(path: Path, *, overwrite: bool) -> None:

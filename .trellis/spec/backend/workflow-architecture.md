@@ -142,9 +142,7 @@ not the legacy direct-support fallback.
 Signatures and entry points:
 
 ```python
-def build_root_cause_reasoner(
-    config: RootCauseProviderSelectionConfig | None = None,
-) -> RcaReasoner | None: ...
+def build_root_cause_reasoner() -> RcaReasoner: ...
 
 def run_tep_rca_evaluation(
     config: TepRcaEvaluationConfig,
@@ -153,9 +151,14 @@ def run_tep_rca_evaluation(
 
 Runtime contracts:
 
-- `tep_rca_provider="native"` builds `TepRootKgdRcaProvider`.
-- `run_adapter_pipeline(..., dataset="tep")` defaults to native Root-KGD unless
-  a caller supplies an explicit pipeline.
+- `build_pipeline()` attaches `TepRootKgdRcaProvider` as the single supported
+  scenario-specific RCA reasoner.
+- Generic adapter, upload, and evaluation callers must not expose
+  `tep_rca_provider` switches. TEP RCA has no public `none/native/simple/artifact`
+  mode split.
+- `TepRootKgdRcaProvider` returns rankings only for TEP Evidence. For non-TEP
+  Evidence it returns an empty RCA result, and `KGTracePipeline` falls back to
+  the generic graph path reasoner.
 - `TepRootKgdRcaProvider` loads static model assets from
   `data/kg/tep_root_kgd/`.
 - Runtime scoring reads the current `Evidence` payload:
@@ -175,7 +178,7 @@ Validation:
 | Condition | Behavior |
 |---|---|
 | TEP Evidence has no Root-KGD contributions | return empty RCA result, not artifact fallback |
-| public CLI/API asks for artifact provider | reject or omit that option; artifact bridge is not public runtime |
+| public CLI/API asks for provider mode | do not expose that option; Root-KGD is the only TEP RCA mode |
 | Root-KGD asset file is missing | fail fast with the missing file name |
 | non-TEP Evidence reaches Root-KGD provider | return empty RCA result |
 | explanation path is not returned in `top_k_paths` | test failure; candidate paths must be reviewable |

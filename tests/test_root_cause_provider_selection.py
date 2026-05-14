@@ -1,57 +1,32 @@
-"""Tests for reusable root-cause provider selection."""
+"""Tests for reusable root-cause reasoner construction."""
 
 from __future__ import annotations
 
-import pytest
-
+from kgtracevis.schema.validators import load_evidence_json
 from kgtracevis.workflows.root_cause_provider_selection import (
-    ENV_TEP_RCA_PROVIDER,
-    RootCauseProviderSelectionConfig,
     build_pipeline,
     build_root_cause_reasoner,
-    normalize_root_cause_provider_selection,
-    root_cause_provider_config_from_env,
 )
-from kgtracevis.workflows.tep_rca import TepSimpleRcaProvider
 from kgtracevis.workflows.tep_root_kgd import TepRootKgdRcaProvider
 
 
-def test_root_cause_provider_selection_defaults_to_no_provider() -> None:
-    """Default selection should preserve existing path-projection behavior."""
-    assert normalize_root_cause_provider_selection(None) == "none"
-    assert normalize_root_cause_provider_selection("default") == "none"
-    assert build_root_cause_reasoner() is None
-    assert build_pipeline().root_cause_reasoner is None
-
-
-def test_root_cause_provider_selection_builds_native_provider() -> None:
-    """Native selection should build the Root-KGD TEP provider."""
-    provider = build_root_cause_reasoner(
-        RootCauseProviderSelectionConfig(tep_rca_provider="native")
-    )
+def test_root_cause_reasoner_is_single_tep_root_kgd_provider() -> None:
+    """Pipeline construction should expose only the TEP Root-KGD reasoner."""
+    provider = build_root_cause_reasoner()
+    pipeline = build_pipeline()
 
     assert isinstance(provider, TepRootKgdRcaProvider)
+    assert isinstance(pipeline.root_cause_reasoner, TepRootKgdRcaProvider)
 
 
-def test_root_cause_provider_selection_builds_simple_fallback_provider() -> None:
-    """Simple selection should keep the old direct-support KG fallback explicit."""
-    provider = build_root_cause_reasoner(
-        RootCauseProviderSelectionConfig(tep_rca_provider="simple")
+def test_single_provider_leaves_non_tep_cases_on_generic_paths() -> None:
+    """The TEP provider returns empty for non-TEP evidence, allowing generic fallback."""
+    evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
+    result = build_pipeline().analyze(evidence, top_k=2)
+
+    assert result.top_k_paths
+    assert result.ranked_root_causes
+    assert all(
+        root_cause.scoring_method != "tep_root_kgd"
+        for root_cause in result.ranked_root_causes
     )
-
-    assert isinstance(provider, TepSimpleRcaProvider)
-
-
-def test_root_cause_provider_selection_rejects_artifact_mode() -> None:
-    """Pipeline selection should not expose precomputed TEP ranking artifacts."""
-    with pytest.raises(ValueError, match="none, native, simple"):
-        normalize_root_cause_provider_selection("artifact")
-
-
-def test_root_cause_provider_config_reads_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Service and scripts can share the same environment-backed config helper."""
-    monkeypatch.setenv(ENV_TEP_RCA_PROVIDER, "native")
-
-    config = root_cause_provider_config_from_env()
-
-    assert config.tep_rca_provider == "native"

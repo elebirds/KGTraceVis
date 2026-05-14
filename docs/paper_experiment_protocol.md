@@ -54,8 +54,9 @@ TEP:
 - TEP fault numbers may be used as evaluation references because the benchmark
   defines process fault types, but they must not be used as scoring input.
 - Native TEP RCA runs through the same `KGTracePipeline` output contract:
-  adapter evidence plus `tep`/`shared` KG support paths produce both
-  `ranked_root_causes` and `top_k_paths`.
+  adapter evidence plus Root-KGD support paths produce both
+  `ranked_root_causes` and `top_k_paths`. Public workflows do not expose
+  provider mode switches.
 
 ## Reference Eligibility Rules
 

@@ -174,10 +174,7 @@ from pathlib import Path
 from kgtracevis.core import KGTracePipeline
 from kgtracevis.experiments.adapter_pipeline import run_adapter_pipeline
 from kgtracevis.kg.graph import KnowledgeGraph
-from kgtracevis.workflows.root_cause_provider_selection import (
-    RootCauseProviderSelectionConfig,
-    build_pipeline,
-)
+from kgtracevis.workflows.root_cause_provider_selection import build_pipeline
 
 root = Path("runs/dataset_pipeline_analysis")
 graph = KnowledgeGraph.from_default_paths()
@@ -206,12 +203,7 @@ run_adapter_pipeline(
     dataset="tep",
     top_k=3,
     overwrite=True,
-    pipeline=build_pipeline(
-        graph=graph,
-        root_cause_provider_config=RootCauseProviderSelectionConfig(
-            tep_rca_provider="native"
-        ),
-    ),
+    pipeline=build_pipeline(graph=graph),
 )
 ```
 
@@ -394,12 +386,7 @@ scoring 使用变量贡献与 KG support paths，不直接用 fault label 打分
 当前 TEP native 路径由如下配置注入：
 
 ```python
-build_pipeline(
-    graph=graph,
-    root_cause_provider_config=RootCauseProviderSelectionConfig(
-        tep_rca_provider="native"
-    ),
-)
+build_pipeline(graph=graph)
 ```
 
 实际对象：
@@ -454,7 +441,7 @@ uv run python scripts/evaluate_tep_rca.py \
 
 ```text
 summary_path = /tmp/kgtracevis_tep_sample_ZpxYQa/tep_rca_evaluation_summary.json
-provider_config = {"tep_rca_provider": "native"}
+tep_rca_reasoner = "tep_root_kgd"
 window_size=100, row_stride=25, n_components=18, top_k=5
 fault_free_max_rows=None
 ```
@@ -633,5 +620,5 @@ producer -> adapter -> Evidence -> KG reasoning 的运行时输入。
 4. TEP 默认评估参数已改为更接近 TEP_KG：`window_size=100`、
    `row_stride=25`、`n_components=18`、`fault_free_max_rows=None`。后续实验应
    继续扩展到完整 fault set。
-5. 在后续前端/文档中统一写法：`TepRootKgdRcaProvider` 是默认 TEP RCA
+5. 在后续前端/文档中统一写法：`TepRootKgdRcaProvider` 是唯一 TEP RCA
    实现类，`tep_root_kgd` 是 reasoner/scoring method。

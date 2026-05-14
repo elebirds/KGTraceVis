@@ -93,16 +93,18 @@ MVTec, wafer, and default behavior. Scenario-specific strategies may replace
 that generic path search when they have better native evidence, but they must
 still emit the same output fields.
 
-For TEP native RCA, the strategy is the Root-KGD provider. It loads the
-runtime graph and learned Root-KGD parameters from `data/kg/tep_root_kgd/`,
-then ranks candidates from the current Evidence's `channel_contributions`,
-Root-KGD `graph_contributions`, and current-window dynamic features. It must
-not read precomputed per-scenario ranking artifacts such as
-`baseline_root_scores.csv`, `topk_subgraphs`, or `rbc_contributions` for
-runtime scoring, and it does not use fault-number labels as scoring input. Its
-`top_k_paths` are the same support paths referenced by the selected
-`ranked_root_causes[*].explanation_paths`, so visual analytics, feedback
-targets, and persisted run details stay aligned.
+For TEP native RCA, the strategy is the Root-KGD provider. It is the only
+supported TEP RCA mode exposed by KGTracePipeline and loads the runtime graph
+and learned Root-KGD parameters from
+`data/kg/tep_root_kgd/`, then ranks candidates from the current Evidence's
+`channel_contributions`, Root-KGD `graph_contributions`, and current-window
+dynamic features. Public adapter, upload, and evaluation workflows do not expose
+provider mode switches. It must not read precomputed per-scenario ranking
+artifacts such as `baseline_root_scores.csv`, `topk_subgraphs`, or
+`rbc_contributions` for runtime scoring, and it does not use fault-number labels
+as scoring input. Its `top_k_paths` are the same support paths referenced by the
+selected `ranked_root_causes[*].explanation_paths`, so visual analytics,
+feedback targets, and persisted run details stay aligned.
 
 Scripts under `scripts/` should only orchestrate these modules. The FastAPI
 service under `src/kgtracevis/service/` should also call the same pipeline

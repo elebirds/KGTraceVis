@@ -226,10 +226,9 @@ Validate example evidence:
 uv run python scripts/run_examples.py
 ```
 
-TEP RCA is computed in the pipeline with the ported Root-KGD provider whenever
-TEP records are run through the TEP evaluation workflow or adapter pipeline.
-`scripts/run_examples.py` remains a lightweight generic evidence/KG smoke and
-does not expose TEP provider mode switches.
+TEP Root-KGD RCA is the single supported TEP RCA mode in `KGTracePipeline`.
+Generic adapter/upload workflows do not expose provider mode switches.
+`scripts/run_examples.py` remains a lightweight evidence/KG smoke.
 
 Build KG CSV files:
 
@@ -645,12 +644,22 @@ uv run python scripts/run_adapter_pipeline.py \
   --overwrite
 ```
 
-For TEP records, `scripts/run_adapter_pipeline.py` automatically uses the
-ported TEP Root-KGD provider. The provider consumes the current Evidence
-variable contributions plus dynamic window features, then populates both
-`top_k_paths` and `ranked_root_causes`. Precomputed TEP_KG ranking artifacts are
-not part of this runtime path, and fault-number labels are evaluation
-references only, not scoring input.
+For TEP records, `scripts/run_adapter_pipeline.py` uses the single Root-KGD RCA
+provider:
+
+```bash
+uv run python scripts/run_adapter_pipeline.py \
+  --input data/processed/records/tep_rbc_subset.jsonl \
+  --dataset tep \
+  --output-dir outputs/adapter_pipeline_v0/tep \
+  --overwrite
+```
+
+The TEP provider consumes the current Evidence variable contributions plus
+dynamic window features, then populates both `top_k_paths` and
+`ranked_root_causes`. Precomputed TEP_KG ranking artifacts are not part of this
+runtime path, and fault-number labels are evaluation references only, not
+scoring input.
 
 To run the paper-facing TEP RCA evaluation from raw TEP CSVs:
 
@@ -664,7 +673,8 @@ uv run python scripts/evaluate_tep_rca.py \
   --overwrite
 ```
 
-This command rebuilds TEP producer records, runs the adapter and
+This dedicated evaluation command explicitly defaults to the native TEP
+Root-KGD provider, rebuilds TEP producer records, runs the adapter and
 `KGTracePipeline`, then writes `tep_rca_evaluation_summary.json` and
 `tep_rca_evaluation_cases.csv`. Fault labels are used only for metric
 calculation, not for native RCA scoring.

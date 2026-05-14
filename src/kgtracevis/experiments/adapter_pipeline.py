@@ -14,11 +14,7 @@ from kgtracevis.adapters.batch import evidence_from_records, load_records, write
 from kgtracevis.core import KGTracePipeline
 from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
-from kgtracevis.workflows.root_cause_provider_selection import (
-    RootCauseProviderSelectionConfig,
-    build_pipeline,
-    normalize_root_cause_provider_selection,
-)
+from kgtracevis.workflows.root_cause_provider_selection import build_pipeline
 
 SUMMARY_FILENAME = "adapter_pipeline_summary.json"
 TABLE_FILENAME = "adapter_pipeline_table.csv"
@@ -65,7 +61,6 @@ def run_adapter_pipeline(
     pipeline: KGTracePipeline | None = None,
     kg_node_paths: list[str | Path] | None = None,
     kg_edge_paths: list[str | Path] | None = None,
-    tep_rca_provider: str | None = None,
 ) -> AdapterPipelineOutput:
     """Run records through Evidence adapters and ``KGTracePipeline``.
 
@@ -93,17 +88,10 @@ def run_adapter_pipeline(
 
     if pipeline is not None and (kg_node_paths or kg_edge_paths):
         raise ValueError("pass either pipeline or KG CSV overlay paths, not both")
-    provider_config = _root_cause_provider_config(
-        evidence_items=evidence_items,
-        tep_rca_provider=tep_rca_provider,
-    )
-    if pipeline is not None and provider_config.tep_rca_provider != "none":
-        raise ValueError("pass either pipeline or TEP RCA provider options, not both")
 
     active_pipeline = pipeline or _pipeline_from_kg_paths(
         kg_node_paths=kg_node_paths,
         kg_edge_paths=kg_edge_paths,
-        root_cause_provider_config=provider_config,
     )
     cases = [
         _case_summary(
@@ -122,7 +110,6 @@ def run_adapter_pipeline(
         top_k=top_k,
         kg_node_paths=kg_node_paths,
         kg_edge_paths=kg_edge_paths,
-        root_cause_provider_config=provider_config,
         evidence_paths=evidence_paths,
         cases=cases,
     )
@@ -176,7 +163,6 @@ def _run_summary(
     top_k: int,
     kg_node_paths: list[str | Path] | None,
     kg_edge_paths: list[str | Path] | None,
-    root_cause_provider_config: RootCauseProviderSelectionConfig,
     evidence_paths: list[Path],
     cases: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -204,7 +190,7 @@ def _run_summary(
             "top_k": top_k,
             "kg_node_paths": [str(path) for path in kg_node_paths or []],
             "kg_edge_paths": [str(path) for path in kg_edge_paths or []],
-            **_root_cause_provider_summary(root_cause_provider_config),
+            "tep_rca_reasoner": "tep_root_kgd",
         },
         "note": (
             "Path targets are candidate/plausible explanation nodes generated from "
@@ -219,42 +205,15 @@ def _pipeline_from_kg_paths(
     *,
     kg_node_paths: list[str | Path] | None,
     kg_edge_paths: list[str | Path] | None,
-    root_cause_provider_config: RootCauseProviderSelectionConfig,
 ) -> KGTracePipeline:
     if not kg_node_paths and not kg_edge_paths:
-        return build_pipeline(root_cause_provider_config=root_cause_provider_config)
+        return build_pipeline()
     graph = KnowledgeGraph.from_paths(
         [*DEFAULT_NODE_PATHS, *(kg_node_paths or [])],
         [*DEFAULT_EDGE_PATHS, *(kg_edge_paths or [])],
         skip_missing=True,
     )
-    return build_pipeline(
-        graph=graph,
-        root_cause_provider_config=root_cause_provider_config,
-    )
-
-
-def _root_cause_provider_config(
-    *,
-    evidence_items: list[Evidence],
-    tep_rca_provider: str | None,
-) -> RootCauseProviderSelectionConfig:
-    provider = tep_rca_provider
-    if provider is None and any(evidence.dataset == "tep" for evidence in evidence_items):
-        provider = "native"
-    return RootCauseProviderSelectionConfig(
-        tep_rca_provider=normalize_root_cause_provider_selection(provider),
-    )
-
-
-def _root_cause_provider_summary(
-    config: RootCauseProviderSelectionConfig,
-) -> dict[str, Any]:
-    if config.tep_rca_provider == "none":
-        return {}
-    return {
-        "root_cause_provider": config.tep_rca_provider,
-    }
+    return build_pipeline(graph=graph)
 
 
 def _case_summary(

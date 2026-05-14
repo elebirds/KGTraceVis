@@ -183,21 +183,29 @@ def test_default_upload_run_persists_detail_to_postgres(
     assert not (Path(detail.run.run_dir) / "manifest.json").exists()
 
 
-def test_upload_run_rejects_tep_artifact_provider_selection(
+def test_upload_run_uses_tep_root_kgd_reasoner(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Service upload should not expose precomputed TEP ranking artifacts."""
+    """TEP records upload should use the single supported Root-KGD provider."""
     monkeypatch.setattr(service_runs, "DEFAULT_RUNS_DIR", tmp_path / "rootlens_sessions")
 
-    with pytest.raises(ValueError, match="none, native, simple"):
-        service_runs.create_run_from_upload(
-            "tep_0001.json",
-            Path("data/examples/tep_example.json").read_bytes(),
-            mode="evidence",
-            top_k=2,
-            tep_rca_provider="artifact",
-        )
+    detail = service_runs.create_run_from_upload(
+        "tep_records.jsonl",
+        _tep_record_jsonl_bytes(),
+        mode="records",
+        dataset="tep",
+        top_k=2,
+    )
+
+    assert detail.run.dataset == "tep"
+    assert detail.summary is not None
+    assert detail.summary["pipeline"]["tep_rca_reasoner"] == "tep_root_kgd"
+    assert detail.cases is not None
+    ranked = detail.cases[0]["ranked_root_causes"]
+    assert ranked
+    assert ranked[0]["candidate_id"] == "faultanchor:stream_1_a_feed_loss"
+    assert ranked[0]["scoring_method"] == "tep_root_kgd"
 
 
 def test_kg_construction_build_route_writes_runtime_artifacts(
@@ -1322,6 +1330,25 @@ def _manual_source_csv() -> str:
             "",
         ]
     )
+
+
+def _tep_record_jsonl_bytes() -> bytes:
+    return (
+        json.dumps(
+            {
+                "dataset": "tep",
+                "case_id": "tep_native_upload",
+                "object": "process",
+                "anomaly_type": "process_fault",
+                "location": "reactor",
+                "variables": ["XMEAS_1", "XMV_3"],
+                "variable_contributions": {"XMEAS_1": 0.7, "XMV_3": 0.3},
+                "fault_number": 6,
+                "confidence": 0.75,
+            }
+        )
+        + "\n"
+    ).encode("utf-8")
 
 
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
