@@ -438,3 +438,36 @@ Added backend build registry/list/detail/validation APIs for source-to-KG constr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: KG construction publish dry-run API
+
+**Date**: 2026-05-14
+**Task**: KG construction publish dry-run API
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added a backend publish endpoint for source-to-KG builds. The API defaults to dry-run over the default KG plus candidate overlay, supports candidate-only counts, and requires explicit confirmation before live Neo4j writes.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c148600` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
