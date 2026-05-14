@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 
-from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
@@ -28,7 +28,9 @@ from kgtracevis.service.kg_construction import (
     KGConstructionBuildRequest,
     KGConstructionEdgeReviewRequest,
     KGConstructionPublishRequest,
+    KGConstructionReviewQueueRequest,
     get_kg_construction_build,
+    get_kg_construction_review_queue,
     list_kg_construction_builds,
     list_kg_construction_source_uploads,
     publish_kg_construction_build,
@@ -216,6 +218,37 @@ def create_app() -> FastAPI:
                 if "unknown construction build run_id" in str(exc)
                 or "unknown construction edge target_key" in str(exc)
                 else 400
+            )
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/builds/{run_id}/review-queue")
+    def kg_construction_review_queue(
+        run_id: str,
+        review_status: Literal["auto", "reviewed", "rejected"] | None = None,
+        source: str | None = None,
+        scenario: str | None = None,
+        relation: str | None = None,
+        query: str | None = None,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    ) -> dict[str, object]:
+        try:
+            request = KGConstructionReviewQueueRequest(
+                review_status=review_status,
+                source=source,
+                scenario=scenario,
+                relation=relation,
+                query=query,
+                offset=offset,
+                limit=limit,
+            )
+            return get_kg_construction_review_queue(
+                run_id,
+                request,
+            ).model_dump(mode="json")
+        except ValueError as exc:
+            status_code = (
+                404 if "unknown construction build run_id" in str(exc) else 400
             )
             raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 

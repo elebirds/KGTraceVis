@@ -527,6 +527,92 @@ def test_kg_construction_review_route_rejects_unknown_edge(
     assert "unknown construction edge target_key" in response.text
 
 
+def test_kg_construction_review_queue_filters_edges(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review queue should expose filterable read-only candidate edge rows."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "review_queue_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_review_queue_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    initial_response = client.get(
+        "/api/kg/construction/builds/kgbuild_review_queue_unit/review-queue",
+        params={
+            "review_status": "auto",
+            "source": "api_manual_unit",
+            "scenario": "tep",
+            "relation": "BELONGS_TO",
+            "query": "explicit api",
+            "limit": "10",
+        },
+    )
+    assert initial_response.status_code == 200
+    initial = initial_response.json()
+    assert initial["total_count"] == 1
+    assert initial["returned_count"] == 1
+    assert initial["summary"]["review_status_counts"] == {"auto": 1}
+    assert initial["summary"]["relation_counts"] == {"BELONGS_TO": 1}
+    assert initial["edges"][0]["target_key"] == (
+        "ApiManualSource|BELONGS_TO|ApiManualTarget|tep"
+    )
+    assert initial["edges"][0]["confidence"] == 0.71
+
+    review_response = client.post(
+        "/api/kg/construction/builds/kgbuild_review_queue_unit/review",
+        json={
+            "target_key": "ApiManualSource|BELONGS_TO|ApiManualTarget|tep",
+            "action": "reject",
+        },
+    )
+    assert review_response.status_code == 200
+
+    rejected_response = client.get(
+        "/api/kg/construction/builds/kgbuild_review_queue_unit/review-queue",
+        params={"review_status": "rejected", "offset": "0", "limit": "1"},
+    )
+    empty_page_response = client.get(
+        "/api/kg/construction/builds/kgbuild_review_queue_unit/review-queue",
+        params={"review_status": "rejected", "offset": "1", "limit": "1"},
+    )
+
+    assert rejected_response.status_code == 200
+    rejected = rejected_response.json()
+    assert rejected["total_count"] == 1
+    assert rejected["returned_count"] == 1
+    assert rejected["edges"][0]["review_status"] == "rejected"
+    assert rejected["edges"][0]["rejected_count"] == 1
+    assert rejected["summary"]["review_status_counts"] == {"rejected": 1}
+
+    assert empty_page_response.status_code == 200
+    empty_page = empty_page_response.json()
+    assert empty_page["total_count"] == 1
+    assert empty_page["returned_count"] == 0
+    assert empty_page["edges"] == []
+
+
 def test_kg_construction_build_registry_rejects_unknown_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

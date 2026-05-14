@@ -6,6 +6,7 @@ import csv
 import json
 import re
 from collections import Counter
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -341,6 +342,70 @@ class KGConstructionEdgeReviewResponse(BaseModel):
     )
 
 
+class KGConstructionReviewQueueRequest(BaseModel):
+    """Filters and pagination for construction edge review queues."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    review_status: Literal["auto", "reviewed", "rejected"] | None = None
+    source: str | None = None
+    scenario: str | None = None
+    relation: str | None = None
+    query: str | None = None
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=50, ge=1, le=500)
+
+
+class KGConstructionReviewQueueEdge(BaseModel):
+    """One reviewable construction edge row."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_key: str
+    head: str
+    relation: str
+    tail: str
+    scenario: str
+    source: str
+    evidence: str
+    confidence: float
+    weight: float
+    review_status: str
+    feedback_count: int
+    accepted_count: int
+    rejected_count: int
+
+
+class KGConstructionReviewQueueSummary(BaseModel):
+    """Facet counts for a construction review queue."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    review_status_counts: dict[str, int] = Field(default_factory=dict)
+    relation_counts: dict[str, int] = Field(default_factory=dict)
+    scenario_counts: dict[str, int] = Field(default_factory=dict)
+    source_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class KGConstructionReviewQueueResponse(BaseModel):
+    """Read-only queue response for construction edge review."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    filters: KGConstructionReviewQueueRequest
+    total_count: int
+    returned_count: int
+    offset: int
+    limit: int
+    edges: list[KGConstructionReviewQueueEdge]
+    summary: KGConstructionReviewQueueSummary
+    claim_boundary: str = (
+        "review queues are read-only views over candidate construction edges; "
+        "accept/reject and Neo4j publish are separate explicit actions"
+    )
+
+
 def run_kg_construction_build(
     request: KGConstructionBuildRequest,
     *,
@@ -590,6 +655,34 @@ def review_kg_construction_edge(
     )
 
 
+def get_kg_construction_review_queue(
+    run_id: str,
+    request: KGConstructionReviewQueueRequest,
+    *,
+    build_root: Path | None = None,
+) -> KGConstructionReviewQueueResponse:
+    """Return a filtered, paginated review queue for construction edges."""
+    build = _find_build_record(run_id, build_root=build_root)
+    _require_build_artifacts(build)
+    rows = [_queue_edge_from_row(row) for row in _read_edge_rows(Path(build.edges_path))]
+    filtered_rows = [
+        edge
+        for edge in rows
+        if _matches_review_queue_filters(edge, request)
+    ]
+    page = filtered_rows[request.offset : request.offset + request.limit]
+    return KGConstructionReviewQueueResponse(
+        build=build,
+        filters=request,
+        total_count=len(filtered_rows),
+        returned_count=len(page),
+        offset=request.offset,
+        limit=request.limit,
+        edges=page,
+        summary=_review_queue_summary(filtered_rows),
+    )
+
+
 def _source_from_input(source: KGConstructionSourceInput) -> KGConstructionSource:
     metadata = dict(source.metadata)
     path = Path(source.path) if source.path else None
@@ -758,6 +851,72 @@ def _safe_edge_key(value: str) -> str:
     return "|".join(parts)
 
 
+def _queue_edge_from_row(row: dict[str, str]) -> KGConstructionReviewQueueEdge:
+    return KGConstructionReviewQueueEdge(
+        target_key=_edge_key_from_row(row),
+        head=row.get("head", ""),
+        relation=row.get("relation", ""),
+        tail=row.get("tail", ""),
+        scenario=row.get("scenario", ""),
+        source=row.get("source", ""),
+        evidence=row.get("evidence", ""),
+        confidence=_float_value(row.get("confidence")),
+        weight=_float_value(row.get("weight")),
+        review_status=row.get("review_status", ""),
+        feedback_count=_int_value(row.get("feedback_count")),
+        accepted_count=_int_value(row.get("accepted_count")),
+        rejected_count=_int_value(row.get("rejected_count")),
+    )
+
+
+def _matches_review_queue_filters(
+    edge: KGConstructionReviewQueueEdge,
+    request: KGConstructionReviewQueueRequest,
+) -> bool:
+    if request.review_status and edge.review_status != request.review_status:
+        return False
+    if request.source and edge.source != request.source:
+        return False
+    if request.scenario and edge.scenario != request.scenario:
+        return False
+    if request.relation and edge.relation != request.relation:
+        return False
+    if request.query and _normalize_query(request.query) not in _normalize_query(
+        " ".join(
+            (
+                edge.target_key,
+                edge.head,
+                edge.relation,
+                edge.tail,
+                edge.source,
+                edge.evidence,
+            )
+        )
+    ):
+        return False
+    return True
+
+
+def _review_queue_summary(
+    rows: list[KGConstructionReviewQueueEdge],
+) -> KGConstructionReviewQueueSummary:
+    return KGConstructionReviewQueueSummary(
+        review_status_counts=_count_values(edge.review_status for edge in rows),
+        relation_counts=_count_values(edge.relation for edge in rows),
+        scenario_counts=_count_values(edge.scenario for edge in rows),
+        source_counts=_count_values(edge.source for edge in rows),
+    )
+
+
+def _count_values(values: Iterable[str]) -> dict[str, int]:
+    counts = Counter(str(value) for value in values if str(value))
+    return dict(sorted(counts.items()))
+
+
+def _normalize_query(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip().lower())
+
+
 def _load_json_object(path: Path, *, object_name: str) -> dict[str, Any]:
     if not path.is_file():
         raise ValueError(f"{object_name} not found: {path}")
@@ -819,6 +978,15 @@ def _int_value(value: object) -> int:
         return 0
 
 
+def _float_value(value: object) -> float:
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _str_or_none(value: object) -> str | None:
     if value is None:
         return None
@@ -867,6 +1035,10 @@ __all__ = [
     "KGConstructionBuildListResponse",
     "KGConstructionPublishRequest",
     "KGConstructionPublishResponse",
+    "KGConstructionReviewQueueEdge",
+    "KGConstructionReviewQueueRequest",
+    "KGConstructionReviewQueueResponse",
+    "KGConstructionReviewQueueSummary",
     "KGConstructionBuildRecord",
     "KGConstructionBuildValidationResponse",
     "KGConstructionSourceListResponse",
@@ -874,6 +1046,7 @@ __all__ = [
     "KGConstructionSourceUploadRequest",
     "KGConstructionUploadedSource",
     "get_kg_construction_build",
+    "get_kg_construction_review_queue",
     "list_kg_construction_source_uploads",
     "list_kg_construction_builds",
     "publish_kg_construction_build",

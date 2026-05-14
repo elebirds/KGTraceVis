@@ -111,6 +111,7 @@ publish step:
 GET /api/kg/construction/builds
 GET /api/kg/construction/builds/{run_id}
 POST /api/kg/construction/builds/{run_id}/validate
+GET /api/kg/construction/builds/{run_id}/review-queue
 POST /api/kg/construction/builds/{run_id}/review
 POST /api/kg/construction/builds/{run_id}/publish
 ```
@@ -138,6 +139,18 @@ review target can be identified by the stable edge key
 counter. `reject` sets `review_status=rejected` and increments the rejected
 feedback counter. Both actions append a review decision to
 `kg_construction_manifest.json`. The endpoint does not publish to Neo4j.
+
+The review queue endpoint is the read side of the same workflow. It returns
+candidate edge rows with stable `target_key` values and can be filtered by
+`review_status`, `source`, `scenario`, `relation`, and `query`, with `offset`
+and `limit` pagination:
+
+```http
+GET /api/kg/construction/builds/kgbuild_demo/review-queue?review_status=auto&scenario=tep
+```
+
+The queue is read-only and exists to support backend review workflows and later
+UI review pages without requiring clients to parse construction CSV files.
 
 The publish endpoint is also safe-by-default. Calling it with an empty JSON body
 performs a dry-run import count over the default seed KG plus the selected
