@@ -372,3 +372,36 @@ Added the KG Studio Build tab, frontend construction API contracts/client, build
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: Backend KG construction source upload API
+
+**Date**: 2026-05-14
+**Task**: Backend KG construction source upload API
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added backend-only construction source upload/list APIs, safe runtime source artifact storage, build-ready source references, upload validation, tests, and KG construction docs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `34a41a7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
