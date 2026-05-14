@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~241 | Active |
+| `journal-1.md` | ~275 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-05-14 | TEP native RCA provider | `746482b`, `2265871` | `codex/rebuild-web-arco-echarts` |
 | 7 | 2026-05-14 | TEP RCA unified integration | `5de8f77`, `3b9f1d7` | `codex/rebuild-web-arco-echarts` |
 | 6 | 2026-05-14 | Analysis detail evidence-to-reasoning workspace | `c937ad6` | `main` |
 | 5 | 2026-05-14 | KG Studio overview workflow actions | `51d85ee` | `main` |

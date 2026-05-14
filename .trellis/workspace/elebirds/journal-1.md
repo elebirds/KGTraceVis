@@ -239,3 +239,37 @@ Unified TEP RCA output into KGTracePipeline via ranked_root_causes, added TEP ar
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: TEP native RCA provider
+
+**Date**: 2026-05-14
+**Task**: TEP native RCA provider
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Implemented a KGTraceVis-native TEP RCA provider that ranks root-cause candidates from TEP variable evidence and KG support paths through the unified RootCauseProvider contract, with tests and workflow spec updates.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `746482b` | (see git log) |
+| `2265871` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
