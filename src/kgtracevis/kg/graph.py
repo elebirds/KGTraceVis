@@ -39,12 +39,14 @@ REQUIRED_EDGE_COLUMNS = {
 DEFAULT_NODE_PATHS = (
     Path("data/kg/nodes.csv"),
     Path("data/kg/mvtec_nodes.csv"),
+    Path("data/kg/tep_nodes.csv"),
     Path("data/kg/wafer_nodes.csv"),
 )
 DEFAULT_EDGE_PATHS = (
     Path("data/kg/edges.csv"),
     Path("data/kg/mvtec_rca_reference.csv"),
     Path("data/kg/mvtec_edges.csv"),
+    Path("data/kg/tep_edges.csv"),
     Path("data/kg/wafer_edges.csv"),
 )
 

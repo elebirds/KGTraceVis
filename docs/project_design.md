@@ -73,7 +73,31 @@ not emit root causes, ranked paths, or prefilled `kg_analysis`.
 
 `KGTracePipeline` is the reusable reasoning facade. It consumes validated
 Evidence and writes runtime analysis outputs: linked entities, consistency
-score, inconsistent fields, correction candidates, and top-k candidate paths.
+score, inconsistent fields, correction candidates, top-k explanation paths, and
+ranked root-cause candidates.
+
+## Unified RCA Reasoning Contract
+
+RCA is a scenario-aware reasoning stage inside `KGTracePipeline`, not an
+adapter responsibility. Adapters remain evidence-only and must not emit root
+causes, ranked paths, or prefilled `kg_analysis`.
+
+The RCA stage returns one unified result containing both:
+
+- `top_k_paths`: reviewable explanation/support paths.
+- `ranked_root_causes`: feedback-compatible root-cause candidates.
+
+Both fields must come from the same RCA strategy for a case. The generic graph
+strategy ranks KG paths and projects those paths into root-cause candidates for
+MVTec, wafer, and default behavior. Scenario-specific strategies may replace
+that generic path search when they have better native evidence, but they must
+still emit the same output fields.
+
+For TEP native RCA, the strategy uses TEP variable contributions plus support
+paths in the `tep` and `shared` KG layers. It does not use fault-number labels
+as scoring input. Its `top_k_paths` are the same support paths referenced by
+the selected `ranked_root_causes[*].explanation_paths`, so visual analytics,
+feedback targets, and persisted run details stay aligned.
 
 Scripts under `scripts/` should only orchestrate these modules. The FastAPI
 service under `src/kgtracevis/service/` should also call the same pipeline

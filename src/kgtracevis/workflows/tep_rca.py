@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from kgtracevis.core.result import RankedRootCause, RcaRankingResult
+from kgtracevis.core.result import RankedRootCause, RcaRankingResult, RcaReasoningResult
 from kgtracevis.kg.graph import KGEdge, KGNode, KnowledgeGraph, normalize_text
 from kgtracevis.schema.evidence_schema import Evidence
 
@@ -64,7 +64,10 @@ class TepNativeRcaConfig(BaseModel):
     beta: float = 0.30
     delta: float = 0.25
     gamma: float = 0.10
+    broad_fault_penalty: float = 0.12
     max_depth: int = Field(default=4, ge=1)
+    max_support_variables: int = Field(default=8, ge=1)
+    min_support_contribution: float = Field(default=0.0, ge=0.0, le=1.0)
     source_name: str = "tep_native_kg"
 
 
@@ -98,6 +101,29 @@ class TepNativeRcaProvider:
         self.graph = graph
         self.config = config or TepNativeRcaConfig()
 
+    def reason_root_causes(
+        self,
+        evidence: Evidence,
+        *,
+        graph: KnowledgeGraph,
+        linked_entities: list[dict[str, Any]],
+        top_k: int = 5,
+    ) -> RcaReasoningResult:
+        """Return aligned native TEP support paths and root-cause rankings."""
+        del linked_entities
+        ranked = self.rank_root_causes(evidence, graph=graph, top_k=top_k)
+        return RcaReasoningResult(
+            case_id=evidence.case_id,
+            top_k_paths=_native_top_k_paths_from_ranked(ranked, top_k=top_k),
+            ranked_root_causes=ranked,
+            scoring_method="tep_native_kg",
+            metadata={
+                "reasoner": "tep_native_graph",
+                "scenario_scope": ["tep", "shared"],
+                "uses_fault_number_for_scoring": False,
+            },
+        )
+
     def rank_root_causes(
         self,
         evidence: Evidence,
@@ -113,6 +139,11 @@ class TepNativeRcaProvider:
         if active_graph is None:
             return []
         variable_evidence = extract_tep_variable_evidence(evidence)
+        variable_evidence = _select_support_variable_evidence(
+            variable_evidence,
+            max_variables=self.config.max_support_variables,
+            min_contribution=self.config.min_support_contribution,
+        )
         if not variable_evidence:
             return []
 
@@ -403,6 +434,8 @@ def _shortest_support_path(
             next_node = edge.tail if edge.head == node_id else edge.head
             if next_node in path_nodes:
                 continue
+            if next_node != target_id and _is_tep_root_cause_node(graph, next_node):
+                continue
             next_path_nodes = [*path_nodes, next_node]
             next_path_edges = [*path_edges, edge]
             if next_node == target_id:
@@ -422,6 +455,13 @@ def _tep_support_edges(graph: KnowledgeGraph, node_id: str) -> list[KGEdge]:
             continue
         edges.append(edge)
     return edges
+
+
+def _is_tep_root_cause_node(graph: KnowledgeGraph, node_id: str) -> bool:
+    node = graph.nodes.get(node_id)
+    return node is not None and (
+        node.label in ROOT_CAUSE_LABELS or node.id.endswith("Cause")
+    )
 
 
 def _native_root_cause_from_support(
@@ -448,6 +488,7 @@ def _native_root_cause_from_support(
         + config.beta * graph_confidence
         + config.delta * propagation_support
         - config.gamma * length_penalty
+        - config.broad_fault_penalty * _broad_fault_ratio(candidate, support_paths)
     )
     explanation_paths = [
         _native_explanation_path(evidence.case_id, candidate, path)
@@ -466,6 +507,7 @@ def _native_root_cause_from_support(
         }
         and path.get("path_id")
     ]
+    support_path_ids = [str(path["path_id"]) for path in explanation_paths]
     return RankedRootCause(
         ranking_id=_stable_ranking_id(evidence.case_id, candidate.id),
         rank=rank,
@@ -498,6 +540,7 @@ def _native_root_cause_from_support(
             "graph_confidence": round(graph_confidence, 4),
             "propagation_support": round(propagation_support, 4),
             "path_length": round(length_penalty, 4),
+            "broad_fault_ratio": round(_broad_fault_ratio(candidate, support_paths), 4),
             "supported_variables": [
                 {
                     "variable": path.variable.raw_names[0],
@@ -508,7 +551,8 @@ def _native_root_cause_from_support(
                 }
                 for index, path in enumerate(support_paths)
             ],
-            "top_k_path_ids": top_k_path_ids,
+            "top_k_path_ids": support_path_ids or top_k_path_ids,
+            "generic_top_k_path_ids": top_k_path_ids,
         },
         source=config.source_name,
         review_status="auto",
@@ -536,6 +580,30 @@ def _weighted_path_length(support_paths: list[_TepSupportPath]) -> float:
     ) / total_weight
 
 
+def _broad_fault_ratio(candidate: KGNode, support_paths: list[_TepSupportPath]) -> float:
+    if not support_paths:
+        return 0.0
+    indirect_paths = sum(1 for path in support_paths if len(path.path_edges) > 1)
+    return indirect_paths / len(support_paths)
+
+
+def _select_support_variable_evidence(
+    variable_evidence: list[TepVariableEvidence],
+    *,
+    max_variables: int,
+    min_contribution: float,
+) -> list[TepVariableEvidence]:
+    ranked = sorted(
+        variable_evidence,
+        key=lambda item: (-item.contribution, item.variable),
+    )
+    return [
+        item
+        for item in ranked
+        if item.contribution >= min_contribution
+    ][:max_variables]
+
+
 def _native_explanation_path(
     case_id: str,
     candidate: KGNode,
@@ -545,6 +613,10 @@ def _native_explanation_path(
         edge.relation if edge.head == head else f"REVERSE_{edge.relation}"
         for head, edge in zip(support_path.path_nodes, support_path.path_edges, strict=False)
     ]
+    confidence = (
+        sum(edge.confidence for edge in support_path.path_edges)
+        / max(1, len(support_path.path_edges))
+    )
     return {
         "path_id": _native_path_id(
             case_id,
@@ -558,17 +630,76 @@ def _native_explanation_path(
         "nodes": list(support_path.path_nodes),
         "node_names": _native_path_node_names(candidate, support_path),
         "relations": relations,
+        "score": round(support_path.variable.contribution * confidence, 4),
         "length": len(support_path.path_edges),
-        "confidence": round(
-            sum(edge.confidence for edge in support_path.path_edges)
-            / max(1, len(support_path.path_edges)),
-            4,
-        ),
+        "confidence": round(confidence, 4),
         "evidence_match": support_path.variable.contribution,
         "supporting_evidence": [edge.evidence for edge in support_path.path_edges],
         "source_edge_ids": [edge.edge_id for edge in support_path.path_edges],
         "source_edges": [edge.model_dump() for edge in support_path.path_edges],
     }
+
+
+def _native_top_k_paths_from_ranked(
+    ranked_root_causes: list[RankedRootCause],
+    *,
+    top_k: int,
+) -> list[dict[str, Any]]:
+    paths: list[dict[str, Any]] = []
+    seen_path_ids: set[str] = set()
+    sorted_paths_by_root = [
+        (
+            root_cause,
+            sorted(
+                root_cause.explanation_paths,
+                key=lambda path: (
+                    -float(path.get("score") or 0.0),
+                    str(path.get("path_id") or ""),
+                ),
+            ),
+        )
+        for root_cause in ranked_root_causes
+    ]
+    for root_cause, explanation_paths in sorted_paths_by_root:
+        if explanation_paths and _append_native_path(
+            paths,
+            seen_path_ids,
+            root_cause=root_cause,
+            explanation_path=explanation_paths[0],
+            top_k=top_k,
+        ):
+            return paths
+    for root_cause, explanation_paths in sorted_paths_by_root:
+        for explanation_path in explanation_paths[1:]:
+            if _append_native_path(
+                paths,
+                seen_path_ids,
+                root_cause=root_cause,
+                explanation_path=explanation_path,
+                top_k=top_k,
+            ):
+                return paths
+    return paths
+
+
+def _append_native_path(
+    paths: list[dict[str, Any]],
+    seen_path_ids: set[str],
+    *,
+    root_cause: RankedRootCause,
+    explanation_path: dict[str, Any],
+    top_k: int,
+) -> bool:
+    path = dict(explanation_path)
+    path_id = str(path.get("path_id") or "")
+    if path_id and path_id in seen_path_ids:
+        return False
+    if path_id:
+        seen_path_ids.add(path_id)
+    path.setdefault("root_cause_candidate_id", root_cause.candidate_id)
+    path.setdefault("root_cause_ranking_id", root_cause.ranking_id)
+    paths.append(path)
+    return len(paths) >= top_k
 
 
 def _native_path_node_names(candidate: KGNode, support_path: _TepSupportPath) -> list[str]:

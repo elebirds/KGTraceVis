@@ -1,1 +1,75 @@
 id,name,label,scenario,aliases,description
+Fault01Stream4ACRatio,TEP Fault 01: Stream 4 A/C ratio,FaultType,tep,fault_01|fault 1|IDV(1)|idv_1|TEP Fault 01: Stream 4 A/C ratio,Step disturbance in stream 4 A/C ratio with B composition constant
+Fault02Stream4BComposition,TEP Fault 02: Stream 4 B composition,FaultType,tep,fault_02|fault 2|IDV(2)|idv_2|TEP Fault 02: Stream 4 B composition,Step disturbance in stream 4 B composition with A/C ratio constant
+Fault03Stream2Temperature,TEP Fault 03: Stream 2 D feed temperature,FaultType,tep,fault_03|fault 3|IDV(3)|idv_3|TEP Fault 03: Stream 2 D feed temperature,Step disturbance in D feed stream 2 temperature
+Fault04ReactorCoolingInletTemperature,TEP Fault 04: Reactor cooling inlet temperature,FaultType,tep,fault_04|fault 4|IDV(4)|idv_4|TEP Fault 04: Reactor cooling inlet temperature,Step disturbance in reactor cooling water inlet temperature
+Fault05SeparatorCoolingInletTemperature,TEP Fault 05: Separator cooling inlet temperature,FaultType,tep,fault_05|fault 5|IDV(5)|idv_5|TEP Fault 05: Separator cooling inlet temperature,Step disturbance in separator cooling water inlet temperature
+Fault06Stream1AFeedLoss,TEP Fault 06: Stream 1 A feed loss,FaultType,tep,fault_06|fault 6|IDV(6)|idv_6|TEP Fault 06: Stream 1 A feed loss,Step disturbance representing A feed loss in stream 1
+Fault07Stream4CHeaderPressure,TEP Fault 07: Stream 4 C header pressure,FaultType,tep,fault_07|fault 7|IDV(7)|idv_7|TEP Fault 07: Stream 4 C header pressure,Step disturbance in C header pressure for stream 4
+Fault08Stream4ABCComposition,TEP Fault 08: Stream 4 A/B/C composition,FaultType,tep,fault_08|fault 8|IDV(8)|idv_8|TEP Fault 08: Stream 4 A/B/C composition,Random disturbance in A/B/C composition of stream 4
+Fault09Stream2Temperature,TEP Fault 09: Stream 2 D feed temperature,FaultType,tep,fault_09|fault 9|IDV(9)|idv_9|TEP Fault 09: Stream 2 D feed temperature,Random disturbance in D feed stream 2 temperature
+Fault10Stream4FeedTemperature,TEP Fault 10: Stream 4 feed temperature,FaultType,tep,fault_10|fault 10|IDV(10)|idv_10|TEP Fault 10: Stream 4 feed temperature,Random disturbance in C feed stream 4 temperature
+Fault11ReactorCoolingInletTemperature,TEP Fault 11: Reactor cooling inlet temperature,FaultType,tep,fault_11|fault 11|IDV(11)|idv_11|TEP Fault 11: Reactor cooling inlet temperature,Random disturbance in reactor cooling water inlet temperature
+Fault12SeparatorCoolingInletTemperature,TEP Fault 12: Separator cooling inlet temperature,FaultType,tep,fault_12|fault 12|IDV(12)|idv_12|TEP Fault 12: Separator cooling inlet temperature,Random disturbance in separator cooling water inlet temperature
+Fault13ReactorKinetics,TEP Fault 13: Reactor kinetics,FaultType,tep,fault_13|fault 13|IDV(13)|idv_13|TEP Fault 13: Reactor kinetics,Drift disturbance in reaction kinetics
+Fault14ReactorCoolantValveStiction,TEP Fault 14: Reactor coolant valve stiction,FaultType,tep,fault_14|fault 14|IDV(14)|idv_14|TEP Fault 14: Reactor coolant valve stiction,Stiction disturbance in reactor cooling water outlet valve
+Fault15SeparatorCoolantValveStiction,TEP Fault 15: Separator coolant valve stiction,FaultType,tep,fault_15|fault 15|IDV(15)|idv_15|TEP Fault 15: Separator coolant valve stiction,Stiction disturbance in separator cooling water outlet valve
+Fault16StripperHeatTransfer,TEP Fault 16: Stripper heat transfer,FaultType,tep,fault_16|fault 16|IDV(16)|idv_16|TEP Fault 16: Stripper heat transfer,Random disturbance in stripper heat transfer
+Fault17ReactorHeatTransfer,TEP Fault 17: Reactor heat transfer,FaultType,tep,fault_17|fault 17|IDV(17)|idv_17|TEP Fault 17: Reactor heat transfer,Random disturbance in reactor heat transfer
+Fault18CondenserHeatTransfer,TEP Fault 18: Condenser heat transfer,FaultType,tep,fault_18|fault 18|IDV(18)|idv_18|TEP Fault 18: Condenser heat transfer,Random disturbance in condenser heat transfer
+Fault19MultiValveStiction,TEP Fault 19: Multi-valve stiction,FaultType,tep,fault_19|fault 19|IDV(19)|idv_19|TEP Fault 19: Multi-valve stiction,"Stiction disturbance over recycle, separator underflow, stripper underflow, and steam valves"
+TepMultivariateResidualShift,Multivariate residual shift,Morphology,tep,multivariate_residual_shift|residual shift|RBC residual shift,Residual-contribution morphology emitted by the TEP producer
+TepProcessObject,Tennessee Eastman Process,Object,tep,process|tep|Tennessee Eastman Process,TEP benchmark process object used by KGTraceVis evidence analysis
+XMEAS1,XMEAS 1,Variable,tep,XMEAS_1|xmeas1,Example measured process variable
+Xmeas10Variable,XMEAS 10: Purge rate,Variable,tep,XMEAS_10|XMEAS 10|xmeas_10|xmeas10|variable:xmeas_10|plant output 10,TEP measured variable channel from TEP_KG variable mapping
+Xmeas11Variable,XMEAS 11: Product separator temperature,Variable,tep,XMEAS_11|XMEAS 11|xmeas_11|xmeas11|variable:xmeas_11|plant output 11,TEP measured variable channel from TEP_KG variable mapping
+Xmeas12Variable,XMEAS 12: Product separator level,Variable,tep,XMEAS_12|XMEAS 12|xmeas_12|xmeas12|variable:xmeas_12|plant output 12,TEP measured variable channel from TEP_KG variable mapping
+Xmeas13Variable,XMEAS 13: Product separator pressure,Variable,tep,XMEAS_13|XMEAS 13|xmeas_13|xmeas13|variable:xmeas_13|plant output 13,TEP measured variable channel from TEP_KG variable mapping
+Xmeas14Variable,XMEAS 14: Product separator underflow,Variable,tep,XMEAS_14|XMEAS 14|xmeas_14|xmeas14|variable:xmeas_14|plant output 14,TEP measured variable channel from TEP_KG variable mapping
+Xmeas15Variable,XMEAS 15: Stripper level,Variable,tep,XMEAS_15|XMEAS 15|xmeas_15|xmeas15|variable:xmeas_15|plant output 15,TEP measured variable channel from TEP_KG variable mapping
+Xmeas16Variable,XMEAS 16: Stripper pressure,Variable,tep,XMEAS_16|XMEAS 16|xmeas_16|xmeas16|variable:xmeas_16|plant output 16,TEP measured variable channel from TEP_KG variable mapping
+Xmeas17Variable,XMEAS 17: Stripper underflow,Variable,tep,XMEAS_17|XMEAS 17|xmeas_17|xmeas17|variable:xmeas_17|plant output 17,TEP measured variable channel from TEP_KG variable mapping
+Xmeas18Variable,XMEAS 18: Stripper temperature,Variable,tep,XMEAS_18|XMEAS 18|xmeas_18|xmeas18|variable:xmeas_18|plant output 18,TEP measured variable channel from TEP_KG variable mapping
+Xmeas19Variable,XMEAS 19: Stripper steam flow,Variable,tep,XMEAS_19|XMEAS 19|xmeas_19|xmeas19|variable:xmeas_19|plant output 19,TEP measured variable channel from TEP_KG variable mapping
+Xmeas1Variable,XMEAS 1: A feed flow,Variable,tep,XMEAS_1|XMEAS 1|xmeas_1|xmeas1|variable:xmeas_1|plant output 1,TEP measured variable channel from TEP_KG variable mapping
+Xmeas20Variable,XMEAS 20: Compressor work,Variable,tep,XMEAS_20|XMEAS 20|xmeas_20|xmeas20|variable:xmeas_20|plant output 20,TEP measured variable channel from TEP_KG variable mapping
+Xmeas21Variable,XMEAS 21: Reactor coolant temperature,Variable,tep,XMEAS_21|XMEAS 21|xmeas_21|xmeas21|variable:xmeas_21|plant output 21,TEP measured variable channel from TEP_KG variable mapping
+Xmeas22Variable,XMEAS 22: Separator coolant temperature,Variable,tep,XMEAS_22|XMEAS 22|xmeas_22|xmeas22|variable:xmeas_22|plant output 22,TEP measured variable channel from TEP_KG variable mapping
+Xmeas23Variable,XMEAS 23: Feed component A,Variable,tep,XMEAS_23|XMEAS 23|xmeas_23|xmeas23|variable:xmeas_23,TEP measured variable channel from TEP_KG variable mapping
+Xmeas24Variable,XMEAS 24: Feed component B,Variable,tep,XMEAS_24|XMEAS 24|xmeas_24|xmeas24|variable:xmeas_24,TEP measured variable channel from TEP_KG variable mapping
+Xmeas25Variable,XMEAS 25: Feed component C,Variable,tep,XMEAS_25|XMEAS 25|xmeas_25|xmeas25|variable:xmeas_25,TEP measured variable channel from TEP_KG variable mapping
+Xmeas26Variable,XMEAS 26: Feed component D,Variable,tep,XMEAS_26|XMEAS 26|xmeas_26|xmeas26|variable:xmeas_26,TEP measured variable channel from TEP_KG variable mapping
+Xmeas27Variable,XMEAS 27: Feed component E,Variable,tep,XMEAS_27|XMEAS 27|xmeas_27|xmeas27|variable:xmeas_27,TEP measured variable channel from TEP_KG variable mapping
+Xmeas28Variable,XMEAS 28: Feed component F,Variable,tep,XMEAS_28|XMEAS 28|xmeas_28|xmeas28|variable:xmeas_28,TEP measured variable channel from TEP_KG variable mapping
+Xmeas29Variable,XMEAS 29: Purge component A,Variable,tep,XMEAS_29|XMEAS 29|xmeas_29|xmeas29|variable:xmeas_29,TEP measured variable channel from TEP_KG variable mapping
+Xmeas2Variable,XMEAS 2: D feed flow,Variable,tep,XMEAS_2|XMEAS 2|xmeas_2|xmeas2|variable:xmeas_2|plant output 2,TEP measured variable channel from TEP_KG variable mapping
+Xmeas30Variable,XMEAS 30: Purge component B,Variable,tep,XMEAS_30|XMEAS 30|xmeas_30|xmeas30|variable:xmeas_30,TEP measured variable channel from TEP_KG variable mapping
+Xmeas31Variable,XMEAS 31: Purge component C,Variable,tep,XMEAS_31|XMEAS 31|xmeas_31|xmeas31|variable:xmeas_31,TEP measured variable channel from TEP_KG variable mapping
+Xmeas32Variable,XMEAS 32: Purge component D,Variable,tep,XMEAS_32|XMEAS 32|xmeas_32|xmeas32|variable:xmeas_32,TEP measured variable channel from TEP_KG variable mapping
+Xmeas33Variable,XMEAS 33: Purge component E,Variable,tep,XMEAS_33|XMEAS 33|xmeas_33|xmeas33|variable:xmeas_33,TEP measured variable channel from TEP_KG variable mapping
+Xmeas34Variable,XMEAS 34: Purge component F,Variable,tep,XMEAS_34|XMEAS 34|xmeas_34|xmeas34|variable:xmeas_34,TEP measured variable channel from TEP_KG variable mapping
+Xmeas35Variable,XMEAS 35: Purge component G,Variable,tep,XMEAS_35|XMEAS 35|xmeas_35|xmeas35|variable:xmeas_35,TEP measured variable channel from TEP_KG variable mapping
+Xmeas36Variable,XMEAS 36: Purge component H,Variable,tep,XMEAS_36|XMEAS 36|xmeas_36|xmeas36|variable:xmeas_36,TEP measured variable channel from TEP_KG variable mapping
+Xmeas37Variable,XMEAS 37: Product component D,Variable,tep,XMEAS_37|XMEAS 37|xmeas_37|xmeas37|variable:xmeas_37,TEP measured variable channel from TEP_KG variable mapping
+Xmeas38Variable,XMEAS 38: Product component E,Variable,tep,XMEAS_38|XMEAS 38|xmeas_38|xmeas38|variable:xmeas_38,TEP measured variable channel from TEP_KG variable mapping
+Xmeas39Variable,XMEAS 39: Product component F,Variable,tep,XMEAS_39|XMEAS 39|xmeas_39|xmeas39|variable:xmeas_39,TEP measured variable channel from TEP_KG variable mapping
+Xmeas3Variable,XMEAS 3: E feed flow,Variable,tep,XMEAS_3|XMEAS 3|xmeas_3|xmeas3|variable:xmeas_3|plant output 3,TEP measured variable channel from TEP_KG variable mapping
+Xmeas40Variable,XMEAS 40: Product component G,Variable,tep,XMEAS_40|XMEAS 40|xmeas_40|xmeas40|variable:xmeas_40,TEP measured variable channel from TEP_KG variable mapping
+Xmeas41Variable,XMEAS 41: Product component H,Variable,tep,XMEAS_41|XMEAS 41|xmeas_41|xmeas41|variable:xmeas_41,TEP measured variable channel from TEP_KG variable mapping
+Xmeas4Variable,XMEAS 4: A and C feed flow,Variable,tep,XMEAS_4|XMEAS 4|xmeas_4|xmeas4|variable:xmeas_4|plant output 4,TEP measured variable channel from TEP_KG variable mapping
+Xmeas5Variable,XMEAS 5: Recycle flow,Variable,tep,XMEAS_5|XMEAS 5|xmeas_5|xmeas5|variable:xmeas_5|plant output 5,TEP measured variable channel from TEP_KG variable mapping
+Xmeas6Variable,XMEAS 6: Reactor feed rate,Variable,tep,XMEAS_6|XMEAS 6|xmeas_6|xmeas6|variable:xmeas_6|plant output 6,TEP measured variable channel from TEP_KG variable mapping
+Xmeas7Variable,XMEAS 7: Reactor pressure,Variable,tep,XMEAS_7|XMEAS 7|xmeas_7|xmeas7|variable:xmeas_7|plant output 7,TEP measured variable channel from TEP_KG variable mapping
+Xmeas8Variable,XMEAS 8: Reactor level,Variable,tep,XMEAS_8|XMEAS 8|xmeas_8|xmeas8|variable:xmeas_8|plant output 8,TEP measured variable channel from TEP_KG variable mapping
+Xmeas9Variable,XMEAS 9: Reactor temperature,Variable,tep,XMEAS_9|XMEAS 9|xmeas_9|xmeas9|variable:xmeas_9|plant output 9,TEP measured variable channel from TEP_KG variable mapping
+Xmv10Variable,XMV 10: Reactor coolant valve,Variable,tep,XMV_10|XMV 10|xmv_10|xmv10|variable:manipulated_variable_10,TEP manipulated variable channel from TEP_KG variable mapping
+Xmv11Variable,XMV 11: Condenser coolant valve,Variable,tep,XMV_11|XMV 11|xmv_11|xmv11|variable:manipulated_variable_11,TEP manipulated variable channel from TEP_KG variable mapping
+Xmv1Variable,XMV 1: D feed valve,Variable,tep,XMV_1|XMV 1|xmv_1|xmv1|variable:manipulated_variable_1,TEP manipulated variable channel from TEP_KG variable mapping
+Xmv2Variable,XMV 2: E feed valve,Variable,tep,XMV_2|XMV 2|xmv_2|xmv2|variable:manipulated_variable_2,TEP manipulated variable channel from TEP_KG variable mapping
+Xmv3Variable,XMV 3: A feed valve,Variable,tep,XMV_3|XMV 3|xmv_3|xmv3|variable:manipulated_variable_3,TEP manipulated variable channel from TEP_KG variable mapping
+Xmv4Variable,XMV 4: A and C feed valve,Variable,tep,XMV_4|XMV 4|xmv_4|xmv4|variable:manipulated_variable_4,TEP manipulated variable channel from TEP_KG variable mapping
+Xmv5Variable,XMV 5: Recycle valve,Variable,tep,XMV_5|XMV 5|xmv_5|xmv5|variable:manipulated_variable_5,TEP manipulated variable channel from TEP_KG variable mapping
+Xmv6Variable,XMV 6: Purge valve,Variable,tep,XMV_6|XMV 6|xmv_6|xmv6|variable:manipulated_variable_6,TEP manipulated variable channel from TEP_KG variable mapping
+Xmv7Variable,XMV 7: Separator underflow valve,Variable,tep,XMV_7|XMV 7|xmv_7|xmv7|variable:manipulated_variable_7,TEP manipulated variable channel from TEP_KG variable mapping
+Xmv8Variable,XMV 8: Stripper underflow valve,Variable,tep,XMV_8|XMV 8|xmv_8|xmv8|variable:manipulated_variable_8,TEP manipulated variable channel from TEP_KG variable mapping
+Xmv9Variable,XMV 9: Stripper steam valve,Variable,tep,XMV_9|XMV 9|xmv_9|xmv9|variable:manipulated_variable_9,TEP manipulated variable channel from TEP_KG variable mapping

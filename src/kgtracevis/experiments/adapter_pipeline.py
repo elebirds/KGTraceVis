@@ -380,7 +380,13 @@ def _candidate_targets(
     targets: dict[str, dict[str, Any]] = {}
     edges_by_id = {edge["edge_id"]: edge for edge in source_edges}
     for path in top_k_paths:
-        target_id = str(path["target_entity_id"])
+        target_id = str(
+            path.get("root_cause_candidate_id")
+            or path.get("target_entity_id")
+            or ""
+        )
+        if not target_id:
+            continue
         target = targets.setdefault(
             target_id,
             _target_seed(target_id, graph=graph),

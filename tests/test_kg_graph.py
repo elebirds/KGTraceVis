@@ -23,6 +23,26 @@ def test_default_kg_loads_reference_layers() -> None:
     assert graph.has_edge("MechanicalContact", "PART_OF", "HandlingDamage")
 
 
+def test_default_kg_loads_tep_seed_layer() -> None:
+    """Default loading should include the curated TEP seed KG."""
+    graph = KnowledgeGraph.from_default_paths()
+
+    assert "Fault06Stream1AFeedLoss" in graph.nodes
+    assert "Xmeas1Variable" in graph.nodes
+    assert graph.has_edge(
+        "Fault06Stream1AFeedLoss",
+        "AFFECTS_VARIABLE",
+        "Xmeas1Variable",
+        scenario="tep",
+    )
+    assert graph.has_edge(
+        "Xmeas1Variable",
+        "INDICATES",
+        "Fault06Stream1AFeedLoss",
+        scenario="tep",
+    )
+
+
 def test_merge_deduplicates_identical_edges() -> None:
     """Merging the same CSV twice should not duplicate identical edges."""
     graph = KnowledgeGraph.from_paths(

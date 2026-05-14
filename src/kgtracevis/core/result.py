@@ -42,6 +42,18 @@ class RcaRankingResult(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class RcaReasoningResult(BaseModel):
+    """Unified RCA reasoning output with aligned paths and root-cause rankings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    case_id: str
+    top_k_paths: list[dict[str, Any]] = Field(default_factory=list)
+    ranked_root_causes: list[RankedRootCause] = Field(default_factory=list)
+    scoring_method: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class AnalysisResult(BaseModel):
     """Stable output envelope for KGTraceVis analysis."""
 

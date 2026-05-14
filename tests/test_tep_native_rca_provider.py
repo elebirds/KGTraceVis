@@ -123,6 +123,38 @@ def test_pipeline_passes_runtime_graph_to_tep_native_provider() -> None:
     assert result.ranked_root_causes
     assert result.ranked_root_causes[0].candidate_id == "CoolingFault"
     assert result.ranked_root_causes[0].scoring_method == "tep_native_kg"
+    assert result.top_k_paths
+    assert result.top_k_paths[0]["path_id"] == (
+        result.ranked_root_causes[0].explanation_paths[0]["path_id"]
+    )
+    assert result.top_k_paths[0]["root_cause_candidate_id"] == "CoolingFault"
+    assert result.top_k_paths[0]["nodes"] == ["CoolingFault", "XMEAS_1"]
+
+
+def test_tep_native_provider_uses_default_seed_kg_for_fault_06() -> None:
+    """The checked-in TEP seed should support native Fault 06 RCA ranking."""
+    evidence = evidence_from_tep_record(
+        {
+            "case_id": "tep_fault_06_seed",
+            "anomaly_type": "fault_06",
+            "variables": ["XMEAS_1", "XMV_3"],
+            "variable_contributions": {"XMEAS_1": 0.7, "XMV_3": 0.3},
+        }
+    )
+    pipeline = KGTracePipeline(
+        graph=KnowledgeGraph.from_default_paths(),
+        root_cause_provider=TepNativeRcaProvider(),
+    )
+
+    result = pipeline.analyze(evidence, top_k=3)
+
+    assert result.ranked_root_causes
+    assert result.ranked_root_causes[0].candidate_id == "Fault06Stream1AFeedLoss"
+    assert result.ranked_root_causes[0].scoring_method == "tep_native_kg"
+    assert {
+        path["path_id"]
+        for path in result.ranked_root_causes[0].explanation_paths
+    }.issubset({path["path_id"] for path in result.top_k_paths})
 
 
 def _native_tep_graph() -> KnowledgeGraph:

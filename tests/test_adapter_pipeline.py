@@ -175,7 +175,7 @@ def test_run_adapter_pipeline_can_select_native_tep_rca_provider(tmp_path: Path)
     case = output.summary["cases"][0]
     assert output.summary["pipeline"]["root_cause_provider"] == "native"
     assert case["ranked_root_causes"]
-    assert case["ranked_root_causes"][0]["candidate_id"] == "FeedFlowDisturbance"
+    assert case["ranked_root_causes"][0]["candidate_id"] == "Fault06Stream1AFeedLoss"
     assert case["ranked_root_causes"][0]["scoring_method"] == "tep_native_kg"
 
 
@@ -263,7 +263,7 @@ def test_run_adapter_pipeline_cli_accepts_native_tep_rca_provider(tmp_path: Path
     summary = json.loads(Path(payload["summary_path"]).read_text(encoding="utf-8"))
     root_cause = summary["cases"][0]["ranked_root_causes"][0]
     assert summary["pipeline"]["root_cause_provider"] == "native"
-    assert root_cause["candidate_id"] == "FeedFlowDisturbance"
+    assert root_cause["candidate_id"] == "Fault06Stream1AFeedLoss"
     assert root_cause["scoring_method"] == "tep_native_kg"
 
 
