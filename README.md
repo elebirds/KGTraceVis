@@ -225,6 +225,11 @@ Validate example evidence:
 uv run python scripts/run_examples.py
 ```
 
+TEP RCA remains opt-in. Local smoke runs can select the KGTraceVis-native
+provider with `--tep-rca-provider native`; bridge-mode artifacts can be selected
+with `--tep-rca-provider artifact` plus an explicit artifact directory or
+ranking path.
+
 Build KG CSV files:
 
 ```bash
@@ -623,6 +628,11 @@ uv run python scripts/run_adapter_pipeline.py \
   --output-dir outputs/adapter_pipeline_v0/wm811k \
   --overwrite
 ```
+
+For TEP records, `scripts/run_adapter_pipeline.py` accepts the same opt-in RCA
+provider flags: `--tep-rca-provider native` uses the native TEP provider, while
+`--tep-rca-provider artifact` requires `--tep-rca-artifact-dir` or
+`--tep-rca-ranking-path`.
 
 WM811K records keep `dataset="wafer"` and identify the adapter with
 `adapter="wm811k"` or `source_dataset="wm811k"`. Adapters emit observed evidence
