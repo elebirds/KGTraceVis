@@ -103,6 +103,34 @@ Rules:
 - Do not implement KG construction pipeline behavior as a side effect of an
   Evidence analysis workflow.
 
+#### RootCauseProvider Graph Context Contract
+
+`RootCauseProvider` is the extension point for scenario-specific RCA scoring
+inside the unified `KGTracePipeline`. Providers may be graph-aware:
+
+```python
+def rank_root_causes(
+    evidence: Evidence,
+    *,
+    graph: KnowledgeGraph | None = None,
+    top_k: int = 5,
+    top_k_paths: list[dict[str, Any]] | None = None,
+) -> list[RankedRootCause]:
+    ...
+```
+
+Rules:
+
+- The provider must return unified `RankedRootCause` objects, not a
+  dataset-specific payload.
+- The pipeline may pass the runtime graph snapshot to graph-aware providers.
+- The pipeline must remain compatible with older providers that do not accept
+  `graph`; use signature detection rather than unconditionally passing a new
+  keyword.
+- Providers must not construct or mutate KG data as a side effect of ranking.
+- TEP-native support path search must stay scoped to `tep` and `shared` nodes
+  and edges.
+
 ### 5. Validation & Error Matrix
 
 | Condition | Behavior |
@@ -113,6 +141,9 @@ Rules:
 | API receives expected workflow `ValueError` | map to a structured 4xx response |
 | Runtime KG provider is unavailable for an analysis path | fail with configuration guidance unless an explicit test graph was supplied |
 | A workflow needs KG construction output | accept explicit paths/provider/version; do not run hidden extraction by default |
+| Root-cause provider accepts `graph` | pass the runtime `KnowledgeGraph` snapshot |
+| Root-cause provider lacks `graph` parameter | call it with the legacy provider signature |
+| Native TEP provider sees non-TEP edges in a mixed graph | ignore them for TEP support-path ranking |
 
 ### 6. Good/Base/Bad Cases
 
