@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
-- **Last Active**: 2026-05-12
+- **Total Sessions**: 3
+- **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~75 | Active |
+| `journal-1.md` | ~108 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-05-14 | KG Studio draft review workflow | `06cc867` | `main` |
 | 2 | 2026-05-12 | PatchCore and model asset cleanup | `8d50414`, `563b3c9`, `bbd25be` | `main` |
 | 1 | 2026-05-04 | Adapter-first paper pipeline | `6c2f7ae` | `main` |
 <!-- @@@/auto:session-history -->

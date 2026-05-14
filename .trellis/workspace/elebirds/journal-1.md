@@ -73,3 +73,36 @@ Grouped pending changes into evidence-contract docs, trusted model asset downloa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: KG Studio draft review workflow
+
+**Date**: 2026-05-14
+**Task**: KG Studio draft review workflow
+**Branch**: `main`
+
+### Summary
+
+Tightened KG Studio filtered selection behavior, replaced source draft edge IDs with reviewable candidate edge tables, documented the non-mutating review workflow, and verified build, tests, lint, typecheck, examples, dashboard smoke, and browser interactions.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `06cc867` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
