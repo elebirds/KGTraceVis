@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~174 | Active |
+| `journal-1.md` | ~207 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-05-14 | Analysis detail evidence-to-reasoning workspace | `c937ad6` | `main` |
 | 5 | 2026-05-14 | KG Studio overview workflow actions | `51d85ee` | `main` |
 | 4 | 2026-05-14 | KG Studio sources workspace tabs | `b92a45f` | `main` |
 | 3 | 2026-05-14 | KG Studio draft review workflow | `06cc867` | `main` |

@@ -172,3 +172,36 @@ Added workflow action cards to KG Studio Overview for Sources, Graph, Review, an
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Analysis detail evidence-to-reasoning workspace
+
+**Date**: 2026-05-14
+**Task**: Analysis detail evidence-to-reasoning workspace
+**Branch**: `main`
+
+### Summary
+
+Refactored Analysis Detail into a paper-demo evidence-to-reasoning workspace with a case summary strip, focused visual evidence band, linking/consistency/path/review stages, and updated documentation; verified MVTec and WM811K detail pages plus full quality gates.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c937ad6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
