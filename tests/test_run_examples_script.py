@@ -36,6 +36,39 @@ def test_run_examples_cli_accepts_kg_overlays(tmp_path: Path) -> None:
     assert payload == {"validated": 1, "kg_backend": "explicit_seed_overlay"}
 
 
+def test_run_examples_cli_accepts_native_tep_rca_provider(tmp_path: Path) -> None:
+    """The examples script should opt into native TEP RCA for local smoke tests."""
+    example_dir = tmp_path / "examples"
+    example_dir.mkdir()
+    shutil.copy("data/examples/tep_example.json", example_dir / "tep_example.json")
+    nodes_path, edges_path = _write_overlay_csv(tmp_path)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_examples.py",
+            "--example-dir",
+            str(example_dir),
+            "--kg-node-path",
+            str(nodes_path),
+            "--kg-edge-path",
+            str(edges_path),
+            "--tep-rca-provider",
+            "native",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout[result.stdout.rfind("{") :])
+    assert payload == {
+        "validated": 1,
+        "kg_backend": "explicit_seed_overlay",
+        "root_cause_provider": "native",
+    }
+
+
 def _write_overlay_csv(tmp_path: Path) -> tuple[Path, Path]:
     nodes_path = tmp_path / "overlay_nodes.csv"
     edges_path = tmp_path / "overlay_edges.csv"

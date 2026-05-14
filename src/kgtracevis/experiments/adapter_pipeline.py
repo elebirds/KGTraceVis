@@ -14,6 +14,11 @@ from kgtracevis.adapters.batch import evidence_from_records, load_records, write
 from kgtracevis.core import KGTracePipeline
 from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
+from kgtracevis.workflows.root_cause_provider_selection import (
+    RootCauseProviderSelectionConfig,
+    build_pipeline,
+    normalize_root_cause_provider_selection,
+)
 
 SUMMARY_FILENAME = "adapter_pipeline_summary.json"
 TABLE_FILENAME = "adapter_pipeline_table.csv"
@@ -60,6 +65,10 @@ def run_adapter_pipeline(
     pipeline: KGTracePipeline | None = None,
     kg_node_paths: list[str | Path] | None = None,
     kg_edge_paths: list[str | Path] | None = None,
+    tep_rca_provider: str | None = None,
+    tep_rca_artifact_dir: str | Path | None = None,
+    tep_rca_ranking_path: str | Path | None = None,
+    tep_rca_contributions_path: str | Path | None = None,
 ) -> AdapterPipelineOutput:
     """Run records through Evidence adapters and ``KGTracePipeline``.
 
@@ -87,10 +96,19 @@ def run_adapter_pipeline(
 
     if pipeline is not None and (kg_node_paths or kg_edge_paths):
         raise ValueError("pass either pipeline or KG CSV overlay paths, not both")
+    provider_config = _root_cause_provider_config(
+        tep_rca_provider=tep_rca_provider,
+        tep_rca_artifact_dir=tep_rca_artifact_dir,
+        tep_rca_ranking_path=tep_rca_ranking_path,
+        tep_rca_contributions_path=tep_rca_contributions_path,
+    )
+    if pipeline is not None and provider_config.tep_rca_provider != "none":
+        raise ValueError("pass either pipeline or TEP RCA provider options, not both")
 
     active_pipeline = pipeline or _pipeline_from_kg_paths(
         kg_node_paths=kg_node_paths,
         kg_edge_paths=kg_edge_paths,
+        root_cause_provider_config=provider_config,
     )
     cases = [
         _case_summary(
@@ -109,6 +127,7 @@ def run_adapter_pipeline(
         top_k=top_k,
         kg_node_paths=kg_node_paths,
         kg_edge_paths=kg_edge_paths,
+        root_cause_provider_config=provider_config,
         evidence_paths=evidence_paths,
         cases=cases,
     )
@@ -162,6 +181,7 @@ def _run_summary(
     top_k: int,
     kg_node_paths: list[str | Path] | None,
     kg_edge_paths: list[str | Path] | None,
+    root_cause_provider_config: RootCauseProviderSelectionConfig,
     evidence_paths: list[Path],
     cases: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -189,6 +209,7 @@ def _run_summary(
             "top_k": top_k,
             "kg_node_paths": [str(path) for path in kg_node_paths or []],
             "kg_edge_paths": [str(path) for path in kg_edge_paths or []],
+            **_root_cause_provider_summary(root_cause_provider_config),
         },
         "note": (
             "Path targets are candidate/plausible explanation nodes generated from "
@@ -203,15 +224,61 @@ def _pipeline_from_kg_paths(
     *,
     kg_node_paths: list[str | Path] | None,
     kg_edge_paths: list[str | Path] | None,
+    root_cause_provider_config: RootCauseProviderSelectionConfig,
 ) -> KGTracePipeline:
     if not kg_node_paths and not kg_edge_paths:
-        return KGTracePipeline()
+        return build_pipeline(root_cause_provider_config=root_cause_provider_config)
     graph = KnowledgeGraph.from_paths(
         [*DEFAULT_NODE_PATHS, *(kg_node_paths or [])],
         [*DEFAULT_EDGE_PATHS, *(kg_edge_paths or [])],
         skip_missing=True,
     )
-    return KGTracePipeline(graph=graph)
+    return build_pipeline(
+        graph=graph,
+        root_cause_provider_config=root_cause_provider_config,
+    )
+
+
+def _root_cause_provider_config(
+    *,
+    tep_rca_provider: str | None,
+    tep_rca_artifact_dir: str | Path | None,
+    tep_rca_ranking_path: str | Path | None,
+    tep_rca_contributions_path: str | Path | None,
+) -> RootCauseProviderSelectionConfig:
+    return RootCauseProviderSelectionConfig(
+        tep_rca_provider=normalize_root_cause_provider_selection(tep_rca_provider),
+        tep_rca_artifact_dir=Path(tep_rca_artifact_dir)
+        if tep_rca_artifact_dir is not None
+        else None,
+        tep_rca_ranking_path=Path(tep_rca_ranking_path)
+        if tep_rca_ranking_path is not None
+        else None,
+        tep_rca_contributions_path=Path(tep_rca_contributions_path)
+        if tep_rca_contributions_path is not None
+        else None,
+    )
+
+
+def _root_cause_provider_summary(
+    config: RootCauseProviderSelectionConfig,
+) -> dict[str, Any]:
+    if config.tep_rca_provider == "none":
+        return {}
+    return {
+        "root_cause_provider": config.tep_rca_provider,
+        "tep_rca_artifact_dir": (
+            str(config.tep_rca_artifact_dir) if config.tep_rca_artifact_dir else None
+        ),
+        "tep_rca_ranking_path": (
+            str(config.tep_rca_ranking_path) if config.tep_rca_ranking_path else None
+        ),
+        "tep_rca_contributions_path": (
+            str(config.tep_rca_contributions_path)
+            if config.tep_rca_contributions_path
+            else None
+        ),
+    }
 
 
 def _case_summary(

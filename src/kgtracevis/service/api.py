@@ -145,6 +145,10 @@ def create_app() -> FastAPI:
         object_name: Annotated[str | None, Form()] = None,
         defect_type: Annotated[str | None, Form()] = None,
         model_preset: Annotated[str | None, Form()] = None,
+        tep_rca_provider: Annotated[str | None, Form()] = None,
+        tep_rca_artifact_dir: Annotated[str | None, Form()] = None,
+        tep_rca_ranking_path: Annotated[str | None, Form()] = None,
+        tep_rca_contributions_path: Annotated[str | None, Form()] = None,
         top_k: Annotated[int, Form()] = 5,
     ) -> dict[str, object]:
         try:
@@ -159,6 +163,10 @@ def create_app() -> FastAPI:
                 object_name=object_name,
                 defect_type=defect_type,
                 model_preset=model_preset,
+                tep_rca_provider=tep_rca_provider,
+                tep_rca_artifact_dir=tep_rca_artifact_dir,
+                tep_rca_ranking_path=tep_rca_ranking_path,
+                tep_rca_contributions_path=tep_rca_contributions_path,
                 top_k=top_k,
             ).model_dump(mode="json")
         except (FileNotFoundError, ValueError) as exc:

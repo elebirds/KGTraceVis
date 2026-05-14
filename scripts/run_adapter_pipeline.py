@@ -57,6 +57,27 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Additional KG edge CSV overlay path. May be passed multiple times.",
     )
+    parser.add_argument(
+        "--tep-rca-provider",
+        choices=("none", "native", "artifact"),
+        default="none",
+        help="Optional TEP RCA provider. Defaults to existing path projection behavior.",
+    )
+    parser.add_argument(
+        "--tep-rca-artifact-dir",
+        type=Path,
+        help="TEP RCA artifact directory required when --tep-rca-provider=artifact.",
+    )
+    parser.add_argument(
+        "--tep-rca-ranking-path",
+        type=Path,
+        help="Explicit TEP RCA ranking artifact path for artifact provider mode.",
+    )
+    parser.add_argument(
+        "--tep-rca-contributions-path",
+        type=Path,
+        help="Optional TEP RCA contribution artifact path for artifact provider mode.",
+    )
     return parser.parse_args()
 
 
@@ -72,6 +93,10 @@ def main() -> None:
         overwrite=args.overwrite,
         kg_node_paths=args.kg_node_path,
         kg_edge_paths=args.kg_edge_path,
+        tep_rca_provider=args.tep_rca_provider,
+        tep_rca_artifact_dir=args.tep_rca_artifact_dir,
+        tep_rca_ranking_path=args.tep_rca_ranking_path,
+        tep_rca_contributions_path=args.tep_rca_contributions_path,
     )
     print(
         json.dumps(

@@ -181,6 +181,23 @@ def test_default_upload_run_persists_detail_to_postgres(
     assert not (Path(detail.run.run_dir) / "manifest.json").exists()
 
 
+def test_upload_run_validates_missing_tep_artifact_provider_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Service upload path should validate artifact-provider config conservatively."""
+    monkeypatch.setattr(service_runs, "DEFAULT_RUNS_DIR", tmp_path / "rootlens_sessions")
+
+    with pytest.raises(ValueError, match="tep_rca_artifact_dir"):
+        service_runs.create_run_from_upload(
+            "tep_0001.json",
+            Path("data/examples/tep_example.json").read_bytes(),
+            mode="evidence",
+            top_k=2,
+            tep_rca_provider="artifact",
+        )
+
+
 def test_upload_run_prepares_visual_evidence_artifacts(
     tmp_path: Path,
     monkeypatch,

@@ -158,6 +158,27 @@ def test_run_adapter_pipeline_default_kg_handles_wm811k_loc(tmp_path: Path) -> N
     assert case["top_k_paths"][0]["target_entity_id"] != "GlueRemovalInsufficient"
 
 
+def test_run_adapter_pipeline_can_select_native_tep_rca_provider(tmp_path: Path) -> None:
+    """Adapter pipeline should opt into native TEP RCA without a separate route."""
+    records_path = _write_tep_record(tmp_path)
+    nodes_path, edges_path = _write_empty_overlay_csv(tmp_path)
+
+    output = run_adapter_pipeline(
+        records_path,
+        tmp_path / "tep_native",
+        dataset="tep",
+        kg_node_paths=[nodes_path],
+        kg_edge_paths=[edges_path],
+        tep_rca_provider="native",
+    )
+
+    case = output.summary["cases"][0]
+    assert output.summary["pipeline"]["root_cause_provider"] == "native"
+    assert case["ranked_root_causes"]
+    assert case["ranked_root_causes"][0]["candidate_id"] == "FeedFlowDisturbance"
+    assert case["ranked_root_causes"][0]["scoring_method"] == "tep_native_kg"
+
+
 def test_run_adapter_pipeline_protects_existing_summary(tmp_path: Path) -> None:
     """Existing summaries should not be replaced unless overwrite is explicit."""
     output_dir = tmp_path / "existing"
@@ -212,6 +233,68 @@ def test_run_adapter_pipeline_cli_reports_compact_result(tmp_path: Path) -> None
     assert Path(payload["table_path"]).is_file()
 
 
+def test_run_adapter_pipeline_cli_accepts_native_tep_rca_provider(tmp_path: Path) -> None:
+    """The CLI should expose native TEP RCA provider selection."""
+    records_path = _write_tep_record(tmp_path)
+    nodes_path, edges_path = _write_empty_overlay_csv(tmp_path)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_adapter_pipeline.py",
+            "--input",
+            str(records_path),
+            "--dataset",
+            "tep",
+            "--output-dir",
+            str(tmp_path / "cli_tep_native"),
+            "--kg-node-path",
+            str(nodes_path),
+            "--kg-edge-path",
+            str(edges_path),
+            "--tep-rca-provider",
+            "native",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    summary = json.loads(Path(payload["summary_path"]).read_text(encoding="utf-8"))
+    root_cause = summary["cases"][0]["ranked_root_causes"][0]
+    assert summary["pipeline"]["root_cause_provider"] == "native"
+    assert root_cause["candidate_id"] == "FeedFlowDisturbance"
+    assert root_cause["scoring_method"] == "tep_native_kg"
+
+
 def _read_table(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
+
+
+def _write_tep_record(tmp_path: Path) -> Path:
+    records_path = tmp_path / "tep_records.jsonl"
+    records_path.write_text(
+        (
+            '{"dataset":"tep","case_id":"tep_native_adapter","object":"process",'
+            '"anomaly_type":"process_fault","location":"reactor",'
+            '"variables":["XMEAS_1"],"variable_contributions":{"XMEAS_1":0.42},'
+            '"confidence":0.75}\n'
+        ),
+        encoding="utf-8",
+    )
+    return records_path
+
+
+def _write_empty_overlay_csv(tmp_path: Path) -> tuple[Path, Path]:
+    nodes_path = tmp_path / "empty_nodes.csv"
+    edges_path = tmp_path / "empty_edges.csv"
+    nodes_path.write_text("id,name,label,scenario,aliases,description\n", encoding="utf-8")
+    edges_path.write_text(
+        (
+            "head,relation,tail,scenario,source,evidence,confidence,weight,"
+            "review_status,feedback_count,accepted_count,rejected_count\n"
+        ),
+        encoding="utf-8",
+    )
+    return nodes_path, edges_path

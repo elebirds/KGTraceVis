@@ -56,6 +56,10 @@ from kgtracevis.service.run_store import (
 from kgtracevis.service.visual_evidence import (
     build_visual_evidence_artifacts,
 )
+from kgtracevis.workflows.root_cause_provider_selection import (
+    build_pipeline,
+    root_cause_provider_config_from_env,
+)
 
 DEFAULT_RUNS_DIR = Path("runs/rootlens_sessions")
 DEFAULT_MVTEC_UPLOAD_CHECKPOINT = DEFAULT_MVTEC_STFPM_CHECKPOINT
@@ -132,6 +136,10 @@ def create_run_from_upload(
     model_preset: str | None = None,
     runs_dir: str | Path | None = None,
     pipeline: KGTracePipeline | None = None,
+    tep_rca_provider: str | None = None,
+    tep_rca_artifact_dir: str | Path | None = None,
+    tep_rca_ranking_path: str | Path | None = None,
+    tep_rca_contributions_path: str | Path | None = None,
 ) -> RunDetail:
     """Persist one uploaded sample and run the applicable pipeline path."""
     if top_k < 1:
@@ -150,7 +158,14 @@ def create_run_from_upload(
     input_path.write_bytes(content)
 
     created_at = datetime.now(timezone.utc).isoformat()
-    active_pipeline = pipeline or KGTracePipeline()
+    active_pipeline = pipeline or build_pipeline(
+        root_cause_provider_config=root_cause_provider_config_from_env(
+            provider=tep_rca_provider,
+            artifact_dir=tep_rca_artifact_dir,
+            ranking_path=tep_rca_ranking_path,
+            contributions_path=tep_rca_contributions_path,
+        )
+    )
     if mode == "evidence":
         detail = _run_evidence_upload(
             run_id=run_id,
