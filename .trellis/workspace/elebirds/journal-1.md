@@ -339,3 +339,36 @@ Implemented the reusable source-to-KG construction pipeline methodology: source 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: KG Studio source-to-KG construction page
+
+**Date**: 2026-05-14
+**Task**: KG Studio source-to-KG construction page
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added the KG Studio Build tab, frontend construction API contracts/client, build form state, candidate KG build result display, KG Studio refresh after construction, documentation, and task PRD/verification notes.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a8a7b68` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
