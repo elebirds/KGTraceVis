@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verified the expected commands for project-level tests, lint, type checking, and examples."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Checked empty/filtered selection states so frontend actions do not reference hidden KG edges."}

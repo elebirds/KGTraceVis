@@ -1068,7 +1068,12 @@ select:disabled {
   grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
 }
 
-.kg-count-list .ant-list-item {
+.kg-count-list {
+  display: grid;
+  gap: 8px;
+}
+
+.kg-count-row {
   align-items: center;
   display: flex;
   gap: 8px;
@@ -1151,13 +1156,7 @@ select:disabled {
 .source-draft-results {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-}
-
-.source-draft-results span {
-  color: #1e3a8a;
-  font-size: 12px;
-  font-weight: 700;
+  gap: 8px;
 }
 
 .source-draft-results code {
@@ -1166,6 +1165,17 @@ select:disabled {
   font-size: 11px;
   overflow-wrap: anywhere;
   padding: 5px;
+}
+
+.source-draft-table {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.source-draft-table .ant-table-cell {
+  overflow-wrap: anywhere;
 }
 
 .kg-edge-list {
@@ -1319,21 +1329,34 @@ select:disabled {
 }
 
 .kg-review-queue-list {
+  display: grid;
+  gap: 8px;
   max-height: 680px;
   overflow: auto;
 }
 
-.kg-review-queue-list .ant-list-item {
+.kg-review-queue-list button {
+  background: #ffffff;
   border: 1px solid var(--border);
   border-radius: 8px;
+  color: #243139;
   cursor: pointer;
-  margin-bottom: 8px;
+  display: grid;
+  gap: 6px;
   padding: 10px;
+  text-align: left;
 }
 
-.kg-review-queue-list .ant-list-item.selected {
+.kg-review-queue-list button.selected {
   background: var(--primary-soft);
   border-color: var(--primary);
+}
+
+.kg-review-queue-list button span {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .kg-draft-form {
@@ -1433,8 +1456,10 @@ th {
   padding: 0;
 }
 
-.compact-list li {
+.compact-list-item {
   border-bottom: 1px solid #eef2f4;
+  display: grid;
+  gap: 3px;
   padding-bottom: 8px;
 }
 

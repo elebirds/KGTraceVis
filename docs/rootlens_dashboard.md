@@ -129,7 +129,10 @@ panel:
 
 Graph, Review, and Draft Lab share a candidate-edge filter bar for text query,
 scenario, source, and review status. Sources has a separate source/document
-search so source curation does not disturb graph review filters.
+search so source curation does not disturb graph review filters. When an edge
+filter changes, Graph, Review, and Draft Lab keep the selected edge aligned to
+the visible result set, so review and draft actions do not submit against a
+hidden stale edge.
 
 The KG Studio workspace reads candidate KG artifacts from local generated outputs.
 It prefers `runs/paper_case_kg/` and falls back to
@@ -164,8 +167,9 @@ ScratchDefect,SUGGESTS_PLAUSIBLE_MECHANISM,MechanicalContact,mvtec,Scratch wordi
 
 The endpoint returns candidate edges with source, evidence, confidence, weight,
 and `review_status=auto`; it does not call a remote LLM or write KG CSV files in
-this foundation version. A future LLM provider can reuse the same response
-contract.
+this foundation version. The UI renders returned candidate edges as a reviewable
+table with edge, scenario, confidence, and evidence columns. A future LLM
+provider can reuse the same response contract.
 
 ## Checks
 

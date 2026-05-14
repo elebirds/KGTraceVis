@@ -498,7 +498,6 @@ function RootLensApp() {
             element={
               <KGStudioWorkspace
                 payload={state.kgStudio}
-                selectedTarget={selectedKGTarget}
                 selectedTargetKey={state.selectedKGEdgeKey}
                 reviewNote={state.kgReviewNote}
                 reviewStatus={state.kgReviewStatus}

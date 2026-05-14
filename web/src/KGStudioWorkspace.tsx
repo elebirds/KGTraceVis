@@ -5,7 +5,6 @@ import {
   Descriptions,
   Empty,
   Input,
-  List,
   Menu,
   Select,
   Space,
@@ -33,13 +32,14 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum
 } from "d3-force";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { shortId, valueText } from "./format";
 import type {
   KGDraftAction,
+  KGSourceDraftEdge,
   KGSourceDraftResponse,
   KGStudioGraphEdge,
   KGStudioGraphNode,
@@ -114,7 +114,6 @@ const KG_STUDIO_VIEWS: Array<{
 
 export function KGStudioWorkspace({
   payload,
-  selectedTarget,
   selectedTargetKey,
   reviewNote,
   reviewStatus,
@@ -138,7 +137,6 @@ export function KGStudioWorkspace({
   onGenerateSourceDraft
 }: {
   payload: KGStudioPayload | null;
-  selectedTarget: KGStudioReviewTarget | undefined;
   selectedTargetKey: string;
   reviewNote: string;
   reviewStatus: string | null;
@@ -180,9 +178,6 @@ export function KGStudioWorkspace({
   const [filters, setFilters] = useState<KGStudioFilters>(EMPTY_FILTERS);
   const [sourceQuery, setSourceQuery] = useState("");
   const activeView = kgStudioViewForPath(location.pathname);
-  const selectedEdge = payload?.graph_edges.find(
-    (edge) => edge.target_key === selectedTargetKey
-  );
   const filteredEdges = useMemo(
     () => filterGraphEdges(payload?.graph_edges ?? [], filters),
     [payload?.graph_edges, filters]
@@ -195,6 +190,19 @@ export function KGStudioWorkspace({
     () => edgeFilterOptions(payload?.graph_edges ?? []),
     [payload?.graph_edges]
   );
+  const usesEdgeFilters = ["graph", "review", "drafts"].includes(activeView);
+  const activeEdges = usesEdgeFilters ? filteredEdges : (payload?.graph_edges ?? []);
+  const activeTargets = usesEdgeFilters ? filteredTargets : (payload?.review_targets ?? []);
+  const selectedEdge = activeEdges.find((edge) => edge.target_key === selectedTargetKey);
+  const activeSelectedTarget = activeTargets.find(
+    (target) => target.target_key === selectedTargetKey
+  );
+
+  useEffect(() => {
+    if (!usesEdgeFilters || !filteredEdges.length) return;
+    if (filteredEdges.some((edge) => edge.target_key === selectedTargetKey)) return;
+    onTargetSelected(filteredEdges[0].target_key);
+  }, [filteredEdges, onTargetSelected, selectedTargetKey, usesEdgeFilters]);
 
   if (location.pathname === "/kg-studio" || location.pathname === "/kg-studio/") {
     return <Navigate to="/kg-studio/overview" replace />;
@@ -245,7 +253,7 @@ export function KGStudioWorkspace({
         </Card>
       ) : (
         <>
-          <Alert className="claim-boundary" message={payload.note} type="warning" showIcon />
+          <Alert className="claim-boundary" title={payload.note} type="warning" showIcon />
           {activeView === "overview" && <KGStudioOverview payload={payload} />}
           {activeView === "sources" && (
             <KGStudioSourcesPage
@@ -290,7 +298,7 @@ export function KGStudioWorkspace({
               />
               <KGStudioReviewPage
                 selectedEdge={selectedEdge}
-                selectedTarget={selectedTarget}
+                selectedTarget={activeSelectedTarget}
                 selectedTargetKey={selectedTargetKey}
                 reviewNote={reviewNote}
                 reviewStatus={reviewStatus}
@@ -312,7 +320,7 @@ export function KGStudioWorkspace({
               />
               <KGStudioDraftsPage
                 selectedEdge={selectedEdge}
-                selectedTarget={selectedTarget}
+                selectedTarget={activeSelectedTarget}
                 selectedTargetKey={selectedTargetKey}
                 draftAction={draftAction}
                 draftRelation={draftRelation}
@@ -758,44 +766,32 @@ function CountList({
 }) {
   if (!rows.length) return <Empty description={emptyText} />;
   return (
-    <List
-      className="kg-count-list"
-      size="small"
-      dataSource={rows}
-      renderItem={(row) => (
-        <List.Item>
+    <div className="kg-count-list" role="list">
+      {rows.map((row) => (
+        <div className="kg-count-row" key={row.label} role="listitem">
           <span className="breakable-value">{row.label}</span>
           <Tag>{row.value}</Tag>
-        </List.Item>
-      )}
-    />
+        </div>
+      ))}
+    </div>
   );
 }
 
 function KGSourceList({ sources }: { sources: KGStudioSource[] }) {
   if (!sources.length) return <Empty description="No source registry rows found." />;
   return (
-    <List
-      className="compact-list"
-      size="small"
-      dataSource={sources}
-      renderItem={(source) => (
-        <List.Item>
-          <List.Item.Meta
-            title={<span className="breakable-value">{source.source_id}</span>}
-            description={
-              <Space direction="vertical" size={0}>
-                <Text>{source.title}</Text>
-                <Text type="secondary">{source.used_for}</Text>
-                <Text type="secondary" className="breakable-value">
-                  {source.path_or_url}
-                </Text>
-              </Space>
-            }
-          />
-        </List.Item>
-      )}
-    />
+    <div className="compact-list" role="list">
+      {sources.map((source) => (
+        <article className="compact-list-item" key={source.source_id} role="listitem">
+          <strong className="breakable-value">{source.source_id}</strong>
+          <Text>{source.title}</Text>
+          <Text type="secondary">{source.used_for}</Text>
+          <Text type="secondary" className="breakable-value">
+            {source.path_or_url}
+          </Text>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -854,38 +850,67 @@ function SourceToKGDraftForm({
       {result && (
         <div className="source-draft-results">
           <Tag color="processing">{result.candidate_edges.length} candidate edge(s)</Tag>
-          {result.candidate_edges.slice(0, 8).map((edge) => (
-            <code key={edge.edge_id}>{edge.edge_id}</code>
-          ))}
+          <Text type="secondary">{result.note}</Text>
+          <SourceDraftResultTable result={result} />
         </div>
       )}
     </div>
   );
 }
 
+function SourceDraftResultTable({ result }: { result: KGSourceDraftResponse }) {
+  const columns: TableColumnsType<KGSourceDraftEdge> = [
+    {
+      title: "Candidate Edge",
+      key: "edge",
+      render: (_, edge) => (
+        <Space wrap>
+          <Text>{edge.head}</Text>
+          <Tag color="blue">{edge.relation}</Tag>
+          <Text>{edge.tail}</Text>
+        </Space>
+      )
+    },
+    { title: "Scenario", dataIndex: "scenario", width: 110 },
+    {
+      title: "Confidence",
+      dataIndex: "confidence",
+      width: 120,
+      render: (value) => valueText(value)
+    },
+    {
+      title: "Evidence",
+      dataIndex: "evidence",
+      render: (value) => <span className="breakable-value">{valueText(value)}</span>
+    }
+  ];
+  return (
+    <Table
+      className="source-draft-table"
+      columns={columns}
+      dataSource={result.candidate_edges}
+      pagination={false}
+      rowKey="edge_id"
+      scroll={{ x: 760 }}
+      size="small"
+    />
+  );
+}
+
 function KGSourceDocumentList({ documents }: { documents: KGStudioSourceDocument[] }) {
   if (!documents.length) return <Empty description="No source documents found." />;
   return (
-    <List
-      className="compact-list"
-      size="small"
-      dataSource={documents}
-      renderItem={(document) => (
-        <List.Item>
-          <List.Item.Meta
-            title={<span className="breakable-value">{document.title}</span>}
-            description={
-              <Space direction="vertical" size={0}>
-                <Text type="secondary" className="breakable-value">
-                  {document.path}
-                </Text>
-                <Text type="secondary">{document.line_count} lines</Text>
-              </Space>
-            }
-          />
-        </List.Item>
-      )}
-    />
+    <div className="compact-list" role="list">
+      {documents.map((document) => (
+        <article className="compact-list-item" key={document.path} role="listitem">
+          <strong className="breakable-value">{document.title}</strong>
+          <Text type="secondary" className="breakable-value">
+            {document.path}
+          </Text>
+          <Text type="secondary">{document.line_count} lines</Text>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -1120,28 +1145,24 @@ function KGReviewQueue({
 }) {
   if (!targets.length) return <Empty description="No KG edge review targets are available." />;
   return (
-    <List
-      className="kg-review-queue-list"
-      dataSource={targets}
-      pagination={{ pageSize: 12, size: "small" }}
-      renderItem={(target) => (
-        <List.Item
+    <div className="kg-review-queue-list" role="list">
+      {targets.map((target) => (
+        <button
           className={target.target_key === selectedTargetKey ? "selected" : ""}
+          key={target.target_key}
           onClick={() => onTargetSelected(target.target_key)}
+          type="button"
+          role="listitem"
         >
-          <List.Item.Meta
-            title={<span className="breakable-value">{target.label}</span>}
-            description={
-              <Space wrap>
-                <Tag>{target.review_status}</Tag>
-                <Text type="secondary">{target.source}</Text>
-                <Text type="secondary">{valueText(target.confidence)}</Text>
-              </Space>
-            }
-          />
-        </List.Item>
-      )}
-    />
+          <strong className="breakable-value">{target.label}</strong>
+          <span>
+            <Tag>{target.review_status}</Tag>
+            <Text type="secondary">{target.source}</Text>
+            <Text type="secondary">{valueText(target.confidence)}</Text>
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -1217,7 +1238,7 @@ function KGReviewBox({
           Needs review
         </Button>
       </div>
-      {reviewStatus && <Alert message={`Feedback ${reviewStatus}.`} type="success" showIcon />}
+      {reviewStatus && <Alert title={`Feedback ${reviewStatus}.`} type="success" showIcon />}
     </div>
   );
 }
@@ -1285,7 +1306,7 @@ function KGDraftForm({
       <Button type="primary" onClick={onSubmitDraft} disabled={!selectedTarget}>
         Save draft
       </Button>
-      {draftStatus && <Alert message={`Draft ${draftStatus}.`} type="success" showIcon />}
+      {draftStatus && <Alert title={`Draft ${draftStatus}.`} type="success" showIcon />}
     </div>
   );
 }

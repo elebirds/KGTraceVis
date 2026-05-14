@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"Confirmed project quality gate and core KG invariants before touching dashboard-facing behavior."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Used current build/test expectations and non-mutating KG constraints for this UI-only change."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Checked selection-state data flow between route, filters, selected target, and review/draft actions."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Kept the existing KG Studio page/filter components and extended them instead of adding parallel review widgets."}
