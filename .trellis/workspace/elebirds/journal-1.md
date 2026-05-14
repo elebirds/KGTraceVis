@@ -139,3 +139,36 @@ Split the KG Studio Sources page into focused Source Registry, Source Documents,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: KG Studio overview workflow actions
+
+**Date**: 2026-05-14
+**Task**: KG Studio overview workflow actions
+**Branch**: `main`
+
+### Summary
+
+Added workflow action cards to KG Studio Overview for Sources, Graph, Review, and Draft Lab using existing KG Studio payload counts; updated docs and verified web build, full tests, lint, typecheck, examples, dashboard smoke, and browser navigation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `51d85ee` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
