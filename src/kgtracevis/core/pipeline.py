@@ -7,9 +7,9 @@ logic in their own entry points.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Protocol
+from typing import Any, Protocol
 
-from kgtracevis.core.result import AnalysisResult
+from kgtracevis.core.result import AnalysisResult, RankedRootCause, ranked_root_causes_from_paths
 from kgtracevis.kg.consistency_checker import check_consistency
 from kgtracevis.kg.correction_generator import generate_correction_candidates
 from kgtracevis.kg.entity_linker import link_evidence_entities
@@ -27,6 +27,19 @@ class KGSnapshotRepository(Protocol):
         """Return a graph snapshot for the selected scenario plus shared layer."""
 
 
+class RootCauseProvider(Protocol):
+    """Optional provider for scenario-specific RCA rankings."""
+
+    def rank_root_causes(
+        self,
+        evidence: Evidence,
+        *,
+        top_k: int = 5,
+        top_k_paths: list[dict[str, Any]] | None = None,
+    ) -> list[RankedRootCause]:
+        """Return unified root-cause candidates for one evidence object."""
+
+
 class KGTracePipeline:
     """Reusable analysis pipeline entry point."""
 
@@ -35,9 +48,11 @@ class KGTracePipeline:
         graph: KnowledgeGraph | None = None,
         *,
         neo4j_repository: KGSnapshotRepository | None = None,
+        root_cause_provider: RootCauseProvider | None = None,
     ) -> None:
         """Create a pipeline backed by runtime Neo4j unless a graph is explicit."""
         self.neo4j_repository = neo4j_repository
+        self.root_cause_provider = root_cause_provider
         self.graph = graph
         self._graph_cache: dict[str, KnowledgeGraph] = {}
 
@@ -57,6 +72,11 @@ class KGTracePipeline:
             consistency,
         )
         top_k_paths = rank_root_cause_paths(evidence, graph, linked_entities, top_k=top_k)
+        ranked_root_causes = self._rank_root_causes(
+            evidence,
+            top_k=top_k,
+            top_k_paths=top_k_paths,
+        )
         return AnalysisResult(
             case_id=evidence.case_id,
             linked_entities=linked_entities,
@@ -64,6 +84,7 @@ class KGTracePipeline:
             inconsistent_fields=consistency["inconsistent_fields"],
             correction_candidates=correction_candidates,
             top_k_paths=top_k_paths,
+            ranked_root_causes=ranked_root_causes,
             human_feedback=deepcopy(evidence.human_feedback),
         )
 
@@ -85,3 +106,20 @@ class KGTracePipeline:
             return graph
         finally:
             repository.close()
+
+    def _rank_root_causes(
+        self,
+        evidence: Evidence,
+        *,
+        top_k: int,
+        top_k_paths: list[dict[str, Any]],
+    ) -> list[RankedRootCause]:
+        if self.root_cause_provider is not None:
+            provided = self.root_cause_provider.rank_root_causes(
+                evidence,
+                top_k=top_k,
+                top_k_paths=top_k_paths,
+            )
+            if provided:
+                return provided
+        return ranked_root_causes_from_paths(evidence.case_id, top_k_paths)

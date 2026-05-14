@@ -57,6 +57,7 @@ class KGAnalysis(BaseModel):
     inconsistent_fields: list[str] = Field(default_factory=list)
     correction_candidates: list[dict[str, Any]] = Field(default_factory=list)
     top_k_paths: list[dict[str, Any]] = Field(default_factory=list)
+    ranked_root_causes: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class Evidence(BaseModel):

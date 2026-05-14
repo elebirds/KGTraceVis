@@ -22,13 +22,15 @@ BEGIN
         'ranked_path',
         'kg_edge',
         'kg_node',
-        'case'
+        'case',
+        'root_cause_candidate'
     );
 EXCEPTION
     WHEN duplicate_object THEN NULL;
 END $$;
 
 ALTER TYPE feedback_target_type ADD VALUE IF NOT EXISTS 'case';
+ALTER TYPE feedback_target_type ADD VALUE IF NOT EXISTS 'root_cause_candidate';
 
 DO $$
 BEGIN

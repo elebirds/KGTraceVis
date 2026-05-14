@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from kgtracevis.core.result import ranked_root_causes_from_paths
 from kgtracevis.service.run_enrichment import (
     path_graph_from_paths,
     review_targets,
@@ -41,29 +42,36 @@ def detail_payload(
     first_evidence: dict[str, Any] | None = None
     first_analysis: dict[str, Any] | None = None
     first_summary: dict[str, Any] | None = None
+    parameters = dict_value(run_row.get("parameters"))
+    root_causes_by_case = dict_value(parameters.get("ranked_root_causes_by_case"))
 
     for row in case_rows:
         case_pk = str(row["case_pk"])
         evidence = dict_value(row.get("evidence_payload"))
         if not evidence:
             evidence = _evidence_from_case_row(row)
+        case_id = str(evidence.get("case_id") or row.get("case_id"))
         links = links_by_case.get(case_pk, [])
         corrections = corrections_by_case.get(case_pk, [])
         paths = paths_by_case.get(case_pk, [])
+        ranked_root_causes = list_of_dicts(root_causes_by_case.get(case_id))
+        if not ranked_root_causes:
+            ranked_root_causes = _ranked_root_causes_from_paths(case_id, paths)
         consistency = consistency_by_case.get(case_pk, {})
         source_edges = unique_source_edges(paths)
         analysis = {
-            "case_id": evidence.get("case_id") or row.get("case_id"),
+            "case_id": case_id,
             "linked_entities": links,
             "consistency_score": consistency.get("consistency_score"),
             "inconsistent_fields": consistency.get("inconsistent_fields", []),
             "correction_candidates": corrections,
             "top_k_paths": paths,
+            "ranked_root_causes": ranked_root_causes,
             "human_feedback": evidence.get("human_feedback"),
         }
         cases.append(
             {
-                "case_id": evidence.get("case_id") or row.get("case_id"),
+                "case_id": case_id,
                 "dataset": evidence.get("dataset") or row.get("dataset"),
                 "generated_evidence": evidence,
                 "generated_evidence_path": row.get("generated_evidence_path"),
@@ -72,12 +80,14 @@ def detail_payload(
                 "inconsistent_fields": analysis["inconsistent_fields"],
                 "correction_candidates": corrections,
                 "top_k_paths": paths,
+                "ranked_root_causes": ranked_root_causes,
                 "source_edge_provenance": source_edges,
                 "path_graph": path_graph_from_paths(paths),
                 "review_targets": review_targets(
                     linked_entities=links,
                     correction_candidates=corrections,
                     top_k_paths=paths,
+                    ranked_root_causes=ranked_root_causes,
                     source_edges=source_edges,
                 ),
             }
@@ -91,7 +101,6 @@ def detail_payload(
             first_summary = _compact_evidence_summary(evidence)
 
     source_edges = unique_source_edges(aggregate_paths)
-    parameters = dict_value(run_row.get("parameters"))
     artifacts, visual_evidence = _artifacts_payload(artifact_rows)
     evidence_with_analysis = None
     if first_evidence is not None and first_analysis is not None:
@@ -102,7 +111,19 @@ def detail_payload(
             "inconsistent_fields": first_analysis["inconsistent_fields"],
             "correction_candidates": first_analysis["correction_candidates"],
             "top_k_paths": first_analysis["top_k_paths"],
+            "ranked_root_causes": first_analysis["ranked_root_causes"],
         }
+
+    aggregate_root_causes = [
+        root_cause
+        for case in cases
+        for root_cause in list_of_dicts(case.get("ranked_root_causes"))
+    ]
+    if not aggregate_root_causes:
+        aggregate_root_causes = _ranked_root_causes_from_paths(
+            str(first_evidence.get("case_id") if first_evidence else "aggregate"),
+            aggregate_paths,
+        )
 
     return {
         "run": run_summary_payload(run_row),
@@ -117,12 +138,14 @@ def detail_payload(
         "linked_entities": aggregate_links,
         "correction_candidates": aggregate_corrections,
         "top_k_paths": aggregate_paths,
+        "ranked_root_causes": aggregate_root_causes,
         "path_graph": path_graph_from_paths(aggregate_paths),
         "source_edge_provenance": source_edges,
         "review_targets": review_targets(
             linked_entities=aggregate_links,
             correction_candidates=aggregate_corrections,
             top_k_paths=aggregate_paths,
+            ranked_root_causes=aggregate_root_causes,
             source_edges=source_edges,
         ),
         "artifacts": artifacts,
@@ -153,6 +176,16 @@ def run_summary_payload(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _ranked_root_causes_from_paths(
+    case_id: str,
+    paths: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        item.model_dump(mode="json")
+        for item in ranked_root_causes_from_paths(case_id, paths)
+    ]
+
+
 def case_entries(detail: Any) -> list[dict[str, Any]]:
     """Return normalized case entries extracted from a RunDetail."""
     entries: list[dict[str, Any]] = []
@@ -175,6 +208,7 @@ def case_entries(detail: Any) -> list[dict[str, Any]]:
                     "checks": list_value(case.get("checks")),
                     "correction_candidates": list_of_dicts(case.get("correction_candidates")),
                     "top_k_paths": list_of_dicts(case.get("top_k_paths")),
+                    "ranked_root_causes": list_of_dicts(case.get("ranked_root_causes")),
                 }
             )
     if not entries and detail.evidence:
@@ -193,6 +227,7 @@ def case_entries(detail: Any) -> list[dict[str, Any]]:
                 "checks": list_value(analysis.get("checks")),
                 "correction_candidates": list_of_dicts(analysis.get("correction_candidates")),
                 "top_k_paths": list_of_dicts(analysis.get("top_k_paths")),
+                "ranked_root_causes": list_of_dicts(analysis.get("ranked_root_causes")),
             }
         )
     return entries
@@ -311,6 +346,7 @@ def feedback_target_type(value: str) -> str:
         "correction": "correction_candidate",
         "link": "entity_link",
         "entity_link": "entity_link",
+        "root_cause_candidate": "root_cause_candidate",
         "case": "case",
     }.get(value, value)
 

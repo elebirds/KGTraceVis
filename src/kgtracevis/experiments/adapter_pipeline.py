@@ -222,6 +222,7 @@ def _case_summary(
     pipeline: KGTracePipeline,
 ) -> dict[str, Any]:
     top_k_paths = list(analysis["top_k_paths"])
+    ranked_root_causes = list(analysis.get("ranked_root_causes", []))
     source_edges = _unique_source_edges(top_k_paths)
     return {
         "case_id": evidence.case_id,
@@ -236,6 +237,7 @@ def _case_summary(
         "inconsistent_fields": analysis["inconsistent_fields"],
         "correction_candidates": analysis["correction_candidates"],
         "top_k_paths": top_k_paths,
+        "ranked_root_causes": ranked_root_causes,
         "candidate_plausible_explanation_targets": _candidate_targets(
             top_k_paths,
             source_edges=source_edges,

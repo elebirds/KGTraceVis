@@ -375,6 +375,7 @@ def _empty_kg_analysis() -> dict[str, object]:
         "inconsistent_fields": [],
         "correction_candidates": [],
         "top_k_paths": [],
+        "ranked_root_causes": [],
     }
 
 
@@ -385,18 +386,19 @@ def _root_cause_keys(evidence: Evidence) -> list[str]:
         "candidate_root_cause",
         "candidate_root_causes",
         "ranked_causes",
+        "ranked_root_causes",
     }
     keys: list[str] = []
 
-    def collect(value: object) -> None:
+    def collect(value: object, *, inside_kg_analysis: bool = False) -> None:
         if isinstance(value, dict):
             for key, nested in value.items():
-                if key in root_keys:
+                if key in root_keys and not inside_kg_analysis:
                     keys.append(key)
-                collect(nested)
+                collect(nested, inside_kg_analysis=inside_kg_analysis or key == "kg_analysis")
         elif isinstance(value, list):
             for item in value:
-                collect(item)
+                collect(item, inside_kg_analysis=inside_kg_analysis)
 
     collect(evidence.model_dump(mode="json"))
     return keys
