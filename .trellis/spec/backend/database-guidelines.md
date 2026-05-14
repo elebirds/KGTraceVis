@@ -92,6 +92,106 @@ couple runtime persistence to upload orchestration and makes future service
 splits brittle. If the store needs API payload shapes, import from
 `run_models.py`, `run_enrichment.py`, or `postgres_run_payloads.py`.
 
+Unified RCA results are persisted through stable run payloads as
+`ranked_root_causes` and exposed as feedback targets with
+`target_type=root_cause_candidate`. When reconstructing Postgres run details,
+stored `ranked_root_causes` must be preferred over any fallback projection from
+`top_k_paths`.
+
+## Scenario: Unified RCA Runtime Payloads
+
+### 1. Scope / Trigger
+
+- Trigger: changing RCA output, run-detail payloads, dashboard fields,
+  feedback targets, or Postgres run persistence.
+- Reason: RCA candidates cross the core pipeline, evidence runtime schema,
+  service DTOs, Postgres replay, dashboard summaries, and human feedback.
+
+### 2. Signatures
+
+Core pipeline:
+
+```python
+class RootCauseProvider(Protocol):
+    def rank_root_causes(
+        self,
+        evidence: Evidence,
+        *,
+        top_k: int = 5,
+        top_k_paths: list[dict[str, Any]] | None = None,
+    ) -> list[RankedRootCause]:
+        ...
+```
+
+Runtime payload fields:
+
+```text
+AnalysisResult.ranked_root_causes: list[RankedRootCause]
+RunDetail.ranked_root_causes: list[dict]
+Evidence.kg_analysis.ranked_root_causes: list[dict]
+feedback_records.target_type: root_cause_candidate
+```
+
+### 3. Contracts
+
+- `ranked_root_causes` is the canonical RCA ranking output.
+- `top_k_paths` remains a compatibility and explanation-path field.
+- If a provider returns candidates, preserve those candidates as-is in the
+  service/Postgres payload instead of re-deriving from paths.
+- If no provider returns candidates, derive a fallback root-cause list from
+  `top_k_paths` with `scoring_method=relation_weighted_path`.
+- Root-cause candidates must carry stable `ranking_id`, `candidate_id`, `rank`,
+  `score`, `scoring_method`, and enough supporting path/evidence data for
+  review.
+- Review targets for these candidates use
+  `target_type=root_cause_candidate` and `target_id=<ranking_id>`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+| --- | --- |
+| Provider returns RCA candidates | Preserve provider rankings and metadata |
+| Provider returns `[]` | Fall back to projection from `top_k_paths` |
+| Postgres replay has stored `ranked_root_causes` | Use stored candidates, not path projection |
+| Postgres replay lacks stored candidates | Reconstruct fallback candidates from paths |
+| Evidence is revalidated with runtime `kg_analysis` | Keep `ranked_root_causes` |
+| Feedback target is a root-cause candidate | Store as `root_cause_candidate` |
+| Artifact ranking row is unscoped to a TEP scenario | Ignore unless explicitly configured as global |
+
+### 5. Good/Base/Bad Cases
+
+- Good: TEP artifact provider returns `tep_artifact_bridge` candidates with
+  selector metadata; Postgres replay returns the same candidates.
+- Base: MVTec path ranking produces paths only; pipeline projects them into
+  `ranked_root_causes` with path-derived supporting edges.
+- Bad: service code rebuilds RCA candidates from paths after a provider already
+  produced Root-KGD/RBC-derived candidates.
+
+### 6. Tests Required
+
+- Pipeline serialization asserts both `top_k_paths` and `ranked_root_causes`.
+- Evidence schema tests assert `KGAnalysis` preserves `ranked_root_causes`.
+- Postgres payload tests assert stored RCA candidates win over path fallback.
+- Feedback tests assert `root_cause_candidate` is accepted.
+- TEP provider tests assert selector-scoped matching and no unscoped leakage.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```python
+payload["ranked_root_causes"] = ranked_root_causes_from_paths(case_id, paths)
+```
+
+Correct:
+
+```python
+payload["ranked_root_causes"] = (
+    stored_ranked_root_causes
+    or ranked_root_causes_from_paths(case_id, paths)
+)
+```
+
 Backward-compatible re-exports from `service.runs` are allowed for public API
 tests and existing service callers, but new code should import the focused
 module directly.

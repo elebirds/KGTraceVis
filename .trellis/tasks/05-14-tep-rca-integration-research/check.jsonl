@@ -1,0 +1,5 @@
+{"file": ".trellis/tasks/05-14-tep-rca-integration-research/prd.md", "reason": "requirements and acceptance criteria"}
+{"file": ".trellis/tasks/05-14-tep-rca-integration-research/research/unified-pipeline-design.md", "reason": "expected architecture and compatibility contract"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "verify workflow boundary"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "verify tests and quality bar"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "verify graph contract compatibility"}

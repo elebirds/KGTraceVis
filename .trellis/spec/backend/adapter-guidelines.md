@@ -105,6 +105,7 @@ root_causes
 candidate_root_cause
 candidate_root_causes
 ranked_causes
+ranked_root_causes
 top_k_paths
 kg_analysis
 ```
@@ -482,8 +483,9 @@ Outputs:
 - `evidence/` contains generated Evidence JSON files with empty adapter-level
   `kg_analysis` before runtime analysis.
 - `adapter_pipeline_summary.json` contains case summaries, linked entities,
-  consistency, correction candidates, `top_k_paths`, source edge provenance,
-  and candidate/plausible explanation targets.
+  consistency, correction candidates, `top_k_paths`, unified
+  `ranked_root_causes`, source edge provenance, and candidate/plausible
+  explanation targets.
 - `adapter_pipeline_table.csv` contains compact paper-review rows including
   `explanation_scope` and `claim_boundary`.
 - `explanation_scope` must remain
