@@ -104,6 +104,18 @@ candidate `nodes.csv`, `edges.csv`, `kg_construction_summary.json`, and
 `kg_construction_manifest.json` files under `runs/source_kg_build/<output_name>`.
 It does not call live LLM extractors, parse source code, or publish to Neo4j.
 
+Source files can also be staged through the backend before a build:
+
+```http
+POST /api/kg/construction/sources/upload
+GET /api/kg/construction/sources
+```
+
+The upload endpoint stores single-file `manual_table`, `structured_records`, or
+`tep_variable_mapping` artifacts under `runs/source_kg_sources/` and returns a
+build-ready `KGConstructionSourceInput`. Multi-file TEP semantic-lift bundles
+still require explicit local node/edge paths in v0.
+
 The maintained React workbench exposes this local workflow in KG Studio's
 `Build` tab. That page composes the same API-safe request shapes, displays the
 resulting artifact paths and summary manifest, and refreshes KG Studio so the

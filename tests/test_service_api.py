@@ -262,6 +262,67 @@ def test_kg_construction_build_route_rejects_missing_tep_paths() -> None:
     assert "tep_semantic_lift requires path" in response.text
 
 
+def test_kg_construction_source_upload_route_stores_build_ready_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Uploaded construction sources should be persisted and listable."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_SOURCE_DIR",
+        tmp_path / "source_uploads",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/kg/construction/sources/upload",
+        files={"file": ("manual_source.csv", _manual_source_csv(), "text/csv")},
+        data={
+            "source_id": "api_manual_upload",
+            "source_type": "manual_table",
+            "scenario": "tep",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "uploaded"
+    assert payload["source_id"] == "api_manual_upload"
+    assert payload["source_format"] == "csv"
+    assert Path(payload["path"]).is_file()
+    assert Path(payload["metadata_path"]).is_file()
+    assert payload["build_source"]["path"] == payload["path"]
+    assert payload["build_source"]["source_type"] == "manual_table"
+
+    listing = client.get("/api/kg/construction/sources")
+    assert listing.status_code == 200
+    sources = listing.json()["sources"]
+    assert [source["source_id"] for source in sources] == ["api_manual_upload"]
+
+
+def test_kg_construction_source_upload_route_rejects_invalid_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Source upload should reject unsupported extensions before persistence."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_SOURCE_DIR",
+        tmp_path / "source_uploads",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/kg/construction/sources/upload",
+        files={"file": ("manual_source.txt", "not supported", "text/plain")},
+        data={"source_id": "bad_upload", "source_type": "manual_table"},
+    )
+
+    assert response.status_code == 400
+    assert "source upload filename must end with one of" in response.text
+    assert not (tmp_path / "source_uploads").exists()
+
+
 def test_upload_run_prepares_visual_evidence_artifacts(
     tmp_path: Path,
     monkeypatch,

@@ -22,8 +22,12 @@ from kgtracevis.service.handlers import (
     what_if_request,
 )
 from kgtracevis.service.kg_construction import (
+    ConstructionSourceFormat,
+    ConstructionSourceType,
     KGConstructionBuildRequest,
+    list_kg_construction_source_uploads,
     run_kg_construction_build,
+    save_kg_construction_source_upload,
 )
 from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
 from kgtracevis.service.kg_source_drafts import (
@@ -145,6 +149,34 @@ def create_app() -> FastAPI:
     def kg_construction_build(request: KGConstructionBuildRequest) -> dict[str, object]:
         try:
             return run_kg_construction_build(request).model_dump(mode="json")
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/sources")
+    def kg_construction_sources() -> dict[str, object]:
+        try:
+            return list_kg_construction_source_uploads().model_dump(mode="json")
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/sources/upload")
+    async def kg_construction_source_upload(
+        file: Annotated[UploadFile, File()],
+        source_id: Annotated[str, Form()],
+        source_type: Annotated[str, Form()] = "manual_table",
+        scenario: Annotated[str, Form()] = "shared",
+        source_format: Annotated[str | None, Form()] = None,
+    ) -> dict[str, object]:
+        try:
+            content = await file.read()
+            return save_kg_construction_source_upload(
+                source_id=source_id,
+                source_type=cast(ConstructionSourceType, source_type),
+                scenario=scenario,
+                filename=file.filename or "source.csv",
+                content=content,
+                source_format=cast(ConstructionSourceFormat | None, source_format),
+            ).model_dump(mode="json")
         except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
