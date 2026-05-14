@@ -205,3 +205,37 @@ Refactored Analysis Detail into a paper-demo evidence-to-reasoning workspace wit
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: TEP RCA unified integration
+
+**Date**: 2026-05-14
+**Task**: TEP RCA unified integration
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Unified TEP RCA output into KGTracePipeline via ranked_root_causes, added TEP artifact provider with scenario selector, persisted RCA candidates through service/Postgres payloads, and documented the runtime contract.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5de8f77` | (see git log) |
+| `3b9f1d7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
