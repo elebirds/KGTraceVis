@@ -7,13 +7,11 @@ logic in their own entry points.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 from kgtracevis.core.rca import (
     GenericGraphPathReasoner,
     RcaReasoner,
-    RootCauseProvider,
-    provider_has_reasoner,
 )
 from kgtracevis.core.result import AnalysisResult, RcaReasoningResult
 from kgtracevis.kg.consistency_checker import check_consistency
@@ -40,16 +38,12 @@ class KGTracePipeline:
         graph: KnowledgeGraph | None = None,
         *,
         neo4j_repository: KGSnapshotRepository | None = None,
-        root_cause_provider: RootCauseProvider | None = None,
         root_cause_reasoner: RcaReasoner | None = None,
     ) -> None:
         """Create a pipeline backed by runtime Neo4j unless a graph is explicit."""
         self.neo4j_repository = neo4j_repository
-        self.root_cause_provider = root_cause_provider
         self.root_cause_reasoner = root_cause_reasoner
-        self._generic_rca_reasoner = GenericGraphPathReasoner(
-            root_cause_provider=root_cause_provider
-        )
+        self._generic_rca_reasoner = GenericGraphPathReasoner()
         self.graph = graph
         self._graph_cache: dict[str, KnowledgeGraph] = {}
 
@@ -113,8 +107,6 @@ class KGTracePipeline:
         top_k: int,
     ) -> RcaReasoningResult:
         reasoner = self.root_cause_reasoner
-        if reasoner is None and provider_has_reasoner(self.root_cause_provider):
-            reasoner = cast(RcaReasoner, self.root_cause_provider)
         if reasoner is not None:
             result = reasoner.reason_root_causes(
                 evidence,

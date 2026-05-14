@@ -153,20 +153,6 @@ def test_pipeline_uses_neo4j_snapshot_repository_by_default() -> None:
     assert result.top_k_paths
 
 
-def test_pipeline_keeps_legacy_root_cause_provider_signature_working() -> None:
-    """Adding graph context should not break older provider implementations."""
-    provider = LegacyRootCauseProvider()
-    evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
-
-    result = KGTracePipeline(
-        graph=KnowledgeGraph.from_default_paths(),
-        root_cause_provider=provider,
-    ).analyze(evidence)
-
-    assert provider.case_ids == ["mvtec_0001"]
-    assert result.ranked_root_causes[0].candidate_id == "MechanicalContact"
-
-
 class FakeSnapshotRepository:
     """Tiny fake repository for pipeline backend selection tests."""
 
@@ -178,25 +164,6 @@ class FakeSnapshotRepository:
     def to_knowledge_graph(self, *, scenario: str | None = None) -> KnowledgeGraph:
         self.scenarios.append(scenario)
         return self.graph
-
-
-class LegacyRootCauseProvider:
-    """Provider fixture with the pre-graph extension method shape."""
-
-    def __init__(self) -> None:
-        self.case_ids: list[str] = []
-
-    def rank_root_causes(
-        self,
-        evidence: Any,
-        *,
-        top_k: int = 5,
-        top_k_paths: list[dict[str, Any]] | None = None,
-    ) -> list[Any]:
-        del top_k
-        del top_k_paths
-        self.case_ids.append(evidence.case_id)
-        return []
 
 
 def _link_for_field(links: list[dict[str, Any]], field: str) -> dict[str, Any]:

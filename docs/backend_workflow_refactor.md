@@ -181,19 +181,20 @@ app aligned with the root-cause candidates persisted for feedback.
 
 The default reasoner is graph-path based: it calls the existing relation-weighted
 path ranker, then projects those paths into `RankedRootCause` candidates when no
-scenario provider supplies richer rankings.
+scenario reasoner supplies richer rankings.
 
 Scenario-aware reasoners may override the default path search when the scenario
 has native RCA evidence. TEP native RCA is the first such case: it scores
 candidates from variable contributions and `tep`/`shared` KG support paths, and
 uses those same support paths for both output fields. TEP native scoring must
-not use fault-number labels as scoring input. Artifact-backed TEP providers may
-continue to populate `ranked_root_causes` through the legacy provider contract.
+not use fault-number labels as scoring input. Artifact-backed TEP adapters must
+also implement the unified RCA reasoner contract, even if they internally map
+artifact ranking rows into `ranked_root_causes`.
 
-Compatibility rule: older `RootCauseProvider.rank_root_causes(...)`
-implementations remain supported by wrapping them behind the default graph-path
-reasoner. New code that needs to control both path and candidate output should
-implement the unified RCA reasoner contract instead.
+Compatibility rule: `KGTracePipeline` accepts only the unified
+`reason_root_causes(...)` contract for scenario-aware RCA overrides. Older
+`rank_root_causes(...)`-only provider implementations are not wrapped by the
+main pipeline.
 
 ## Migration Phases
 

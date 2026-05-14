@@ -266,6 +266,34 @@ class TepRcaArtifactProvider:
             _load_contributions(self.contributions_path) if self.contributions_path else {}
         )
 
+    def reason_root_causes(
+        self,
+        evidence: Evidence,
+        *,
+        graph: KnowledgeGraph,
+        linked_entities: list[dict[str, Any]],
+        top_k: int = 5,
+    ) -> RcaReasoningResult:
+        """Return artifact-backed TEP root-cause rankings through the unified contract."""
+        del graph
+        del linked_entities
+        ranked = self.rank_root_causes(evidence, top_k=top_k)
+        selector = tep_scenario_selector(evidence)
+        return RcaReasoningResult(
+            case_id=evidence.case_id,
+            top_k_paths=[],
+            ranked_root_causes=ranked,
+            scoring_method="tep_artifact_bridge",
+            metadata={
+                "reasoner": "tep_artifact_bridge",
+                "scenario_selector": selector.model_dump(mode="json"),
+                "ranking_path": str(self.ranking_path) if self.ranking_path else None,
+                "contributions_path": (
+                    str(self.contributions_path) if self.contributions_path else None
+                ),
+            },
+        )
+
     def rank_root_causes(
         self,
         evidence: Evidence,

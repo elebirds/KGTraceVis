@@ -180,11 +180,11 @@ def test_tep_rca_provider_does_not_match_by_simulation_run_only(tmp_path: Path) 
 
 
 def test_pipeline_can_use_optional_tep_rca_provider() -> None:
-    """The generic pipeline should optionally fill RCA rankings from a TEP provider."""
+    """The generic pipeline should optionally fill RCA rankings from a TEP reasoner."""
     evidence = load_evidence_json("data/examples/tep_example.json")
     pipeline = KGTracePipeline(
         graph=KnowledgeGraph.from_default_paths(),
-        root_cause_provider=TepRcaArtifactProvider(FIXTURE_DIR),
+        root_cause_reasoner=TepRcaArtifactProvider(FIXTURE_DIR),
     )
 
     result = pipeline.analyze(evidence, top_k=1)

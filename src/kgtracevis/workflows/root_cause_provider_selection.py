@@ -1,4 +1,4 @@
-"""Reusable root-cause provider selection for KGTracePipeline clients."""
+"""Reusable TEP RCA reasoner selection for KGTracePipeline clients."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Literal
 
 from kgtracevis.core import KGTracePipeline
-from kgtracevis.core.pipeline import KGSnapshotRepository, RootCauseProvider
+from kgtracevis.core.pipeline import KGSnapshotRepository
+from kgtracevis.core.rca import RcaReasoner
 from kgtracevis.kg.graph import KnowledgeGraph
 from kgtracevis.workflows.tep_rca import (
     TepNativeRcaProvider,
@@ -26,7 +27,7 @@ ENV_TEP_RCA_CONTRIBUTIONS_PATH = "KGTRACEVIS_TEP_RCA_CONTRIBUTIONS_PATH"
 
 @dataclass(frozen=True)
 class RootCauseProviderSelectionConfig:
-    """Configuration for optional TEP RCA provider construction."""
+    """Configuration for optional TEP RCA reasoner construction."""
 
     tep_rca_provider: RootCauseProviderSelection = "none"
     tep_rca_artifact_dir: Path | None = None
@@ -43,7 +44,7 @@ def root_cause_provider_config_from_env(
     contributions_path: str | Path | None = None,
     allow_global_rankings: bool = False,
 ) -> RootCauseProviderSelectionConfig:
-    """Resolve explicit provider options with environment-variable fallbacks."""
+    """Resolve explicit TEP RCA options with environment-variable fallbacks."""
     provider_value = provider if provider is not None else os.getenv(ENV_TEP_RCA_PROVIDER)
     artifact_value = (
         artifact_dir if artifact_dir is not None else os.getenv(ENV_TEP_RCA_ARTIFACT_DIR)
@@ -79,10 +80,10 @@ def normalize_root_cause_provider_selection(
     raise ValueError("tep_rca_provider must be one of none, native, artifact")
 
 
-def build_root_cause_provider(
+def build_root_cause_reasoner(
     config: RootCauseProviderSelectionConfig | None = None,
-) -> RootCauseProvider | None:
-    """Build the selected optional TEP RCA provider."""
+) -> RcaReasoner | None:
+    """Build the selected optional TEP RCA reasoner."""
     selection = config or RootCauseProviderSelectionConfig()
     if selection.tep_rca_provider == "none":
         return None
@@ -120,11 +121,11 @@ def build_pipeline(
     neo4j_repository: KGSnapshotRepository | None = None,
     root_cause_provider_config: RootCauseProviderSelectionConfig | None = None,
 ) -> KGTracePipeline:
-    """Build a KGTracePipeline with optional TEP RCA provider selection."""
+    """Build a KGTracePipeline with optional TEP RCA reasoner selection."""
     return KGTracePipeline(
         graph=graph,
         neo4j_repository=neo4j_repository,
-        root_cause_provider=build_root_cause_provider(root_cause_provider_config),
+        root_cause_reasoner=build_root_cause_reasoner(root_cause_provider_config),
     )
 
 

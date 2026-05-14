@@ -115,7 +115,7 @@ def test_pipeline_passes_runtime_graph_to_tep_native_provider() -> None:
     )
     pipeline = KGTracePipeline(
         graph=_native_tep_graph(),
-        root_cause_provider=TepNativeRcaProvider(),
+        root_cause_reasoner=TepNativeRcaProvider(),
     )
 
     result = pipeline.analyze(evidence, top_k=2)
@@ -143,7 +143,7 @@ def test_tep_native_provider_uses_default_seed_kg_for_fault_06() -> None:
     )
     pipeline = KGTracePipeline(
         graph=KnowledgeGraph.from_default_paths(),
-        root_cause_provider=TepNativeRcaProvider(),
+        root_cause_reasoner=TepNativeRcaProvider(),
     )
 
     result = pipeline.analyze(evidence, top_k=3)

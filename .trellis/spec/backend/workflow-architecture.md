@@ -107,31 +107,30 @@ Rules:
 - Do not implement KG construction pipeline behavior as a side effect of an
   Evidence analysis workflow.
 
-#### RootCauseProvider Graph Context Contract
+#### RCA Reasoner Contract
 
-`RootCauseProvider` is the extension point for scenario-specific RCA scoring
-inside the unified `KGTracePipeline`. Providers may be graph-aware:
+`RcaReasoner` is the extension point for scenario-specific RCA scoring inside
+the unified `KGTracePipeline`. Reasoners receive graph context and must return
+aligned path and candidate outputs:
 
 ```python
-def rank_root_causes(
+def reason_root_causes(
     evidence: Evidence,
     *,
-    graph: KnowledgeGraph | None = None,
+    graph: KnowledgeGraph,
+    linked_entities: list[dict[str, Any]],
     top_k: int = 5,
-    top_k_paths: list[dict[str, Any]] | None = None,
-) -> list[RankedRootCause]:
+) -> RcaReasoningResult:
     ...
 ```
 
 Rules:
 
-- The provider must return unified `RankedRootCause` objects, not a
+- The reasoner must return unified `RcaReasoningResult` objects, not a
   dataset-specific payload.
-- The pipeline may pass the runtime graph snapshot to graph-aware providers.
-- The pipeline must remain compatible with older providers that do not accept
-  `graph`; use signature detection rather than unconditionally passing a new
-  keyword.
-- Providers must not construct or mutate KG data as a side effect of ranking.
+- The pipeline passes the runtime graph snapshot to scenario-aware reasoners.
+- The pipeline does not wrap legacy `rank_root_causes(...)`-only providers.
+- Reasoners must not construct or mutate KG data as a side effect of ranking.
 - TEP-native support path search must stay scoped to `tep` and `shared` nodes
   and edges.
 
@@ -148,8 +147,8 @@ Rules:
 | Source-to-KG workflow receives no sources | raise `ValueError` before writing artifacts |
 | Source-to-KG workflow output files already exist | raise `ValueError` unless overwrite is explicit |
 | Source-to-KG API receives unsupported source shape | reject with a structured 4xx response |
-| Root-cause provider accepts `graph` | pass the runtime `KnowledgeGraph` snapshot |
-| Root-cause provider lacks `graph` parameter | call it with the legacy provider signature |
+| RCA reasoner is configured | pass the runtime `KnowledgeGraph` snapshot through `reason_root_causes` |
+| Legacy rank-only RCA provider is passed to pipeline | unsupported; implement `reason_root_causes` |
 | Native TEP provider sees non-TEP edges in a mixed graph | ignore them for TEP support-path ranking |
 
 ### 6. Good/Base/Bad Cases

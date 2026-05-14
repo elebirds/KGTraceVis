@@ -10,7 +10,7 @@ from kgtracevis.workflows.root_cause_provider_selection import (
     ENV_TEP_RCA_PROVIDER,
     RootCauseProviderSelectionConfig,
     build_pipeline,
-    build_root_cause_provider,
+    build_root_cause_reasoner,
     normalize_root_cause_provider_selection,
     root_cause_provider_config_from_env,
 )
@@ -21,13 +21,13 @@ def test_root_cause_provider_selection_defaults_to_no_provider() -> None:
     """Default selection should preserve existing path-projection behavior."""
     assert normalize_root_cause_provider_selection(None) == "none"
     assert normalize_root_cause_provider_selection("default") == "none"
-    assert build_root_cause_provider() is None
-    assert build_pipeline().root_cause_provider is None
+    assert build_root_cause_reasoner() is None
+    assert build_pipeline().root_cause_reasoner is None
 
 
 def test_root_cause_provider_selection_builds_native_provider() -> None:
     """Native selection should build the KGTraceVis-native TEP provider."""
-    provider = build_root_cause_provider(
+    provider = build_root_cause_reasoner(
         RootCauseProviderSelectionConfig(tep_rca_provider="native")
     )
 
@@ -36,7 +36,7 @@ def test_root_cause_provider_selection_builds_native_provider() -> None:
 
 def test_root_cause_provider_selection_builds_artifact_provider() -> None:
     """Artifact selection should build the bridge provider from explicit paths."""
-    provider = build_root_cause_provider(
+    provider = build_root_cause_reasoner(
         RootCauseProviderSelectionConfig(
             tep_rca_provider="artifact",
             tep_rca_artifact_dir=Path("tests/fixtures/tep_rca"),
@@ -49,7 +49,7 @@ def test_root_cause_provider_selection_builds_artifact_provider() -> None:
 def test_root_cause_provider_selection_requires_artifact_path() -> None:
     """Artifact mode should fail fast without an artifact directory or ranking path."""
     with pytest.raises(ValueError, match="tep_rca_artifact_dir"):
-        build_root_cause_provider(
+        build_root_cause_reasoner(
             RootCauseProviderSelectionConfig(tep_rca_provider="artifact")
         )
 
@@ -59,7 +59,7 @@ def test_root_cause_provider_selection_requires_artifact_ranking(
 ) -> None:
     """Artifact mode should fail fast when no ranking artifact can be resolved."""
     with pytest.raises(FileNotFoundError, match="TEP RCA ranking artifact"):
-        build_root_cause_provider(
+        build_root_cause_reasoner(
             RootCauseProviderSelectionConfig(
                 tep_rca_provider="artifact",
                 tep_rca_artifact_dir=tmp_path,
