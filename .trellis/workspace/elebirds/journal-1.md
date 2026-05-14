@@ -273,3 +273,36 @@ Implemented a KGTraceVis-native TEP RCA provider that ranks root-cause candidate
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: Source-to-KG runtime workflow
+
+**Date**: 2026-05-14
+**Task**: Source-to-KG runtime workflow
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Verified and closed the reusable source-to-KG construction runtime workflow, including service route, KG Studio discovery, CLI compatibility, and restored the full project quality gate.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6e165df` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
