@@ -1,10 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import "@arco-design/web-react/dist/css/arco.css";
-import "./styles/tokens.css";
-import "./styles/global.css";
 
-import { App } from "./app/App";
+import { App } from "./App";
+import "antd/dist/reset.css";
+import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

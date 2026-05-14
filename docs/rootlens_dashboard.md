@@ -23,9 +23,11 @@ npm run dev
 ```
 
 The API runs on `http://127.0.0.1:8000`. Vite runs on
-`http://127.0.0.1:5173` and proxies `/api` to the API server. The dashboard
-uses Ant Design for stable application components, Tailwind CSS through the
-Vite plugin for layout utilities, and React Router for module-level navigation.
+`http://127.0.0.1:5173` and proxies `/api` to the API server. The maintained
+dashboard under `web/` uses Arco React for application components, ECharts for
+graph exploration, plain CSS tokens for layout polish, and React Router for
+module-level navigation. The previous React dashboard is preserved under
+`web_legacy/` only as a migration reference.
 
 On first load, the dashboard opens to Home rather than a single mixed
 workspace. A persistent top navigation separates the system into product

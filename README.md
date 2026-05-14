@@ -58,11 +58,11 @@ KGTraceVis supports two usage modes:
    metric evaluation.
 2. Interactive visual analytics mode:
    evidence inspection, correction review, path comparison, and human feedback
-   through the maintained FastAPI backend and the foundation-first RootLens
-   dashboard under `web/`.
+   through the maintained FastAPI backend and the React workbench under `web/`.
 
-The legacy Streamlit demo and old React/Vite frontend were removed. RootLens v1
-is a clean React + TypeScript + Vite client that consumes the FastAPI contracts
+The old React/Vite dashboard is preserved under `web_legacy/` as a migration
+reference. The maintained `web/` client is a clean React + TypeScript + Vite
+workspace using Arco React and ECharts while consuming the FastAPI contracts
 without owning reusable analysis logic.
 
 ## Repository Layout
@@ -459,7 +459,7 @@ uv run python scripts/run_web_api.py
 
 This starts the FastAPI service on `http://127.0.0.1:8000`.
 
-Start the RootLens dashboard client:
+Start the KGTraceVis workbench client:
 
 ```bash
 cd web
@@ -468,9 +468,10 @@ npm run dev
 ```
 
 The Vite dev server starts on `http://127.0.0.1:5173` and proxies `/api` to the
-local FastAPI service. The client uses Ant Design components, Tailwind CSS
-layout utilities, and React Router routes for Home, Analysis, KG Studio, and
-Experiments modules. To type-check and build the dashboard:
+local FastAPI service. The maintained client uses Arco React components,
+ECharts graph views, plain CSS tokens, and React Router routes for Home,
+Analysis, KG Studio, and Experiments modules. To type-check and build the
+dashboard:
 
 ```bash
 cd web
