@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 15
+- **Total Sessions**: 16
 - **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~506 | Active |
+| `journal-1.md` | ~539 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-05-14 | KG construction review queue API | `04b2932` | `codex/rebuild-web-arco-echarts` |
 | 15 | 2026-05-14 | KG construction edge review API | `c7987a9` | `codex/rebuild-web-arco-echarts` |
 | 14 | 2026-05-14 | KG construction publish dry-run API | `c148600` | `codex/rebuild-web-arco-echarts` |
 | 13 | 2026-05-14 | KG construction build registry API | `2306590` | `codex/rebuild-web-arco-echarts` |

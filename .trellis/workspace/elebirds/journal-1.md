@@ -504,3 +504,36 @@ Added a backend review endpoint for source-to-KG construction edges. Accept and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: KG construction review queue API
+
+**Date**: 2026-05-14
+**Task**: KG construction review queue API
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added a read-only backend review queue endpoint for source-to-KG construction edges. The queue supports status/source/scenario/relation/text filters, offset-limit pagination, facet summaries, and stable target keys for later review UI integration.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `04b2932` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
