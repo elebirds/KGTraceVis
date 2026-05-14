@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated, cast
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 
+from kgtracevis.kg.import_neo4j import Neo4jImportError
 from kgtracevis.producers.model_assets import MODEL_ASSET_CHOICES, ModelAsset
 from kgtracevis.service.dashboard import dashboard_bootstrap
 from kgtracevis.service.handlers import (
@@ -25,9 +26,11 @@ from kgtracevis.service.kg_construction import (
     ConstructionSourceFormat,
     ConstructionSourceType,
     KGConstructionBuildRequest,
+    KGConstructionPublishRequest,
     get_kg_construction_build,
     list_kg_construction_builds,
     list_kg_construction_source_uploads,
+    publish_kg_construction_build,
     run_kg_construction_build,
     save_kg_construction_source_upload,
     validate_kg_construction_build,
@@ -175,6 +178,28 @@ def create_app() -> FastAPI:
             return validate_kg_construction_build(run_id).model_dump(mode="json")
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/builds/{run_id}/publish")
+    def kg_construction_build_publish(
+        run_id: str,
+        request: Annotated[
+            KGConstructionPublishRequest | None,
+            Body(),
+        ] = None,
+    ) -> dict[str, object]:
+        try:
+            publish_request = request or KGConstructionPublishRequest()
+            return publish_kg_construction_build(
+                run_id,
+                publish_request,
+            ).model_dump(mode="json")
+        except Neo4jImportError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError as exc:
+            status_code = (
+                404 if "unknown construction build run_id" in str(exc) else 400
+            )
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
     @app.get("/api/kg/construction/sources")
     def kg_construction_sources() -> dict[str, object]:

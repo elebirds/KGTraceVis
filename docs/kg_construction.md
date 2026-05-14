@@ -111,12 +111,33 @@ publish step:
 GET /api/kg/construction/builds
 GET /api/kg/construction/builds/{run_id}
 POST /api/kg/construction/builds/{run_id}/validate
+POST /api/kg/construction/builds/{run_id}/publish
 ```
 
 The registry is file-backed in v0. It scans `runs/source_kg_build/*` for
 `kg_construction_manifest.json`, returns artifact paths and summary counts, and
 runs structured KG CSV QA on the selected build. Validation is read-only and
 does not import to Neo4j.
+
+The publish endpoint is also safe-by-default. Calling it with an empty JSON body
+performs a dry-run import count over the default seed KG plus the selected
+candidate build:
+
+```json
+{}
+```
+
+To inspect only the candidate overlay, pass:
+
+```json
+{"include_defaults": false}
+```
+
+Real Neo4j writes require both `{"dry_run": false}` and
+`{"confirm_publish": true}` in the request body. This keeps exploratory
+candidate knowledge explicit: publication writes source, evidence, confidence,
+and review status into Neo4j, but it does not turn `auto` rows into reviewed or
+verified facts.
 
 Source files can also be staged through the backend before a build:
 

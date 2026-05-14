@@ -296,6 +296,107 @@ def test_kg_construction_build_registry_lists_details_and_validates(
     assert validation["qa_report"]["summary"]["edge_count"] == 1
 
 
+def test_kg_construction_publish_route_dry_runs_merged_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Construction publish should default to a read-only default+candidate dry-run."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "publish_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_publish_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    publish_response = client.post(
+        "/api/kg/construction/builds/kgbuild_publish_unit/publish",
+        json={},
+    )
+    candidate_only_response = client.post(
+        "/api/kg/construction/builds/kgbuild_publish_unit/publish",
+        json={"include_defaults": False},
+    )
+
+    assert publish_response.status_code == 200
+    payload = publish_response.json()
+    assert payload["build"]["run_id"] == "kgbuild_publish_unit"
+    assert payload["include_defaults"] is True
+    assert payload["import_summary"]["dry_run"] is True
+    assert payload["import_summary"]["node_count"] > 2
+    assert payload["import_summary"]["edge_count"] > 1
+    assert payload["node_paths"][-1].endswith("nodes.csv")
+    assert payload["edge_paths"][-1].endswith("edges.csv")
+    assert "candidate/reviewable" in payload["claim_boundary"]
+
+    assert candidate_only_response.status_code == 200
+    candidate_only = candidate_only_response.json()
+    assert candidate_only["include_defaults"] is False
+    assert candidate_only["import_summary"] == {
+        "node_count": 2,
+        "edge_count": 1,
+        "dry_run": True,
+    }
+
+
+def test_kg_construction_publish_route_requires_confirmation_for_real_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real Neo4j publication should fail closed without explicit confirmation."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "publish_guard_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_publish_guard_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    response = client.post(
+        "/api/kg/construction/builds/kgbuild_publish_guard_unit/publish",
+        json={"dry_run": False},
+    )
+
+    assert response.status_code == 400
+    assert "confirm_publish=true" in response.text
+
+
 def test_kg_construction_build_registry_rejects_unknown_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -10,6 +10,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
+from kgtracevis.kg.import_neo4j import (
+    DEFAULT_NEO4J_CONFIG_PATH,
+    dry_run_import,
+    import_knowledge_graph_with_config,
+    resolve_neo4j_config,
+)
 from kgtracevis.kg_construction import KGConstructionSource
 from kgtracevis.kg_construction.qa import run_kg_qa
 from kgtracevis.workflows.source_kg_construction import (
@@ -232,6 +239,48 @@ class KGConstructionBuildValidationResponse(BaseModel):
     )
 
 
+class KGConstructionPublishRequest(BaseModel):
+    """Request to dry-run or explicitly publish one construction build."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = True
+    include_defaults: bool = True
+    confirm_publish: bool = False
+    config_path: str = str(DEFAULT_NEO4J_CONFIG_PATH)
+    uri: str | None = None
+    user: str | None = None
+    password: str | None = None
+    database: str | None = None
+
+
+class KGConstructionImportSummary(BaseModel):
+    """Serializable import counts returned by construction publish."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_count: int
+    edge_count: int
+    dry_run: bool
+
+
+class KGConstructionPublishResponse(BaseModel):
+    """Response envelope for construction publish/dry-run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    import_summary: KGConstructionImportSummary
+    include_defaults: bool
+    node_paths: list[str]
+    edge_paths: list[str]
+    claim_boundary: str = (
+        "construction publish loads candidate/reviewable KG rows; real Neo4j "
+        "writes require explicit confirmation and do not upgrade auto rows to "
+        "ground truth"
+    )
+
+
 def run_kg_construction_build(
     request: KGConstructionBuildRequest,
     *,
@@ -394,6 +443,48 @@ def validate_kg_construction_build(
     )
 
 
+def publish_kg_construction_build(
+    run_id: str,
+    request: KGConstructionPublishRequest,
+    *,
+    build_root: Path | None = None,
+) -> KGConstructionPublishResponse:
+    """Dry-run or explicitly publish one construction build to Neo4j."""
+    build = _find_build_record(run_id, build_root=build_root)
+    _require_build_artifacts(build)
+    if not request.dry_run and not request.confirm_publish:
+        raise ValueError(
+            "confirmed Neo4j publication requires confirm_publish=true when "
+            "dry_run=false"
+        )
+
+    node_paths, edge_paths = _publish_paths(build, include_defaults=request.include_defaults)
+    graph = KnowledgeGraph.from_paths(node_paths, edge_paths, skip_missing=True)
+    if request.dry_run:
+        summary = dry_run_import(graph)
+    else:
+        config = resolve_neo4j_config(
+            uri=request.uri,
+            user=request.user,
+            password=request.password,
+            database=request.database,
+            config_path=request.config_path,
+        )
+        summary = import_knowledge_graph_with_config(graph, config)
+
+    return KGConstructionPublishResponse(
+        build=build,
+        import_summary=KGConstructionImportSummary(
+            node_count=summary.node_count,
+            edge_count=summary.edge_count,
+            dry_run=summary.dry_run,
+        ),
+        include_defaults=request.include_defaults,
+        node_paths=[str(path) for path in node_paths],
+        edge_paths=[str(path) for path in edge_paths],
+    )
+
+
 def _source_from_input(source: KGConstructionSourceInput) -> KGConstructionSource:
     metadata = dict(source.metadata)
     path = Path(source.path) if source.path else None
@@ -480,6 +571,30 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
     )
 
 
+def _publish_paths(
+    build: KGConstructionBuildRecord,
+    *,
+    include_defaults: bool,
+) -> tuple[list[Path], list[Path]]:
+    node_paths = [Path(build.nodes_path)]
+    edge_paths = [Path(build.edges_path)]
+    if include_defaults:
+        node_paths = [*DEFAULT_NODE_PATHS, *node_paths]
+        edge_paths = [*DEFAULT_EDGE_PATHS, *edge_paths]
+    return node_paths, edge_paths
+
+
+def _require_build_artifacts(build: KGConstructionBuildRecord) -> None:
+    missing = [
+        path
+        for path in (Path(build.nodes_path), Path(build.edges_path))
+        if not path.is_file()
+    ]
+    if missing:
+        joined = ", ".join(str(path) for path in missing)
+        raise ValueError(f"construction build artifact not found: {joined}")
+
+
 def _dict_value(payload: dict[str, Any], key: str) -> dict[str, Any]:
     value = payload.get(key)
     if isinstance(value, dict):
@@ -544,7 +659,10 @@ __all__ = [
     "KGConstructionBuildRequest",
     "KGConstructionBuildResponse",
     "KGConstructionBuildDetail",
+    "KGConstructionImportSummary",
     "KGConstructionBuildListResponse",
+    "KGConstructionPublishRequest",
+    "KGConstructionPublishResponse",
     "KGConstructionBuildRecord",
     "KGConstructionBuildValidationResponse",
     "KGConstructionSourceListResponse",
@@ -554,6 +672,7 @@ __all__ = [
     "get_kg_construction_build",
     "list_kg_construction_source_uploads",
     "list_kg_construction_builds",
+    "publish_kg_construction_build",
     "run_kg_construction_build",
     "save_kg_construction_source_upload",
     "validate_kg_construction_build",
