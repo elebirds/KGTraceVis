@@ -6,11 +6,12 @@ import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from kgtracevis.kg_construction import KGConstructionSource
+from kgtracevis.kg_construction.qa import run_kg_qa
 from kgtracevis.workflows.source_kg_construction import (
     DEFAULT_SOURCE_KG_BUILD_DIR,
     SourceKGConstructionWorkflowConfig,
@@ -174,6 +175,63 @@ class KGConstructionSourceListResponse(BaseModel):
     sources: list[KGConstructionUploadedSource]
 
 
+class KGConstructionBuildRecord(BaseModel):
+    """One source-to-KG construction build registry entry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    status: str
+    created_at: str | None = None
+    output_dir: str
+    nodes_path: str
+    edges_path: str
+    summary_path: str
+    manifest_path: str
+    source_ids: list[str] = Field(default_factory=list)
+    source_count: int = 0
+    node_count: int = 0
+    edge_count: int = 0
+    scenarios: dict[str, int] = Field(default_factory=dict)
+    review_status_counts: dict[str, int] = Field(default_factory=dict)
+    claim_boundary: str = (
+        "source-to-KG build registry entries are candidate/reviewable KG "
+        "snapshots; they are not published to Neo4j automatically"
+    )
+
+
+class KGConstructionBuildListResponse(BaseModel):
+    """List response for source-to-KG construction builds."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build_root: str
+    builds: list[KGConstructionBuildRecord]
+
+
+class KGConstructionBuildDetail(BaseModel):
+    """Detail response for one source-to-KG construction build."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    summary: dict[str, Any]
+    manifest: dict[str, Any]
+
+
+class KGConstructionBuildValidationResponse(BaseModel):
+    """Validation response for one source-to-KG construction build."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    qa_report: dict[str, Any]
+    claim_boundary: str = (
+        "validation reports KG CSV contract issues and warnings; it does not "
+        "mutate KG files or publish to Neo4j"
+    )
+
+
 def run_kg_construction_build(
     request: KGConstructionBuildRequest,
     *,
@@ -286,6 +344,56 @@ def list_kg_construction_source_uploads(
     return KGConstructionSourceListResponse(source_root=str(root), sources=sources)
 
 
+def list_kg_construction_builds(
+    *,
+    build_root: Path | None = None,
+) -> KGConstructionBuildListResponse:
+    """List source-to-KG build artifacts discovered under the build root."""
+    root = build_root or DEFAULT_SOURCE_KG_BUILD_DIR
+    builds = [
+        _build_record_from_manifest_path(manifest_path)
+        for manifest_path in _build_manifest_paths(root)
+    ]
+    builds.sort(key=lambda item: item.created_at or "", reverse=True)
+    return KGConstructionBuildListResponse(build_root=str(root), builds=builds)
+
+
+def get_kg_construction_build(
+    run_id: str,
+    *,
+    build_root: Path | None = None,
+) -> KGConstructionBuildDetail:
+    """Return summary and manifest payload for one construction build."""
+    build = _find_build_record(run_id, build_root=build_root)
+    summary_path = Path(build.summary_path)
+    manifest_path = Path(build.manifest_path)
+    if not summary_path.is_file():
+        raise ValueError(f"construction build summary not found: {summary_path}")
+    if not manifest_path.is_file():
+        raise ValueError(f"construction build manifest not found: {manifest_path}")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(summary, dict):
+        raise ValueError(f"construction build summary must be an object: {summary_path}")
+    if not isinstance(manifest, dict):
+        raise ValueError(f"construction build manifest must be an object: {manifest_path}")
+    return KGConstructionBuildDetail(build=build, summary=summary, manifest=manifest)
+
+
+def validate_kg_construction_build(
+    run_id: str,
+    *,
+    build_root: Path | None = None,
+) -> KGConstructionBuildValidationResponse:
+    """Run structured KG QA for one construction build."""
+    build = _find_build_record(run_id, build_root=build_root)
+    report = run_kg_qa([build.nodes_path], [build.edges_path])
+    return KGConstructionBuildValidationResponse(
+        build=build,
+        qa_report=report.model_dump(),
+    )
+
+
 def _source_from_input(source: KGConstructionSourceInput) -> KGConstructionSource:
     metadata = dict(source.metadata)
     path = Path(source.path) if source.path else None
@@ -317,6 +425,88 @@ def _safe_output_name(value: str) -> str:
     if safe != stripped:
         raise ValueError("output_name may contain only letters, numbers, '.', '_', and '-'")
     return safe
+
+
+def _build_manifest_paths(root: Path) -> list[Path]:
+    if not root.exists():
+        return []
+    if root.is_file():
+        return [root] if root.name == "kg_construction_manifest.json" else []
+    return sorted(root.glob("*/kg_construction_manifest.json"))
+
+
+def _find_build_record(
+    run_id: str,
+    *,
+    build_root: Path | None,
+) -> KGConstructionBuildRecord:
+    requested = _safe_path_component(run_id, field_name="run_id")
+    for build in list_kg_construction_builds(build_root=build_root).builds:
+        if build.run_id == requested:
+            return build
+    raise ValueError(f"unknown construction build run_id: {run_id}")
+
+
+def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuildRecord:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise ValueError(f"construction manifest must be an object: {manifest_path}")
+    if manifest.get("artifact_type") != "source_to_kg_construction_manifest_v1":
+        raise ValueError(f"unsupported construction manifest: {manifest_path}")
+    run = _dict_value(manifest, "run")
+    summary = _dict_value(manifest, "summary")
+    artifacts = _dict_value(manifest, "artifacts")
+    run_id = str(run.get("run_id") or summary.get("run_id") or "")
+    if not run_id:
+        raise ValueError(f"construction manifest missing run_id: {manifest_path}")
+    output_dir = artifacts.get("output_dir") or manifest_path.parent
+    return KGConstructionBuildRecord(
+        run_id=run_id,
+        status=str(run.get("status") or "built"),
+        created_at=_str_or_none(run.get("created_at")),
+        output_dir=str(output_dir),
+        nodes_path=str(artifacts.get("nodes") or manifest_path.parent / "nodes.csv"),
+        edges_path=str(artifacts.get("edges") or manifest_path.parent / "edges.csv"),
+        summary_path=str(
+            artifacts.get("summary") or manifest_path.parent / "kg_construction_summary.json"
+        ),
+        manifest_path=str(artifacts.get("manifest") or manifest_path),
+        source_ids=[str(item) for item in summary.get("source_ids", [])],
+        source_count=_int_value(summary.get("source_count")),
+        node_count=_int_value(summary.get("node_count")),
+        edge_count=_int_value(summary.get("edge_count")),
+        scenarios=_int_dict(summary.get("scenarios")),
+        review_status_counts=_int_dict(summary.get("review_status_counts")),
+    )
+
+
+def _dict_value(payload: dict[str, Any], key: str) -> dict[str, Any]:
+    value = payload.get(key)
+    if isinstance(value, dict):
+        return value
+    raise ValueError(f"construction manifest missing object field: {key}")
+
+
+def _int_dict(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): _int_value(item) for key, item in value.items()}
+
+
+def _int_value(value: object) -> int:
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _str_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text or None
 
 
 def _source_format_from_filename(filename: str) -> ConstructionSourceFormat:
@@ -353,11 +543,18 @@ __all__ = [
     "ConstructionSourceType",
     "KGConstructionBuildRequest",
     "KGConstructionBuildResponse",
+    "KGConstructionBuildDetail",
+    "KGConstructionBuildListResponse",
+    "KGConstructionBuildRecord",
+    "KGConstructionBuildValidationResponse",
     "KGConstructionSourceListResponse",
     "KGConstructionSourceInput",
     "KGConstructionSourceUploadRequest",
     "KGConstructionUploadedSource",
+    "get_kg_construction_build",
     "list_kg_construction_source_uploads",
+    "list_kg_construction_builds",
     "run_kg_construction_build",
     "save_kg_construction_source_upload",
+    "validate_kg_construction_build",
 ]

@@ -104,6 +104,20 @@ candidate `nodes.csv`, `edges.csv`, `kg_construction_summary.json`, and
 `kg_construction_manifest.json` files under `runs/source_kg_build/<output_name>`.
 It does not call live LLM extractors, parse source code, or publish to Neo4j.
 
+Completed construction builds can be inspected and validated before any future
+publish step:
+
+```http
+GET /api/kg/construction/builds
+GET /api/kg/construction/builds/{run_id}
+POST /api/kg/construction/builds/{run_id}/validate
+```
+
+The registry is file-backed in v0. It scans `runs/source_kg_build/*` for
+`kg_construction_manifest.json`, returns artifact paths and summary counts, and
+runs structured KG CSV QA on the selected build. Validation is read-only and
+does not import to Neo4j.
+
 Source files can also be staged through the backend before a build:
 
 ```http

@@ -25,9 +25,12 @@ from kgtracevis.service.kg_construction import (
     ConstructionSourceFormat,
     ConstructionSourceType,
     KGConstructionBuildRequest,
+    get_kg_construction_build,
+    list_kg_construction_builds,
     list_kg_construction_source_uploads,
     run_kg_construction_build,
     save_kg_construction_source_upload,
+    validate_kg_construction_build,
 )
 from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
 from kgtracevis.service.kg_source_drafts import (
@@ -151,6 +154,27 @@ def create_app() -> FastAPI:
             return run_kg_construction_build(request).model_dump(mode="json")
         except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/builds")
+    def kg_construction_builds() -> dict[str, object]:
+        try:
+            return list_kg_construction_builds().model_dump(mode="json")
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/builds/{run_id}")
+    def kg_construction_build_detail(run_id: str) -> dict[str, object]:
+        try:
+            return get_kg_construction_build(run_id).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/builds/{run_id}/validate")
+    def kg_construction_build_validate(run_id: str) -> dict[str, object]:
+        try:
+            return validate_kg_construction_build(run_id).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/kg/construction/sources")
     def kg_construction_sources() -> dict[str, object]:

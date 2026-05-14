@@ -241,6 +241,83 @@ def test_kg_construction_build_route_writes_runtime_artifacts(
     assert Path(payload["manifest_path"]).is_file()
 
 
+def test_kg_construction_build_registry_lists_details_and_validates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Construction builds should be discoverable and independently QA-able."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "registry_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_registry_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    list_response = client.get("/api/kg/construction/builds")
+    assert list_response.status_code == 200
+    builds = list_response.json()["builds"]
+    assert [build["run_id"] for build in builds] == ["kgbuild_registry_unit"]
+    assert builds[0]["node_count"] == 2
+    assert builds[0]["edge_count"] == 1
+
+    detail_response = client.get("/api/kg/construction/builds/kgbuild_registry_unit")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["build"]["summary_path"].endswith("kg_construction_summary.json")
+    assert detail["summary"]["node_count"] == 2
+    assert detail["manifest"]["run"]["run_id"] == "kgbuild_registry_unit"
+
+    validation_response = client.post(
+        "/api/kg/construction/builds/kgbuild_registry_unit/validate"
+    )
+    assert validation_response.status_code == 200
+    validation = validation_response.json()
+    assert validation["build"]["run_id"] == "kgbuild_registry_unit"
+    assert validation["qa_report"]["summary"]["passed"] is True
+    assert validation["qa_report"]["summary"]["edge_count"] == 1
+
+
+def test_kg_construction_build_registry_rejects_unknown_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown construction build IDs should be explicit 404s."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    detail_response = client.get("/api/kg/construction/builds/missing_build")
+    validation_response = client.post(
+        "/api/kg/construction/builds/missing_build/validate"
+    )
+
+    assert detail_response.status_code == 404
+    assert validation_response.status_code == 404
+    assert "unknown construction build run_id" in detail_response.text
+
+
 def test_kg_construction_build_route_rejects_missing_tep_paths() -> None:
     """TEP runtime construction inputs should require explicit local artifacts."""
     client = TestClient(app)
