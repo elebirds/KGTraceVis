@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify expected test/build commands and KG non-mutation constraints."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check action cards use existing payload data without introducing stale or duplicated state."}

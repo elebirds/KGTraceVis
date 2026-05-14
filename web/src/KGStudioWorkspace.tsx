@@ -396,9 +396,12 @@ function KGStudioFilterBar({
 }
 
 function KGStudioOverview({ payload }: { payload: KGStudioPayload }) {
+  const navigate = useNavigate();
   const statusRows = countRows(payload.review_status_counts);
   const scenarioRows = countRows(payload.scenario_counts);
   const sourceRows = countRows(payload.source_counts);
+  const pendingReviewCount =
+    payload.review_status_counts.auto ?? payload.review_targets.length;
   return (
     <div className="kg-workspace-stack">
       <section className="kg-metrics">
@@ -407,6 +410,37 @@ function KGStudioOverview({ payload }: { payload: KGStudioPayload }) {
         <Metric label="edges" value={payload.edge_count} />
         <Metric label="validation" value={payload.validation_summary?.passed ?? "unknown"} />
         <Metric label="mean confidence" value={payload.confidence_summary.mean ?? "unknown"} />
+      </section>
+
+      <section className="kg-action-grid" aria-label="KG Studio workflow actions">
+        <KGWorkflowActionCard
+          icon={<FileSearchOutlined />}
+          title="Sources"
+          description="Browse source registry rows and source documents, then draft candidate KG edges."
+          metric={`${payload.sources.length} sources · ${payload.source_documents.length} docs`}
+          onOpen={() => navigate("/kg-studio/sources")}
+        />
+        <KGWorkflowActionCard
+          icon={<BranchesOutlined />}
+          title="Graph"
+          description="Inspect candidate topology, provenance, confidence, and source evidence."
+          metric={`${payload.edge_count} edges · ${payload.node_count} nodes`}
+          onOpen={() => navigate("/kg-studio/graph")}
+        />
+        <KGWorkflowActionCard
+          icon={<CheckOutlined />}
+          title="Review"
+          description="Move through the KG edge queue and record append-only feedback decisions."
+          metric={`${pendingReviewCount} auto-review targets`}
+          onOpen={() => navigate("/kg-studio/review")}
+        />
+        <KGWorkflowActionCard
+          icon={<EditOutlined />}
+          title="Draft Lab"
+          description="Prepare proposed relation, evidence, or confidence adjustments for later promotion."
+          metric={`${payload.review_targets.length} selectable targets`}
+          onOpen={() => navigate("/kg-studio/drafts")}
+        />
       </section>
 
       <section className="kg-overview-grid">
@@ -438,6 +472,36 @@ function KGStudioOverview({ payload }: { payload: KGStudioPayload }) {
         </Descriptions>
       </Card>
     </div>
+  );
+}
+
+function KGWorkflowActionCard({
+  icon,
+  title,
+  description,
+  metric,
+  onOpen
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  metric: string;
+  onOpen: () => void;
+}) {
+  return (
+    <Card className="kg-action-card">
+      <div className="kg-action-card-header">
+        <span>{icon}</span>
+        <Tag>{metric}</Tag>
+      </div>
+      <div>
+        <Text strong>{title}</Text>
+        <Text type="secondary">{description}</Text>
+      </div>
+      <Button type="primary" onClick={onOpen}>
+        Open {title}
+      </Button>
+    </Card>
   );
 }
 

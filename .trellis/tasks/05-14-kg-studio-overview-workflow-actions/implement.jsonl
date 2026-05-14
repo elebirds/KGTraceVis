@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"Confirm dashboard changes preserve KG and service boundaries."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Use current project quality gate and KG non-mutation rules."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Keep overview action cards derived from existing KG Studio payload fields."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse existing KG Studio navigation and metric patterns."}

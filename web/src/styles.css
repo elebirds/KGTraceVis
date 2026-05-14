@@ -1053,6 +1053,45 @@ select:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.kg-action-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.kg-action-card .ant-card-body {
+  display: grid;
+  gap: 12px;
+  min-height: 218px;
+}
+
+.kg-action-card-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.kg-action-card-header > span {
+  align-items: center;
+  background: var(--primary-soft);
+  border-radius: 8px;
+  color: var(--primary-strong);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.kg-action-card .ant-typography {
+  display: block;
+  margin: 0;
+}
+
+.kg-action-card button {
+  align-self: end;
+}
+
 .kg-two-column > .ant-card,
 .kg-overview-grid > .ant-card {
   min-width: 0;
@@ -1881,6 +1920,7 @@ th {
 
   .kg-studio-grid,
   .kg-overview-grid,
+  .kg-action-grid,
   .kg-two-column,
   .graph-browser-layout,
   .review-layout,

@@ -117,8 +117,9 @@ editor, KG mutation workflow, or LLM source-to-KG construction UI.
 KG Studio is split into focused workspace pages rather than a single mixed
 panel:
 
-- `/kg-studio/overview` shows KG status, validation, source/scenario/review
-  counts, and artifact paths.
+- `/kg-studio/overview` acts as the KG Studio home, with workflow action cards
+  for Sources, Graph, Review, and Draft Lab plus KG status, validation,
+  source/scenario/review counts, and artifact paths.
 - `/kg-studio/sources` is split into in-page workspaces for Source Registry,
   Source Documents, and Extract Draft, so source browsing and candidate
   generation do not compete for the same panel space.
