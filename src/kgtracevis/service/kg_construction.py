@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import re
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -18,6 +20,11 @@ from kgtracevis.kg.import_neo4j import (
     resolve_neo4j_config,
 )
 from kgtracevis.kg_construction import KGConstructionSource
+from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS
+from kgtracevis.kg_construction.models import (
+    KGConstructionReviewDecision,
+    review_decision_for_edge,
+)
 from kgtracevis.kg_construction.qa import run_kg_qa
 from kgtracevis.workflows.source_kg_construction import (
     DEFAULT_SOURCE_KG_BUILD_DIR,
@@ -281,6 +288,59 @@ class KGConstructionPublishResponse(BaseModel):
     )
 
 
+class KGConstructionEdgeReviewRequest(BaseModel):
+    """Request to review one candidate construction KG edge."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["accept", "reject"]
+    target_key: str | None = None
+    head: str | None = None
+    relation: str | None = None
+    tail: str | None = None
+    scenario: str | None = None
+    reviewer: str | None = None
+    note: str | None = None
+    proposed_payload: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_target(self) -> KGConstructionEdgeReviewRequest:
+        """Require exactly one stable edge target shape."""
+        has_key = self.target_key is not None
+        has_parts = all((self.head, self.relation, self.tail, self.scenario))
+        if has_key == bool(has_parts):
+            raise ValueError(
+                "pass either target_key or head/relation/tail/scenario for edge review"
+            )
+        return self
+
+    def edge_key(self) -> str:
+        """Return the target edge key in KGEdge.edge_id format."""
+        if self.target_key is not None:
+            return _safe_edge_key(self.target_key)
+        return _safe_edge_key(
+            f"{self.head}|{self.relation}|{self.tail}|{self.scenario}"
+        )
+
+
+class KGConstructionEdgeReviewResponse(BaseModel):
+    """Response envelope for one construction edge review action."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    decision: KGConstructionReviewDecision
+    edge: dict[str, Any]
+    summary: dict[str, Any]
+    manifest_path: str
+    edges_path: str
+    claim_boundary: str = (
+        "edge review updates only the selected construction build artifacts; "
+        "Neo4j publication remains a separate explicit step"
+    )
+
+
 def run_kg_construction_build(
     request: KGConstructionBuildRequest,
     *,
@@ -485,6 +545,51 @@ def publish_kg_construction_build(
     )
 
 
+def review_kg_construction_edge(
+    run_id: str,
+    request: KGConstructionEdgeReviewRequest,
+    *,
+    build_root: Path | None = None,
+) -> KGConstructionEdgeReviewResponse:
+    """Record an accept/reject decision for one candidate construction edge."""
+    build = _find_build_record(run_id, build_root=build_root)
+    _require_build_artifacts(build)
+    target_key = request.edge_key()
+    edge_rows = _read_edge_rows(Path(build.edges_path))
+    updated_edge = _review_edge_row(edge_rows, target_key=target_key, action=request.action)
+    _write_edge_rows(Path(build.edges_path), edge_rows)
+
+    manifest = _load_json_object(Path(build.manifest_path), object_name="construction manifest")
+    summary = _load_json_object(Path(build.summary_path), object_name="construction summary")
+    _refresh_review_summary(summary, edge_rows)
+    _refresh_manifest_review_summary(manifest, summary)
+    decision = review_decision_for_edge(
+        target_id=target_key,
+        target_key=target_key,
+        action=request.action,
+        reviewer=request.reviewer,
+        note=request.note,
+        proposed_payload=request.proposed_payload or updated_edge,
+        metadata={
+            "run_id": build.run_id,
+            "edge": updated_edge,
+            **request.metadata,
+        },
+    )
+    manifest.setdefault("review_decisions", []).append(decision.model_dump(mode="json"))
+    _write_json_object(Path(build.summary_path), summary)
+    _write_json_object(Path(build.manifest_path), manifest)
+    refreshed_build = _build_record_from_manifest_path(Path(build.manifest_path))
+    return KGConstructionEdgeReviewResponse(
+        build=refreshed_build,
+        decision=decision,
+        edge=updated_edge,
+        summary=summary,
+        manifest_path=build.manifest_path,
+        edges_path=build.edges_path,
+    )
+
+
 def _source_from_input(source: KGConstructionSourceInput) -> KGConstructionSource:
     metadata = dict(source.metadata)
     path = Path(source.path) if source.path else None
@@ -595,6 +700,103 @@ def _require_build_artifacts(build: KGConstructionBuildRecord) -> None:
         raise ValueError(f"construction build artifact not found: {joined}")
 
 
+def _read_edge_rows(path: Path) -> list[dict[str, str]]:
+    if not path.is_file():
+        raise ValueError(f"construction build edges not found: {path}")
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        missing = set(EDGE_COLUMNS).difference(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"edge CSV missing required columns: {sorted(missing)}")
+        return [{key: row.get(key, "") for key in EDGE_COLUMNS} for row in reader]
+
+
+def _write_edge_rows(path: Path, rows: list[dict[str, str]]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=EDGE_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _review_edge_row(
+    rows: list[dict[str, str]],
+    *,
+    target_key: str,
+    action: Literal["accept", "reject"],
+) -> dict[str, Any]:
+    for row in rows:
+        if _edge_key_from_row(row) != target_key:
+            continue
+        row["feedback_count"] = str(_int_value(row.get("feedback_count")) + 1)
+        if action == "accept":
+            row["review_status"] = "reviewed"
+            row["accepted_count"] = str(_int_value(row.get("accepted_count")) + 1)
+        elif action == "reject":
+            row["review_status"] = "rejected"
+            row["rejected_count"] = str(_int_value(row.get("rejected_count")) + 1)
+        return dict(row)
+    raise ValueError(f"unknown construction edge target_key: {target_key}")
+
+
+def _edge_key_from_row(row: dict[str, str]) -> str:
+    return _safe_edge_key(
+        "|".join(
+            (
+                row.get("head", ""),
+                row.get("relation", ""),
+                row.get("tail", ""),
+                row.get("scenario", ""),
+            )
+        )
+    )
+
+
+def _safe_edge_key(value: str) -> str:
+    parts = [part.strip() for part in value.split("|")]
+    if len(parts) != 4 or any(not part for part in parts):
+        raise ValueError("edge target_key must have form head|relation|tail|scenario")
+    return "|".join(parts)
+
+
+def _load_json_object(path: Path, *, object_name: str) -> dict[str, Any]:
+    if not path.is_file():
+        raise ValueError(f"{object_name} not found: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{object_name} must be a JSON object: {path}")
+    return payload
+
+
+def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def _refresh_review_summary(
+    summary: dict[str, Any],
+    edge_rows: list[dict[str, str]],
+) -> None:
+    review_counts = Counter(row.get("review_status", "") for row in edge_rows)
+    review_counts.pop("", None)
+    summary["review_status_counts"] = dict(sorted(review_counts.items()))
+
+
+def _refresh_manifest_review_summary(
+    manifest: dict[str, Any],
+    summary: dict[str, Any],
+) -> None:
+    manifest_summary = manifest.get("summary")
+    if isinstance(manifest_summary, dict):
+        manifest_summary["review_status_counts"] = summary.get("review_status_counts", {})
+    run = manifest.get("run")
+    if isinstance(run, dict) and summary.get("review_status_counts"):
+        statuses = set(_int_dict(summary.get("review_status_counts")))
+        if statuses and "auto" not in statuses:
+            run["status"] = "reviewed"
+
+
 def _dict_value(payload: dict[str, Any], key: str) -> dict[str, Any]:
     value = payload.get(key)
     if isinstance(value, dict):
@@ -659,6 +861,8 @@ __all__ = [
     "KGConstructionBuildRequest",
     "KGConstructionBuildResponse",
     "KGConstructionBuildDetail",
+    "KGConstructionEdgeReviewRequest",
+    "KGConstructionEdgeReviewResponse",
     "KGConstructionImportSummary",
     "KGConstructionBuildListResponse",
     "KGConstructionPublishRequest",
@@ -673,6 +877,7 @@ __all__ = [
     "list_kg_construction_source_uploads",
     "list_kg_construction_builds",
     "publish_kg_construction_build",
+    "review_kg_construction_edge",
     "run_kg_construction_build",
     "save_kg_construction_source_upload",
     "validate_kg_construction_build",

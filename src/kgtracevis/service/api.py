@@ -26,11 +26,13 @@ from kgtracevis.service.kg_construction import (
     ConstructionSourceFormat,
     ConstructionSourceType,
     KGConstructionBuildRequest,
+    KGConstructionEdgeReviewRequest,
     KGConstructionPublishRequest,
     get_kg_construction_build,
     list_kg_construction_builds,
     list_kg_construction_source_uploads,
     publish_kg_construction_build,
+    review_kg_construction_edge,
     run_kg_construction_build,
     save_kg_construction_source_upload,
     validate_kg_construction_build,
@@ -198,6 +200,22 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             status_code = (
                 404 if "unknown construction build run_id" in str(exc) else 400
+            )
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/builds/{run_id}/review")
+    def kg_construction_edge_review(
+        run_id: str,
+        request: KGConstructionEdgeReviewRequest,
+    ) -> dict[str, object]:
+        try:
+            return review_kg_construction_edge(run_id, request).model_dump(mode="json")
+        except ValueError as exc:
+            status_code = (
+                404
+                if "unknown construction build run_id" in str(exc)
+                or "unknown construction edge target_key" in str(exc)
+                else 400
             )
             raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 

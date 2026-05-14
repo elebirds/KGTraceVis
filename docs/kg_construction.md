@@ -111,6 +111,7 @@ publish step:
 GET /api/kg/construction/builds
 GET /api/kg/construction/builds/{run_id}
 POST /api/kg/construction/builds/{run_id}/validate
+POST /api/kg/construction/builds/{run_id}/review
 POST /api/kg/construction/builds/{run_id}/publish
 ```
 
@@ -118,6 +119,25 @@ The registry is file-backed in v0. It scans `runs/source_kg_build/*` for
 `kg_construction_manifest.json`, returns artifact paths and summary counts, and
 runs structured KG CSV QA on the selected build. Validation is read-only and
 does not import to Neo4j.
+
+The review endpoint is the pre-publish control point for candidate edges. It
+updates only the selected construction build's `edges.csv` and manifest. A
+review target can be identified by the stable edge key
+`head|relation|tail|scenario`:
+
+```json
+{
+  "target_key": "ApiManualSource|BELONGS_TO|ApiManualTarget|tep",
+  "action": "accept",
+  "reviewer": "operator-a",
+  "note": "source-backed relation"
+}
+```
+
+`accept` sets `review_status=reviewed` and increments the accepted feedback
+counter. `reject` sets `review_status=rejected` and increments the rejected
+feedback counter. Both actions append a review decision to
+`kg_construction_manifest.json`. The endpoint does not publish to Neo4j.
 
 The publish endpoint is also safe-by-default. Calling it with an empty JSON body
 performs a dry-run import count over the default seed KG plus the selected

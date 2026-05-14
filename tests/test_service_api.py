@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import uuid
 from collections.abc import Generator
@@ -395,6 +396,135 @@ def test_kg_construction_publish_route_requires_confirmation_for_real_import(
 
     assert response.status_code == 400
     assert "confirm_publish=true" in response.text
+
+
+def test_kg_construction_review_route_updates_edge_and_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edge review should update the candidate CSV counters and decision log."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "review_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_review_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+    build_payload = build_response.json()
+    edge_key = "ApiManualSource|BELONGS_TO|ApiManualTarget|tep"
+
+    accept_response = client.post(
+        "/api/kg/construction/builds/kgbuild_review_unit/review",
+        json={
+            "target_key": edge_key,
+            "action": "accept",
+            "reviewer": "unit-test",
+            "note": "looks source-backed",
+        },
+    )
+    reject_response = client.post(
+        "/api/kg/construction/builds/kgbuild_review_unit/review",
+        json={
+            "head": "ApiManualSource",
+            "relation": "BELONGS_TO",
+            "tail": "ApiManualTarget",
+            "scenario": "tep",
+            "action": "reject",
+            "reviewer": "unit-test",
+            "note": "exercise reject path",
+        },
+    )
+
+    assert accept_response.status_code == 200
+    accepted = accept_response.json()
+    assert accepted["edge"]["review_status"] == "reviewed"
+    assert accepted["edge"]["feedback_count"] == "1"
+    assert accepted["edge"]["accepted_count"] == "1"
+    assert accepted["edge"]["rejected_count"] == "0"
+    assert accepted["decision"]["target_key"] == edge_key
+    assert accepted["decision"]["action"] == "accept"
+    assert accepted["summary"]["review_status_counts"] == {"reviewed": 1}
+
+    assert reject_response.status_code == 200
+    rejected = reject_response.json()
+    assert rejected["edge"]["review_status"] == "rejected"
+    assert rejected["edge"]["feedback_count"] == "2"
+    assert rejected["edge"]["accepted_count"] == "1"
+    assert rejected["edge"]["rejected_count"] == "1"
+    assert rejected["decision"]["action"] == "reject"
+    assert rejected["summary"]["review_status_counts"] == {"rejected": 1}
+
+    edge_rows = _read_csv_rows(Path(build_payload["edges_path"]))
+    assert edge_rows[0]["review_status"] == "rejected"
+    assert edge_rows[0]["feedback_count"] == "2"
+    manifest = json.loads(Path(build_payload["manifest_path"]).read_text(encoding="utf-8"))
+    assert [item["action"] for item in manifest["review_decisions"]] == [
+        "accept",
+        "reject",
+    ]
+    assert manifest["summary"]["review_status_counts"] == {"rejected": 1}
+    assert manifest["run"]["status"] == "reviewed"
+
+
+def test_kg_construction_review_route_rejects_unknown_edge(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown edge review targets should be explicit 404s."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "review_missing_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_review_missing_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    response = client.post(
+        "/api/kg/construction/builds/kgbuild_review_missing_unit/review",
+        json={
+            "target_key": "MissingHead|BELONGS_TO|MissingTail|tep",
+            "action": "accept",
+        },
+    )
+
+    assert response.status_code == 404
+    assert "unknown construction edge target_key" in response.text
 
 
 def test_kg_construction_build_registry_rejects_unknown_run(
@@ -1106,3 +1236,8 @@ def _manual_source_csv() -> str:
             "",
         ]
     )
+
+
+def _read_csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
