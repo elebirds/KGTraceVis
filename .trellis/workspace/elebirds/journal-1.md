@@ -106,3 +106,36 @@ Tightened KG Studio filtered selection behavior, replaced source draft edge IDs 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: KG Studio sources workspace tabs
+
+**Date**: 2026-05-14
+**Task**: KG Studio sources workspace tabs
+**Branch**: `main`
+
+### Summary
+
+Split the KG Studio Sources page into focused Source Registry, Source Documents, and Extract Draft workspaces; preserved source search and candidate generation contracts; verified web build, full tests, lint, typecheck, examples, dashboard smoke, and browser interactions.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b92a45f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
