@@ -45,8 +45,10 @@ Analysis is route-backed:
 - `/analysis/:runId` opens a timeline-driven detail view for one run.
 
 The detail view uses a stepper so one investigation stage owns the main canvas
-at a time: input, model evidence, normalized evidence, entity linking,
-consistency/correction, candidate paths, and review/provenance.
+at a time: evidence, linking, consistency/correction, candidate paths, and
+review/provenance. A case summary strip stays above the stepper with the current
+dataset, object/pattern, anomaly fields, linked entities, corrections, path
+count, and review target count.
 
 ## Example Uploads
 
@@ -100,14 +102,15 @@ the baseline dashboard smoke.
 Review feedback is append-only history under `runs/web_feedback/feedback.jsonl`.
 It does not promote or mutate KG CSV edges.
 
-The run detail view includes visual evidence cards in the Model Evidence step.
-MVTec producer records can expose source image, mask, and heatmap previews;
-WM811K records can expose a rendered wafer-map preview. The Path Graph
-workspace renders candidate reasoning paths as compact node-edge chains;
-selecting a path changes the current review target, and selecting an edge
-exposes the KG edge source, confidence, review status, and evidence text. The
-Review panel groups available path, edge, entity-link, and correction targets
-into a queue and submits the stable `target_key` in feedback metadata.
+The run detail view includes a focused evidence workspace. MVTec producer
+records can expose source image, mask, and heatmap previews; WM811K records can
+expose a rendered wafer-map preview. Evidence fields and run artifacts sit below
+the visual band so the model observation is separate from KG-derived reasoning.
+The Path Graph workspace renders candidate reasoning paths as compact node-edge
+chains; selecting a path changes the current review target, and selecting an
+edge exposes the KG edge source, confidence, review status, and evidence text.
+The Review panel groups available path, edge, entity-link, and correction
+targets into a queue and submits the stable `target_key` in feedback metadata.
 
 This is only a review affordance; RootLens v1 does not implement a full KG
 editor, KG mutation workflow, or LLM source-to-KG construction UI.

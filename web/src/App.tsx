@@ -1241,110 +1241,56 @@ function RunDetailView({
   const visualEvidence = selectedCaseKey
     ? (run.visual_evidence ?? []).filter((item) => item.case_id === selectedCaseKey)
     : (run.visual_evidence ?? []);
+  const reviewTargetCount = reviewTargets.length;
+  const pathCount = pathGraph.path_count || pathGraph.paths.length;
+  const artifactCount = Object.keys(run.artifacts).length;
   const stages: Array<{ title: string; description: string; content: ReactNode }> = [
     {
-      title: "Input",
-      description: "Run metadata and workflow",
+      title: "Evidence",
+      description: "Model output and artifacts",
+      content: (
+        <div className="analysis-evidence-workspace">
+          <AnalysisStageIntro
+            title="Observed evidence"
+            description="Model and adapter outputs are kept separate from KG-derived reasoning so the case remains auditable."
+            tags={[
+              `${visualEvidence.length} visual artifacts`,
+              `${artifactCount} run artifacts`,
+              valueText(run.run.mode)
+            ]}
+          />
+          <section className="visual-evidence-section">
+            <div className="visual-evidence-heading">
+              <Text strong>Visual Evidence</Text>
+              <Text type="secondary">
+                Raw images, masks, heatmaps, and wafer maps attached to the selected case.
+              </Text>
+            </div>
+            <VisualEvidencePanel items={visualEvidence} />
+          </section>
+          <section className="analysis-detail-grid">
+            <Card title="Evidence Fields">
+              <EvidenceFieldGrid evidence={evidence} />
+            </Card>
+            <ArtifactPanel artifacts={run.artifacts} />
+          </section>
+        </div>
+      )
+    },
+    {
+      title: "Linking",
+      description: "Evidence to KG entities",
       content: (
         <div className="analysis-stage-grid">
-          <Card title="Run Summary">
-            <Descriptions size="small" column={2} bordered>
-              <Descriptions.Item label="run id">{run.run.run_id}</Descriptions.Item>
-              <Descriptions.Item label="source">{run.run.source_filename}</Descriptions.Item>
-              <Descriptions.Item label="dataset">{valueText(run.run.dataset)}</Descriptions.Item>
-              <Descriptions.Item label="mode">{run.run.mode}</Descriptions.Item>
-              <Descriptions.Item label="cases">{run.run.case_count}</Descriptions.Item>
-              <Descriptions.Item label="evidence">{run.run.evidence_count}</Descriptions.Item>
-              <Descriptions.Item label="created">
-                {new Date(run.run.created_at).toLocaleString()}
-              </Descriptions.Item>
-              <Descriptions.Item label="status">{run.run.status}</Descriptions.Item>
-            </Descriptions>
-          </Card>
-          <Card title={<Space><CheckOutlined />Workflow</Space>}>
-            <List
-              size="small"
-              dataSource={run.workflow_steps}
-              renderItem={(step) => (
-                <List.Item>
-                  <List.Item.Meta title={step.title} description={step.summary} />
-                </List.Item>
-              )}
-            />
-          </Card>
-        </div>
-      )
-    },
-    {
-      title: "Model Evidence",
-      description: "Observed anomaly fields",
-      content: (
-        <div className="analysis-stage-grid visual-evidence-layout">
-          <Card className="visual-evidence-card" title="Visual Evidence">
-            <VisualEvidencePanel items={visualEvidence} />
-          </Card>
-          <Card title="Evidence Summary">
-            <Descriptions size="small" column={2} bordered>
-              {[
-                "case_id",
-                "dataset",
-                "object",
-                "anomaly_type",
-                "location",
-                "morphology",
-                "severity",
-                "confidence"
-              ].map((key) => (
-                <Descriptions.Item key={key} label={key}>
-                  <span className="breakable-value">{valueText(evidence[key])}</span>
-                </Descriptions.Item>
-              ))}
-            </Descriptions>
-          </Card>
-          <Card title="Artifacts">
-            {Object.keys(run.artifacts).length ? (
-              <List
-                className="artifact-list"
-                size="small"
-                dataSource={Object.entries(run.artifacts)}
-                renderItem={([key, value]) => (
-                  <List.Item>
-                    <List.Item.Meta
-                      title={<span className="breakable-value">{key}</span>}
-                      description={<span className="breakable-value">{value}</span>}
-                    />
-                  </List.Item>
-                )}
-              />
-            ) : (
-              <Empty description="No artifact paths were recorded for this run." />
-            )}
-          </Card>
-        </div>
-      )
-    },
-    {
-      title: "Normalized Evidence",
-      description: "Adapter output and schema payload",
-      content: (
-        <div className="analysis-stage-grid single">
-          <Card title="Evidence JSON">
-            <JsonBlock value={run.evidence_with_analysis ?? run.evidence ?? run.summary} />
-          </Card>
-        </div>
-      )
-    },
-    {
-      title: "Entity Linking",
-      description: "KG entity matches",
-      content: (
-        <div className="analysis-stage-grid single">
           <Card title="Linked Entities">
             <CompactList
               items={linkedEntities}
               idField="link_id"
               labelField="selected_entity_id"
             />
+          </Card>
+          <Card title="Normalized Evidence">
+            <JsonBlock value={run.evidence_with_analysis ?? run.evidence ?? run.summary} />
           </Card>
         </div>
       )
@@ -1361,7 +1307,7 @@ function RunDetailView({
               labelField="suggested_value"
             />
           </Card>
-          <Card title="Analysis Summary">
+          <Card title="Case Analysis Payload">
             <JsonBlock value={selectedCase ?? run.analysis ?? run.summary} />
           </Card>
         </div>
@@ -1369,7 +1315,7 @@ function RunDetailView({
     },
     {
       title: "Candidate Paths",
-      description: "Ranked traceability paths",
+      description: "Traceable KG hypotheses",
       content: (
         <ReasoningWorkspace
           paths={pathGraph.paths}
@@ -1382,10 +1328,12 @@ function RunDetailView({
       title: "Review",
       description: "Provenance and feedback",
       content: (
-        <Card className="review-panel" title="Review Targets">
+        <div className="analysis-stage-grid">
+          <WorkflowPanel steps={run.workflow_steps} run={run.run} />
+          <Card className="review-panel" title="Review Targets">
           <Alert
             className="claim-boundary"
-            message={run.claim_boundary}
+            title={run.claim_boundary}
             type="warning"
             showIcon
           />
@@ -1434,9 +1382,10 @@ function RunDetailView({
             <p className="muted">No feedback target is available for this run.</p>
           )}
           {reviewStatus && (
-            <Alert message={`Feedback ${reviewStatus}.`} type="success" showIcon />
+            <Alert title={`Feedback ${reviewStatus}.`} type="success" showIcon />
           )}
-        </Card>
+          </Card>
+        </div>
       )
     }
   ];
@@ -1444,18 +1393,14 @@ function RunDetailView({
   return (
     <div className="analysis-detail-page">
       <Card className="analysis-case-header">
-        <div>
+        <div className="analysis-case-title">
           <p className="eyebrow">Analysis Detail</p>
           <Title level={2}>{run.run.label}</Title>
           <Text type="secondary">
-            {valueText(evidence.dataset)} · {valueText(evidence.object)} ·{" "}
-            {valueText(evidence.anomaly_type)}
+            {run.run.source_filename} · {new Date(run.run.created_at).toLocaleString()}
           </Text>
         </div>
-        <Space wrap>
-          <Tag color="blue">{pathGraph.path_count} paths</Tag>
-          <Tag color="processing">{linkedEntities.length} linked entities</Tag>
-          <Tag color="warning">{correctionCandidates.length} corrections</Tag>
+        <div className="analysis-case-actions">
           {caseRows.length > 1 && (
             <Select
               className="case-selector"
@@ -1464,11 +1409,23 @@ function RunDetailView({
               options={caseRows.map((caseRow) => ({
                 value: valueText(caseRow.case_id),
                 label: valueText(caseRow.case_id)
-              }))}
+                }))}
             />
           )}
-        </Space>
+        </div>
       </Card>
+      <section className="case-summary-strip" aria-label="Selected case summary">
+        <CaseSummaryItem label="dataset" value={valueText(evidence.dataset ?? run.run.dataset)} />
+        <CaseSummaryItem label="object / pattern" value={valueText(evidence.object)} />
+        <CaseSummaryItem label="anomaly" value={valueText(evidence.anomaly_type)} />
+        <CaseSummaryItem label="location" value={valueText(evidence.location)} />
+        <CaseSummaryItem label="morphology" value={valueText(evidence.morphology)} />
+        <CaseSummaryItem label="confidence" value={valueText(evidence.confidence)} />
+        <CaseSummaryItem label="linked" value={String(linkedEntities.length)} />
+        <CaseSummaryItem label="corrections" value={String(correctionCandidates.length)} />
+        <CaseSummaryItem label="paths" value={String(pathCount)} />
+        <CaseSummaryItem label="review targets" value={String(reviewTargetCount)} />
+      </section>
       <Card className="analysis-timeline-card">
         <Steps
           current={activeStep}
@@ -1483,6 +1440,110 @@ function RunDetailView({
       </Card>
       <section className="analysis-stage-canvas">{stages[activeStep]?.content}</section>
     </div>
+  );
+}
+
+function CaseSummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="case-summary-item">
+      <span>{label}</span>
+      <strong>{value || "unknown"}</strong>
+    </div>
+  );
+}
+
+function AnalysisStageIntro({
+  title,
+  description,
+  tags
+}: {
+  title: string;
+  description: string;
+  tags: string[];
+}) {
+  return (
+    <section className="analysis-stage-intro">
+      <div>
+        <Text strong>{title}</Text>
+        <Text type="secondary">{description}</Text>
+      </div>
+      <Space wrap>
+        {tags.map((tag) => (
+          <Tag key={tag}>{tag}</Tag>
+        ))}
+      </Space>
+    </section>
+  );
+}
+
+function EvidenceFieldGrid({ evidence }: { evidence: Record<string, unknown> }) {
+  const fields = [
+    "case_id",
+    "dataset",
+    "source",
+    "object",
+    "anomaly_type",
+    "location",
+    "morphology",
+    "severity",
+    "confidence"
+  ];
+  return (
+    <div className="evidence-field-grid">
+      {fields.map((field) => (
+        <div className="evidence-field" key={field}>
+          <span>{field}</span>
+          <strong>{valueText(evidence[field])}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ArtifactPanel({ artifacts }: { artifacts: Record<string, string> }) {
+  const artifactRows = Object.entries(artifacts);
+  return (
+    <Card title="Artifacts">
+      {artifactRows.length ? (
+        <div className="artifact-grid" role="list">
+          {artifactRows.map(([key, value]) => (
+            <div className="artifact-row" key={key} role="listitem">
+              <strong>{key}</strong>
+              <span>{value}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Empty description="No artifact paths were recorded for this run." />
+      )}
+    </Card>
+  );
+}
+
+function WorkflowPanel({ steps, run }: { steps: Array<{ title: string; summary: string }>; run: RunSummary }) {
+  return (
+    <Card title={<Space><CheckOutlined />Run Workflow</Space>}>
+      <Descriptions size="small" column={1} bordered>
+        <Descriptions.Item label="run id">
+          <span className="breakable-value">{run.run_id}</span>
+        </Descriptions.Item>
+        <Descriptions.Item label="mode">{run.mode}</Descriptions.Item>
+        <Descriptions.Item label="cases">{run.case_count}</Descriptions.Item>
+        <Descriptions.Item label="evidence">{run.evidence_count}</Descriptions.Item>
+        <Descriptions.Item label="status">{run.status}</Descriptions.Item>
+      </Descriptions>
+      <div className="workflow-step-list" role="list">
+        {steps.map((step) => (
+          <div className="workflow-step-row" key={step.title} role="listitem">
+            <CheckOutlined />
+            <div>
+              <strong>{step.title}</strong>
+              <span>{step.summary}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 

@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"Confirm dashboard changes preserve evidence/KG contracts and service boundaries."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Use project quality gates and KG claim-boundary constraints."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Keep the detail UI derived from existing RunDetail payload fields without API drift."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse existing Analysis detail components and patterns instead of creating a parallel detail page."}

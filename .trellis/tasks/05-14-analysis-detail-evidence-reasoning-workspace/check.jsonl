@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Verify build/test/lint expectations and non-mutating KG constraints."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Check Analysis detail renders existing API fields consistently across cases and empty states."}
