@@ -1,4 +1,4 @@
-"""Bridge TEP RCA artifacts into the unified root-cause ranking contract."""
+"""TEP RCA providers for the unified root-cause ranking contract."""
 
 from __future__ import annotations
 
@@ -6,17 +6,30 @@ import csv
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from kgtracevis.core.result import RankedRootCause, RcaRankingResult
+from kgtracevis.kg.graph import KGEdge, KGNode, KnowledgeGraph, normalize_text
 from kgtracevis.schema.evidence_schema import Evidence
 
 SCENARIO_ID_KEYS = ("scenario_id", "case_id", "scenario", "scenario_key")
 FAULT_NUMBER_KEYS = ("fault_number", "fault_id")
 SIMULATION_RUN_KEYS = ("simulation_run", "simulation_id", "run_id")
+TEP_VARIABLE_KEYS = ("variables", "variable_names", "abnormal_variables", "tags", "sensors")
+TEP_CONTRIBUTION_KEYS = (
+    "variable_contributions",
+    "contributions",
+    "attribution",
+    "variable_scores",
+    "contribution_scores",
+    "graph_contributions",
+    "channel_contributions",
+)
+ROOT_CAUSE_LABELS = {"RootCause", "CauseCategory", "FaultType", "FaultAnchor"}
 
 
 class TepRcaArtifactConfig(BaseModel):
@@ -42,6 +55,170 @@ class TepScenarioSelector(BaseModel):
     simulation_runs: tuple[int, ...] = ()
 
 
+class TepNativeRcaConfig(BaseModel):
+    """Scoring knobs for KGTraceVis-native TEP RCA ranking."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    alpha: float = 0.50
+    beta: float = 0.30
+    delta: float = 0.25
+    gamma: float = 0.10
+    max_depth: int = Field(default=4, ge=1)
+    source_name: str = "tep_native_kg"
+
+
+@dataclass(frozen=True)
+class TepVariableEvidence:
+    """One normalized TEP variable observation used by native RCA scoring."""
+
+    variable: str
+    contribution: float
+    raw_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _TepSupportPath:
+    variable: TepVariableEvidence
+    variable_node: KGNode
+    path_nodes: tuple[str, ...]
+    path_edges: tuple[KGEdge, ...]
+
+
+class TepNativeRcaProvider:
+    """Rank TEP root-cause candidates directly from Evidence and KGTraceVis KG."""
+
+    def __init__(
+        self,
+        graph: KnowledgeGraph | None = None,
+        *,
+        config: TepNativeRcaConfig | None = None,
+    ) -> None:
+        """Create a native provider with an optional fixed graph."""
+        self.graph = graph
+        self.config = config or TepNativeRcaConfig()
+
+    def rank_root_causes(
+        self,
+        evidence: Evidence,
+        *,
+        graph: KnowledgeGraph | None = None,
+        top_k: int = 5,
+        top_k_paths: list[dict[str, Any]] | None = None,
+    ) -> list[RankedRootCause]:
+        """Return KG-backed native RCA rankings for TEP evidence."""
+        if evidence.dataset != "tep":
+            return []
+        active_graph = graph or self.graph
+        if active_graph is None:
+            return []
+        variable_evidence = extract_tep_variable_evidence(evidence)
+        if not variable_evidence:
+            return []
+
+        variable_nodes = _resolve_variable_nodes(variable_evidence, active_graph)
+        if not variable_nodes:
+            return []
+
+        ranked: list[RankedRootCause] = []
+        evidence_total = sum(item.contribution for item, _node in variable_nodes.values())
+        variable_count = len(variable_nodes)
+        for candidate in _tep_root_cause_candidates(active_graph):
+            support_paths = _candidate_support_paths(
+                candidate,
+                active_graph,
+                variable_nodes,
+                max_depth=self.config.max_depth,
+            )
+            if not support_paths:
+                continue
+            ranked.append(
+                _native_root_cause_from_support(
+                    candidate,
+                    evidence=evidence,
+                    support_paths=support_paths,
+                    evidence_total=evidence_total,
+                    variable_count=variable_count,
+                    rank=1,
+                    config=self.config,
+                    top_k_paths=top_k_paths or [],
+                )
+            )
+
+        ranked.sort(key=lambda item: (-item.score, item.candidate_id))
+        return [
+            item.model_copy(update={"rank": index})
+            for index, item in enumerate(ranked[:top_k], start=1)
+        ]
+
+
+def extract_tep_variable_evidence(evidence: Evidence) -> list[TepVariableEvidence]:
+    """Extract normalized TEP variable contribution evidence from an Evidence item."""
+    weights: dict[str, float | None] = {}
+    raw_names: dict[str, set[str]] = {}
+
+    def add_variable(name: Any, contribution: Any = None) -> None:
+        text = str(name).strip() if name not in (None, "") else ""
+        if not text:
+            return
+        key = _tep_variable_key(text)
+        raw_names.setdefault(key, set()).add(text)
+        value = _optional_float(contribution)
+        if value is not None:
+            weights[key] = max(0.0, value)
+        else:
+            weights.setdefault(key, None)
+
+    def add_contribution_map(value: Any) -> None:
+        value = _decoded_value(value)
+        if not isinstance(value, dict):
+            return
+        for variable, contribution in value.items():
+            add_variable(variable, contribution)
+
+    for variable in evidence.raw_evidence.variables:
+        add_variable(variable, evidence.raw_evidence.variable_contributions.get(variable))
+    add_contribution_map(evidence.raw_evidence.variable_contributions)
+
+    raw_extra = evidence.raw_evidence.extra or {}
+    for key in TEP_VARIABLE_KEYS:
+        for variable in _list_from_field(raw_extra.get(key)):
+            add_variable(variable)
+    for key in TEP_CONTRIBUTION_KEYS:
+        add_contribution_map(raw_extra.get(key))
+
+    normalized = evidence.normalized_evidence or {}
+    for key in TEP_VARIABLE_KEYS:
+        for variable in _list_from_field(normalized.get(key)):
+            add_variable(variable)
+    for key in TEP_CONTRIBUTION_KEYS:
+        add_contribution_map(normalized.get(key))
+
+    for observation in evidence.observations:
+        if observation.facet != "variable":
+            continue
+        add_variable(observation.name, observation.value)
+        add_contribution_map(observation.metadata.get("variable_contributions"))
+
+    if not weights:
+        return []
+    positive_values = [value for value in weights.values() if value is not None and value > 0.0]
+    max_value = max(positive_values, default=1.0)
+    normalized_max = max(max_value, 1.0)
+    results = []
+    for key in sorted(weights):
+        value = weights[key]
+        contribution = 1.0 if value is None else min(1.0, value / normalized_max)
+        results.append(
+            TepVariableEvidence(
+                variable=key,
+                contribution=round(contribution, 6),
+                raw_names=tuple(sorted(raw_names.get(key, {key}))),
+            )
+        )
+    return results
+
+
 class TepRcaArtifactProvider:
     """Read small TEP RCA artifacts and emit unified root-cause rankings."""
 
@@ -62,10 +239,12 @@ class TepRcaArtifactProvider:
         self,
         evidence: Evidence,
         *,
+        graph: KnowledgeGraph | None = None,
         top_k: int = 5,
         top_k_paths: list[dict[str, Any]] | None = None,
     ) -> list[RankedRootCause]:
         """Return artifact-backed RCA rankings for TEP evidence."""
+        del graph
         del top_k_paths
         if evidence.dataset != "tep" or not self._ranking_rows:
             return []
@@ -130,6 +309,303 @@ def run_tep_rca_bridge(
             ),
         },
     )
+
+
+def _tep_root_cause_candidates(graph: KnowledgeGraph) -> list[KGNode]:
+    candidates = [
+        node
+        for node in graph.nodes.values()
+        if node.scenario in {"tep", "shared"}
+        and (node.label in ROOT_CAUSE_LABELS or node.id.endswith("Cause"))
+    ]
+    return sorted(candidates, key=lambda node: node.id)
+
+
+def _resolve_variable_nodes(
+    variable_evidence: list[TepVariableEvidence],
+    graph: KnowledgeGraph,
+) -> dict[str, tuple[TepVariableEvidence, KGNode]]:
+    variable_nodes: dict[str, tuple[TepVariableEvidence, KGNode]] = {}
+    for item in variable_evidence:
+        node = _best_variable_node(item, graph)
+        if node is not None:
+            variable_nodes[item.variable] = (item, node)
+    return variable_nodes
+
+
+def _best_variable_node(item: TepVariableEvidence, graph: KnowledgeGraph) -> KGNode | None:
+    raw_terms = {item.variable, *item.raw_names}
+    normalized_terms = {_tep_variable_key(term) for term in raw_terms}
+    best_node: KGNode | None = None
+    best_score = 0.0
+    for node in graph.nodes.values():
+        if node.scenario not in {"tep", "shared"}:
+            continue
+        if node.label in ROOT_CAUSE_LABELS:
+            continue
+        node_terms = {node.id, node.name, *node.aliases}
+        exact = bool(normalized_terms & {_tep_variable_key(term) for term in node_terms})
+        if exact:
+            score = 1.0
+        else:
+            candidates = [
+                candidate
+                for raw_name in raw_terms
+                for candidate in graph.candidates(raw_name, scenario="tep", top_k=3, min_score=0.84)
+                if candidate.entity_id == node.id
+            ]
+            score = max((candidate.score for candidate in candidates), default=0.0)
+        if score > best_score:
+            best_node = node
+            best_score = score
+    return best_node if best_score >= 0.84 else None
+
+
+def _candidate_support_paths(
+    candidate: KGNode,
+    graph: KnowledgeGraph,
+    variable_nodes: dict[str, tuple[TepVariableEvidence, KGNode]],
+    *,
+    max_depth: int,
+) -> list[_TepSupportPath]:
+    paths: list[_TepSupportPath] = []
+    for item, variable_node in variable_nodes.values():
+        path = _shortest_support_path(graph, candidate.id, variable_node.id, max_depth)
+        if path is not None:
+            path_nodes, path_edges = path
+            paths.append(
+                _TepSupportPath(
+                    variable=item,
+                    variable_node=variable_node,
+                    path_nodes=tuple(path_nodes),
+                    path_edges=tuple(path_edges),
+                )
+            )
+    return paths
+
+
+def _shortest_support_path(
+    graph: KnowledgeGraph,
+    source_id: str,
+    target_id: str,
+    max_depth: int,
+) -> tuple[list[str], list[KGEdge]] | None:
+    queue: list[tuple[str, list[str], list[KGEdge]]] = [(source_id, [source_id], [])]
+    while queue:
+        node_id, path_nodes, path_edges = queue.pop(0)
+        if len(path_edges) >= max_depth:
+            continue
+        next_edges = sorted(
+            _tep_support_edges(graph, node_id),
+            key=lambda edge: (-edge.confidence, edge.edge_id),
+        )
+        for edge in next_edges:
+            next_node = edge.tail if edge.head == node_id else edge.head
+            if next_node in path_nodes:
+                continue
+            next_path_nodes = [*path_nodes, next_node]
+            next_path_edges = [*path_edges, edge]
+            if next_node == target_id:
+                return next_path_nodes, next_path_edges
+            queue.append((next_node, next_path_nodes, next_path_edges))
+    return None
+
+
+def _tep_support_edges(graph: KnowledgeGraph, node_id: str) -> list[KGEdge]:
+    edges: list[KGEdge] = []
+    for edge in (*graph.outgoing(node_id), *graph.incoming(node_id)):
+        if edge.scenario not in {"tep", "shared"}:
+            continue
+        other_node_id = edge.tail if edge.head == node_id else edge.head
+        other_node = graph.nodes.get(other_node_id)
+        if other_node is None or other_node.scenario not in {"tep", "shared"}:
+            continue
+        edges.append(edge)
+    return edges
+
+
+def _native_root_cause_from_support(
+    candidate: KGNode,
+    *,
+    evidence: Evidence,
+    support_paths: list[_TepSupportPath],
+    evidence_total: float,
+    variable_count: int,
+    rank: int,
+    config: TepNativeRcaConfig,
+    top_k_paths: list[dict[str, Any]],
+) -> RankedRootCause:
+    total_contribution = sum(path.variable.contribution for path in support_paths)
+    evidence_match = total_contribution / max(evidence_total, 1e-9)
+    graph_confidence = _weighted_graph_confidence(support_paths)
+    propagation_support = len({path.variable.variable for path in support_paths}) / max(
+        1,
+        variable_count,
+    )
+    length_penalty = _weighted_path_length(support_paths) / config.max_depth
+    score = (
+        config.alpha * evidence_match
+        + config.beta * graph_confidence
+        + config.delta * propagation_support
+        - config.gamma * length_penalty
+    )
+    explanation_paths = [
+        _native_explanation_path(evidence.case_id, candidate, path)
+        for path in support_paths
+    ]
+    source_edges = _dedupe_edges(
+        edge for path in support_paths for edge in path.path_edges
+    )
+    top_k_path_ids = [
+        str(path.get("path_id"))
+        for path in top_k_paths
+        if candidate.id
+        in {
+            str(path.get("target_entity_id") or ""),
+            *(str(node_id) for node_id in path.get("nodes") or []),
+        }
+        and path.get("path_id")
+    ]
+    return RankedRootCause(
+        ranking_id=_stable_ranking_id(evidence.case_id, candidate.id),
+        rank=rank,
+        candidate_id=candidate.id,
+        candidate_name=candidate.name,
+        candidate_label=candidate.label,
+        candidate_role="native_kg_candidate",
+        score=round(max(0.0, score), 4),
+        confidence=round(max(0.0, min(1.0, graph_confidence)), 4),
+        evidence_match=round(max(0.0, min(1.0, evidence_match)), 4),
+        explanation_paths=explanation_paths,
+        supporting_edges=[edge.model_dump() for edge in source_edges],
+        supporting_evidence=[
+            {
+                "evidence_id": (
+                    f"{evidence.case_id}_{candidate.id}_{path.variable.variable}_contribution"
+                ),
+                "source": "tep_evidence",
+                "variable": path.variable.raw_names[0],
+                "variable_node_id": path.variable_node.id,
+                "contribution": path.variable.contribution,
+            }
+            for path in support_paths
+        ],
+        scoring_method="tep_native_kg",
+        scoring_details={
+            "formula": "alpha*evidence_match + beta*graph_confidence + "
+            "delta*propagation_support - gamma*path_length",
+            "weights": config.model_dump(mode="json", exclude={"source_name"}),
+            "graph_confidence": round(graph_confidence, 4),
+            "propagation_support": round(propagation_support, 4),
+            "path_length": round(length_penalty, 4),
+            "supported_variables": [
+                {
+                    "variable": path.variable.raw_names[0],
+                    "variable_key": path.variable.variable,
+                    "variable_node_id": path.variable_node.id,
+                    "contribution": path.variable.contribution,
+                    "path_id": explanation_paths[index]["path_id"],
+                }
+                for index, path in enumerate(support_paths)
+            ],
+            "top_k_path_ids": top_k_path_ids,
+        },
+        source=config.source_name,
+        review_status="auto",
+    )
+
+
+def _weighted_graph_confidence(support_paths: list[_TepSupportPath]) -> float:
+    total_weight = sum(path.variable.contribution for path in support_paths)
+    if total_weight <= 0.0:
+        return 0.0
+    return sum(
+        path.variable.contribution
+        * (sum(edge.confidence for edge in path.path_edges) / max(1, len(path.path_edges)))
+        for path in support_paths
+    ) / total_weight
+
+
+def _weighted_path_length(support_paths: list[_TepSupportPath]) -> float:
+    total_weight = sum(path.variable.contribution for path in support_paths)
+    if total_weight <= 0.0:
+        return 0.0
+    return sum(
+        path.variable.contribution * len(path.path_edges)
+        for path in support_paths
+    ) / total_weight
+
+
+def _native_explanation_path(
+    case_id: str,
+    candidate: KGNode,
+    support_path: _TepSupportPath,
+) -> dict[str, Any]:
+    relations = [
+        edge.relation if edge.head == head else f"REVERSE_{edge.relation}"
+        for head, edge in zip(support_path.path_nodes, support_path.path_edges, strict=False)
+    ]
+    return {
+        "path_id": _native_path_id(
+            case_id,
+            candidate.id,
+            support_path.variable_node.id,
+            support_path.path_nodes,
+            relations,
+        ),
+        "source_entity_id": candidate.id,
+        "target_entity_id": support_path.variable_node.id,
+        "nodes": list(support_path.path_nodes),
+        "node_names": _native_path_node_names(candidate, support_path),
+        "relations": relations,
+        "length": len(support_path.path_edges),
+        "confidence": round(
+            sum(edge.confidence for edge in support_path.path_edges)
+            / max(1, len(support_path.path_edges)),
+            4,
+        ),
+        "evidence_match": support_path.variable.contribution,
+        "supporting_evidence": [edge.evidence for edge in support_path.path_edges],
+        "source_edge_ids": [edge.edge_id for edge in support_path.path_edges],
+        "source_edges": [edge.model_dump() for edge in support_path.path_edges],
+    }
+
+
+def _native_path_node_names(candidate: KGNode, support_path: _TepSupportPath) -> list[str]:
+    names: list[str] = []
+    for node_id in support_path.path_nodes:
+        if node_id == candidate.id:
+            names.append(candidate.name)
+        elif node_id == support_path.variable_node.id:
+            names.append(support_path.variable_node.name)
+        else:
+            names.append(node_id)
+    return names
+
+
+def _dedupe_edges(edges: Any) -> list[KGEdge]:
+    by_id: dict[str, KGEdge] = {}
+    for edge in edges:
+        by_id.setdefault(edge.edge_id, edge)
+    return [by_id[edge_id] for edge_id in sorted(by_id)]
+
+
+def _native_path_id(
+    case_id: str,
+    candidate_id: str,
+    variable_node_id: str,
+    nodes: tuple[str, ...],
+    relations: list[str],
+) -> str:
+    signature = "|".join((candidate_id, variable_node_id, *nodes, *relations))
+    digest = hashlib.sha1(signature.encode("utf-8")).hexdigest()[:10]
+    return f"tep_path_{case_id}_{digest}"
+
+
+def _tep_variable_key(value: str) -> str:
+    token = normalize_text(value)
+    token = re.sub(r"^variable", "", token)
+    return token
 
 
 def _resolve_ranking_path(config: TepRcaArtifactConfig) -> Path | None:

@@ -7,6 +7,7 @@ logic in their own entry points.
 from __future__ import annotations
 
 from copy import deepcopy
+from inspect import Parameter, signature
 from typing import Any, Protocol
 
 from kgtracevis.core.result import AnalysisResult, RankedRootCause, ranked_root_causes_from_paths
@@ -34,6 +35,7 @@ class RootCauseProvider(Protocol):
         self,
         evidence: Evidence,
         *,
+        graph: KnowledgeGraph | None = None,
         top_k: int = 5,
         top_k_paths: list[dict[str, Any]] | None = None,
     ) -> list[RankedRootCause]:
@@ -74,6 +76,7 @@ class KGTracePipeline:
         top_k_paths = rank_root_cause_paths(evidence, graph, linked_entities, top_k=top_k)
         ranked_root_causes = self._rank_root_causes(
             evidence,
+            graph=graph,
             top_k=top_k,
             top_k_paths=top_k_paths,
         )
@@ -111,15 +114,37 @@ class KGTracePipeline:
         self,
         evidence: Evidence,
         *,
+        graph: KnowledgeGraph,
         top_k: int,
         top_k_paths: list[dict[str, Any]],
     ) -> list[RankedRootCause]:
         if self.root_cause_provider is not None:
-            provided = self.root_cause_provider.rank_root_causes(
-                evidence,
-                top_k=top_k,
-                top_k_paths=top_k_paths,
-            )
+            ranker = self.root_cause_provider.rank_root_causes
+            if _provider_accepts_graph(ranker):
+                provided = ranker(
+                    evidence,
+                    graph=graph,
+                    top_k=top_k,
+                    top_k_paths=top_k_paths,
+                )
+            else:
+                provided = ranker(
+                    evidence,
+                    top_k=top_k,
+                    top_k_paths=top_k_paths,
+                )
             if provided:
                 return provided
         return ranked_root_causes_from_paths(evidence.case_id, top_k_paths)
+
+
+def _provider_accepts_graph(ranker: Any) -> bool:
+    """Return whether a root-cause provider method accepts runtime graph context."""
+    try:
+        parameters = signature(ranker).parameters
+    except (TypeError, ValueError):
+        return True
+    return "graph" in parameters or any(
+        parameter.kind is Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
