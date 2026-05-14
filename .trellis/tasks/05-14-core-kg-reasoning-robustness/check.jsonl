@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "KG graph, scenario scoping, and path-ranking data contracts"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Transparent degradation and ambiguity reporting"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Workflow/provider boundary changes for RCA behavior"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required focused verification and regression test expectations"}
