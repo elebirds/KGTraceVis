@@ -405,3 +405,36 @@ Added backend-only construction source upload/list APIs, safe runtime source art
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: KG construction build registry API
+
+**Date**: 2026-05-14
+**Task**: KG construction build registry API
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added backend build registry/list/detail/validation APIs for source-to-KG construction outputs, including manifest scanning, build summaries, structured KG QA validation, service tests, and documentation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2306590` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
