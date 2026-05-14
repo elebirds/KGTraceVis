@@ -10,8 +10,10 @@ dependencies = [
     "neo4j>=5.0",
     "numpy>=1.24",
     "pandas>=2.0",
+    "pillow>=10.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
+    "psycopg[binary]>=3.2",
     "python-dotenv>=1.0",
     "python-multipart>=0.0.9",
     "pyyaml>=6.0",
@@ -25,7 +27,6 @@ dependencies = [
 vision = [
     "matplotlib>=3.7",
     "opencv-python>=4.8",
-    "pillow>=10.0",
     "scikit-image>=0.22",
 ]
 llm = [
@@ -58,6 +59,7 @@ ml = [
 [project.scripts]
 kgtrace-build-kg = "kgtracevis.cli:build_kg"
 kgtrace-import-kg = "kgtracevis.cli:import_kg"
+kgtrace-init-postgres = "scripts.init_postgres:main"
 kgtrace-run-web-api = "scripts.run_web_api:main"
 
 [build-system]

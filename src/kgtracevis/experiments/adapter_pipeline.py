@@ -183,9 +183,9 @@ def _run_summary(
         },
         "pipeline": {
             "name": "KGTracePipeline",
-            "kg_backend": "csv_default_paths_with_overlay"
+            "kg_backend": "explicit_seed_overlay"
             if kg_node_paths or kg_edge_paths
-            else "csv_default_paths",
+            else "neo4j_runtime",
             "top_k": top_k,
             "kg_node_paths": [str(path) for path in kg_node_paths or []],
             "kg_edge_paths": [str(path) for path in kg_edge_paths or []],
@@ -239,7 +239,7 @@ def _case_summary(
         "candidate_plausible_explanation_targets": _candidate_targets(
             top_k_paths,
             source_edges=source_edges,
-            pipeline=pipeline,
+            graph=pipeline.graph_for_evidence(evidence),
         ),
         "source_edge_provenance": source_edges,
         "claim_boundary": (
@@ -306,7 +306,7 @@ def _candidate_targets(
     top_k_paths: list[Mapping[str, Any]],
     *,
     source_edges: list[dict[str, Any]],
-    pipeline: KGTracePipeline,
+    graph: KnowledgeGraph,
 ) -> list[dict[str, Any]]:
     targets: dict[str, dict[str, Any]] = {}
     edges_by_id = {edge["edge_id"]: edge for edge in source_edges}
@@ -314,7 +314,7 @@ def _candidate_targets(
         target_id = str(path["target_entity_id"])
         target = targets.setdefault(
             target_id,
-            _target_seed(target_id, pipeline=pipeline),
+            _target_seed(target_id, graph=graph),
         )
         target["supporting_path_ids"].append(path["path_id"])
         target["best_score"] = max(float(target["best_score"]), float(path["score"]))
@@ -329,8 +329,8 @@ def _candidate_targets(
     )
 
 
-def _target_seed(target_id: str, *, pipeline: KGTracePipeline) -> dict[str, Any]:
-    node = pipeline.graph.nodes.get(target_id)
+def _target_seed(target_id: str, *, graph: KnowledgeGraph) -> dict[str, Any]:
+    node = graph.nodes.get(target_id)
     return {
         "target_entity_id": target_id,
         "target_name": node.name if node else target_id,

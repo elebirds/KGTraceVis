@@ -89,7 +89,7 @@ def build_output_payload(
             "output_dir": str(output_dir),
             "top_k": top_k,
             "pipeline": "KGTracePipeline",
-            "kg_backend": "csv_default_paths",
+            "kg_backend": "neo4j_runtime",
         },
         "note": (
             "Generated path rankings are v0 reproducibility outputs over checked-in examples; "

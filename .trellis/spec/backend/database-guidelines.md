@@ -1,16 +1,17 @@
 # Database Guidelines
 
-KGTraceVis currently uses CSV-backed source-constrained KG files as the primary
-development backend. Neo4j is supported as a future/import backend, but the v0
-pipeline should remain runnable without a database service.
+KGTraceVis is moving to database-backed runtime infrastructure. Neo4j is the
+runtime KG backend, Postgres is the runtime application-state backend, and
+CSV/JSON files are retained as reproducible seed/import/export artifacts.
 
 ## Current Backends
 
 | Backend | Purpose | Example |
 |---|---|---|
-| CSV files | tracked curated KG source of truth | `data/kg/nodes.csv`, `data/kg/edges.csv` |
-| In-memory NetworkX graph | default analysis backend for tests/scripts/app | `KnowledgeGraph.from_default_paths()` |
-| Neo4j | optional graph database import/query target | `scripts/import_kg.py` |
+| Neo4j | runtime KG storage and graph traversal | `Neo4jKGRepository` |
+| Postgres | runtime app state, run history, feedback, drafts | `src/kgtracevis/service/postgres_schema.sql` |
+| CSV files | tracked KG seed/import/export artifacts | `data/kg/nodes.csv`, `data/kg/edges.csv` |
+| JSON/JSONL | evidence fixtures and reproducible paper artifacts | `data/examples/`, `runs/`, `outputs/` |
 
 ## CSV Node Contract
 
@@ -45,20 +46,29 @@ Rules:
 - Every edge must preserve source and evidence text.
 - Do not overwrite reviewed triples automatically.
 
-## Loading Pattern
+## Runtime Loading Pattern
 
-Use `KnowledgeGraph.from_default_paths()` for the default development pipeline.
-It loads the base KG plus development reference layers such as
-`data/kg/mvtec_rca_reference.csv`.
+Use `Neo4jKGRepository` for runtime KG queries. Every dataset-specific runtime
+query must include the selected dataset plus `shared`.
+
+```text
+mvtec evidence -> shared + mvtec
+wafer evidence -> shared + wafer
+tep evidence   -> shared + tep
+```
+
+Use `KnowledgeGraph.from_default_paths()` only for seed/import validation,
+focused unit tests, and backward-compatible scripts that have not yet been
+migrated to the runtime repository.
 
 Use `KnowledgeGraph.from_csv()` only when a test intentionally wants a single
 node/edge CSV pair without reference layers.
 
-Example:
+Legacy/import example:
 
 ```python
 graph = KnowledgeGraph.from_default_paths()
-result = KGTracePipeline(graph=graph).analyze(evidence)
+summary = dry_run_import(graph)
 ```
 
 ## Merge Rules
@@ -120,15 +130,91 @@ rule source unless the private source explicitly mentions `Loc`.
 Tests for private-source KG extensions should assert both the positive edge and
 the absence of leakage onto nearby/shared classes.
 
-## Neo4j Rules
+## Scenario: Neo4j + Postgres Runtime Foundation
 
-Neo4j code should remain optional for v0:
+### 1. Scope / Trigger
 
-- Do not make tests or scripts require a running Neo4j instance unless the script
-  explicitly uses `--with-neo4j`.
-- Keep CSV as the reproducible source of truth.
-- Import scripts may read configs from `configs/neo4j.example.yaml` or
-  environment variables.
+Use this when adding database runtime code, Docker deployment wiring, runtime KG
+queries, app-state persistence, or schema migrations.
+
+### 2. Signatures
+
+- Neo4j import: `uv run python scripts/import_kg.py [--config ...] [--dry-run]`
+- Postgres init: `uv run python scripts/init_postgres.py [--dsn ...] [--dry-run]`
+- Runtime KG repository: `Neo4jKGRepository.candidates(...)`,
+  `has_edge(...)`, `outgoing(...)`, and `edge_between(...)`
+- Postgres schema source: `src/kgtracevis/service/postgres_schema.sql`
+
+### 3. Contracts
+
+- Neo4j environment keys: `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`,
+  `NEO4J_DATABASE`
+- KG runtime selection: analysis defaults to a dataset-scoped Neo4j snapshot.
+  CSV graph loading is allowed only for seed/import validation and focused tests.
+- Postgres environment keys: `KGTRACE_POSTGRES_DSN`, or
+  `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`,
+  `POSTGRES_PASSWORD`
+- Neo4j KG truth: node IDs, edge IDs, scenario, relation type, source, evidence,
+  confidence, review status, feedback counters
+- Postgres app truth: evidence cases, analysis runs, linked entities,
+  consistency checks, correction candidates, ranked paths, feedback, drafts,
+  review actions, artifacts, KG version metadata
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|---|---|
+| Missing Postgres DSN for real init | raise `PostgresInitError` with config guidance |
+| Missing Postgres schema file | raise `ValueError` naming the path |
+| Missing Neo4j config for real import | raise `Neo4jImportError` with config guidance |
+| Invalid dynamic relation type | raise `ValueError` |
+| Runtime KG query has dataset | restrict to `[shared, dataset]` |
+| Runtime KG query has no dataset | allow all known scenarios only for browse/admin views |
+
+### 5. Good/Base/Bad Cases
+
+- Good: `dataset=mvtec` query returns only `shared` and `mvtec` KG entities.
+- Base: `scripts/import_kg.py --dry-run` validates tracked CSV seed rows without
+  connecting to Neo4j.
+- Bad: a wafer analysis path traverses MVTec-specific plausible mechanism edges.
+
+### 6. Tests Required
+
+- Config resolution precedence for Neo4j and Postgres.
+- Postgres schema contains core runtime tables and can be dry-run loaded.
+- Neo4j importer creates constraints/indexes before importing nodes and edges.
+- Neo4j runtime repository passes `[shared, dataset]` scenario scopes.
+- Dynamic Neo4j relation strings reject non-contract relation names.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+records = session.run("MATCH (n:KGEntity) RETURN n", {})
+```
+
+#### Correct
+
+```python
+records = session.run(
+    "MATCH (n:KGEntity) WHERE n.scenario IN $scenarios RETURN n",
+    {"scenarios": ["shared", dataset]},
+)
+```
+
+#### Wrong
+
+```python
+# Postgres stores a second full copy of all KG edges.
+```
+
+#### Correct
+
+```python
+# Postgres stores run/path/feedback rows with stable Neo4j node_id, edge_id,
+# scenario, and kg_version references.
+```
 
 ## Common Mistakes
 

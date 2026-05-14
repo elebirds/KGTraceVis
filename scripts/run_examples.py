@@ -19,11 +19,6 @@ def main() -> None:
     """Validate all example JSON files in a directory."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--example-dir", default="data/examples")
-    parser.add_argument(
-        "--with-neo4j",
-        action="store_true",
-        help="Reserved for future Neo4j checks.",
-    )
     args = parser.parse_args()
 
     example_dir = Path(args.example_dir)
@@ -45,7 +40,7 @@ def main() -> None:
     if not results:
         raise SystemExit(f"no example JSON files found in {example_dir}")
 
-    print(json.dumps({"validated": len(results), "with_neo4j": args.with_neo4j}, indent=2))
+    print(json.dumps({"validated": len(results), "kg_backend": "neo4j"}, indent=2))
 
 
 if __name__ == "__main__":

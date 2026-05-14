@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from kgtracevis.core import KGTracePipeline
+from kgtracevis.kg.graph import KnowledgeGraph
 from kgtracevis.schema.validators import load_evidence_json
 
 EDGE_CONTRACT_KEYS = {
@@ -23,7 +24,7 @@ EDGE_CONTRACT_KEYS = {
 
 def test_pipeline_analyzes_all_examples() -> None:
     """The v0 pipeline should produce links, scores, and paths for examples."""
-    pipeline = KGTracePipeline()
+    pipeline = KGTracePipeline(graph=KnowledgeGraph.from_default_paths())
 
     for path in sorted(Path("data/examples").glob("*.json")):
         result = pipeline.analyze(load_evidence_json(path))
@@ -35,7 +36,7 @@ def test_pipeline_analyzes_all_examples() -> None:
 
 def test_pipeline_uses_mvtec_reference_layer() -> None:
     """The default pipeline should use curated MVTec RCA reference edges."""
-    pipeline = KGTracePipeline()
+    pipeline = KGTracePipeline(graph=KnowledgeGraph.from_default_paths())
     result = pipeline.analyze(load_evidence_json("data/examples/ds_mvtec_example.json"))
     root_targets = {path["target_entity_id"] for path in result.top_k_paths}
 
@@ -56,7 +57,7 @@ def test_pipeline_result_serializes_feedback_compatible_contract() -> None:
         update={"human_feedback": feedback}
     )
 
-    result = KGTracePipeline().analyze(evidence)
+    result = KGTracePipeline(graph=KnowledgeGraph.from_default_paths()).analyze(evidence)
     payload = result.model_dump(mode="json")
 
     assert payload["case_id"] == "mvtec_0001"
@@ -77,7 +78,7 @@ def test_pipeline_correction_candidate_contract_for_known_inconsistency() -> Non
     """Correction candidates should expose stable IDs and supporting KG edges."""
     evidence = load_evidence_json("data/examples/mvtec_noisy_morphology_demo.json")
 
-    result = KGTracePipeline().analyze(evidence)
+    result = KGTracePipeline(graph=KnowledgeGraph.from_default_paths()).analyze(evidence)
 
     assert result.inconsistent_fields == ["anomaly_type", "morphology"]
     assert result.correction_candidates
@@ -98,7 +99,9 @@ def test_pipeline_correction_candidate_contract_for_known_inconsistency() -> Non
 
 def test_pipeline_path_contract_for_known_example() -> None:
     """Ranked paths should expose stable path IDs and reviewable source edges."""
-    result = KGTracePipeline().analyze(load_evidence_json("data/examples/ds_mvtec_example.json"))
+    result = KGTracePipeline(graph=KnowledgeGraph.from_default_paths()).analyze(
+        load_evidence_json("data/examples/ds_mvtec_example.json")
+    )
 
     path = result.top_k_paths[0]
     assert path["path_id"] == "path_mvtec_0001_742df5e1c9"
@@ -119,9 +122,33 @@ def test_pipeline_does_not_mutate_input_evidence() -> None:
     evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
     before = evidence.model_dump(mode="json")
 
-    KGTracePipeline().analyze(evidence)
+    KGTracePipeline(graph=KnowledgeGraph.from_default_paths()).analyze(evidence)
 
     assert evidence.model_dump(mode="json") == before
+
+
+def test_pipeline_uses_neo4j_snapshot_repository_by_default() -> None:
+    """Default runtime analysis should come from a dataset-scoped Neo4j snapshot."""
+    repository = FakeSnapshotRepository(KnowledgeGraph.from_default_paths())
+    evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
+
+    result = KGTracePipeline(neo4j_repository=repository).analyze(evidence)
+
+    assert repository.scenarios == ["mvtec"]
+    assert result.top_k_paths
+
+
+class FakeSnapshotRepository:
+    """Tiny fake repository for pipeline backend selection tests."""
+
+    def __init__(self, graph: KnowledgeGraph | None) -> None:
+        assert graph is not None
+        self.graph = graph
+        self.scenarios: list[str | None] = []
+
+    def to_knowledge_graph(self, *, scenario: str | None = None) -> KnowledgeGraph:
+        self.scenarios.append(scenario)
+        return self.graph
 
 
 def _link_for_field(links: list[dict[str, Any]], field: str) -> dict[str, Any]:

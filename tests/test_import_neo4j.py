@@ -14,6 +14,7 @@ from kgtracevis.kg.import_neo4j import (
     Neo4jConfig,
     Neo4jImportError,
     dry_run_import,
+    ensure_neo4j_schema,
     import_knowledge_graph,
     import_knowledge_graph_with_config,
     resolve_neo4j_config,
@@ -128,9 +129,10 @@ def test_import_knowledge_graph_runs_node_and_edge_cypher() -> None:
     assert summary.edge_count == 1
     assert summary.dry_run is False
     assert driver.session_options == {"database": "kgtrace"}
-    assert len(driver.session_instance.runs) == 3
+    assert len(driver.session_instance.runs) == 5
+    assert "CREATE CONSTRAINT kg_entity_id_unique" in driver.session_instance.runs[0][0]
 
-    node_query, node_params = driver.session_instance.runs[0]
+    node_query, node_params = driver.session_instance.runs[2]
     assert "MERGE (node:KGEntity {id: $id})" in node_query
     assert node_params["id"] == "ScratchDefect"
     assert node_params["aliases"] == ["scratch"]
@@ -145,6 +147,18 @@ def test_import_knowledge_graph_runs_node_and_edge_cypher() -> None:
     assert edge_params["feedback_count"] == 0
     assert edge_params["accepted_count"] == 0
     assert edge_params["rejected_count"] == 0
+
+
+def test_ensure_neo4j_schema_runs_constraints_and_indexes() -> None:
+    """Schema setup should create the constraints and indexes used by runtime queries."""
+    session = FakeSession()
+
+    count = ensure_neo4j_schema(session)
+
+    assert count == 2
+    queries = "\n".join(query for query, _params in session.runs)
+    assert "CREATE CONSTRAINT kg_entity_id_unique" in queries
+    assert "CREATE INDEX kg_entity_scenario" in queries
 
 
 def test_import_rejects_invalid_relation_type() -> None:

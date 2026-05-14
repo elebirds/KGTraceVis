@@ -173,7 +173,44 @@ Create a local `.env` from `.env.example`:
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=password
+NEO4J_DATABASE=neo4j
+KGTRACE_POSTGRES_DSN=postgresql://kgtracevis:kgtracevis@localhost:5432/kgtracevis
 ```
+
+## Database Runtime
+
+The runtime database direction is:
+
+```text
+Neo4j     runtime KG storage and graph traversal
+Postgres  evidence cases, analysis runs, feedback, drafts, review state
+CSV/JSON   seed/import/export artifacts for reproducibility, not runtime state
+```
+
+Start the local services:
+
+```bash
+docker compose up -d neo4j postgres
+```
+
+Initialize Postgres and import the KG seed files into Neo4j:
+
+```bash
+uv run python scripts/init_postgres.py
+uv run python scripts/import_kg.py
+```
+
+For a containerized backend plus databases:
+
+```bash
+docker compose up --build
+```
+
+The Docker Compose stack initializes the Postgres schema, imports the KG seed
+rows into Neo4j, then starts the API. It exposes Neo4j Browser at
+`http://localhost:7474`, Neo4j Bolt at `bolt://localhost:7687`, Postgres at
+`localhost:5432`, and the FastAPI backend at `http://localhost:8000`.
+Analysis loads a dataset-scoped KG snapshot from Neo4j at runtime.
 
 ## Common Commands
 
@@ -193,6 +230,12 @@ Import KG into Neo4j:
 
 ```bash
 uv run python scripts/import_kg.py
+```
+
+Initialize the Postgres application-state schema:
+
+```bash
+uv run python scripts/init_postgres.py
 ```
 
 Run noise experiment:

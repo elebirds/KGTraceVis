@@ -1,4 +1,4 @@
-"""Optional Neo4j import helpers for validated KG rows."""
+"""Neo4j import helpers for validated KG seed rows."""
 
 from __future__ import annotations
 
@@ -29,6 +29,16 @@ SET node.name = $name,
     node.aliases = $aliases,
     node.description = $description
 """
+SCHEMA_QUERIES = (
+    """
+    CREATE CONSTRAINT kg_entity_id_unique IF NOT EXISTS
+    FOR (node:KGEntity) REQUIRE node.id IS UNIQUE
+    """,
+    """
+    CREATE INDEX kg_entity_scenario IF NOT EXISTS
+    FOR (node:KGEntity) ON (node.scenario)
+    """,
+)
 RELATION_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
@@ -111,9 +121,19 @@ def import_knowledge_graph(
 ) -> ImportSummary:
     """Import validated in-memory KG rows with one Neo4j session."""
     with driver.session(database=database) as session:
+        ensure_neo4j_schema(session)
         import_nodes(session, graph.nodes.values())
         import_edges(session, graph.edges)
     return ImportSummary(node_count=len(graph.nodes), edge_count=len(graph.edges), dry_run=False)
+
+
+def ensure_neo4j_schema(session: Neo4jSession) -> int:
+    """Create Neo4j constraints and indexes needed by the runtime KG backend."""
+    count = 0
+    for query in SCHEMA_QUERIES:
+        session.run(query, {})
+        count += 1
+    return count
 
 
 def import_nodes(session: Neo4jSession, nodes: Iterable[KGNode]) -> int:

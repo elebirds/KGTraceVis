@@ -1,4 +1,4 @@
-"""Import KG CSV files into optional Neo4j backend."""
+"""Import KG seed CSV files into the Neo4j runtime backend."""
 
 from __future__ import annotations
 

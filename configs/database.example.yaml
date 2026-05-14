@@ -1,0 +1,2 @@
+postgres:
+  dsn: postgresql://kgtracevis:kgtracevis@localhost:5432/kgtracevis

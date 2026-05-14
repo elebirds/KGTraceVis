@@ -360,7 +360,7 @@ def _compact_summary(summary: dict[str, Any]) -> dict[str, Any]:
         return nested
     keys = (
         "validated",
-        "with_neo4j",
+        "kg_backend",
         "nodes",
         "edges",
         "node_count",
