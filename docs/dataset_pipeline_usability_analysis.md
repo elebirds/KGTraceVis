@@ -478,6 +478,76 @@ path_hit_rate = 1.0000
 | 02 | `faultanchor:stream_4_b_composition` | `faultanchor:stream_4_b_composition` | 1 | yes |
 | 06 | `faultanchor:stream_1_a_feed_loss` | `faultanchor:stream_1_a_feed_loss` | 1 | yes |
 
+### TEP full fault-set evaluation
+
+进一步检查 `data/raw/tep/TEP_Faulty_Training.csv` 后，当前本地 raw CSV 覆盖
+fault 1-20，每个 fault 有 500 个 simulation runs；本地文件中没有 fault 21。
+因此这里的 full fault-set 指当前 raw CSV 可评估的 20 个 fault。
+
+单 run smoke：
+
+```bash
+uv run python scripts/evaluate_tep_rca.py \
+  --output-dir runs/tep_root_kgd_full_fault_set_20260514_220404 \
+  --raw-data-dir data/raw/tep \
+  --faults 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21 \
+  --max-runs-per-fault 1 \
+  --top-k 5 \
+  --overwrite
+```
+
+```text
+case_count = 20
+top1_root_cause_accuracy = 0.8000
+top3_root_cause_accuracy = 0.9000
+top5_root_cause_accuracy = 0.9000
+MRR = 0.8417
+path_hit_rate = 0.9000
+```
+
+三 run smoke：
+
+```bash
+uv run python scripts/evaluate_tep_rca.py \
+  --output-dir runs/tep_root_kgd_fault_set_3runs_20260514_220500 \
+  --raw-data-dir data/raw/tep \
+  --faults 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20 \
+  --max-runs-per-fault 3 \
+  --top-k 5 \
+  --overwrite
+```
+
+```text
+case_count = 60
+top1_root_cause_accuracy = 0.8667
+top3_root_cause_accuracy = 0.9167
+top5_root_cause_accuracy = 0.9167
+MRR = 0.8889
+path_hit_rate = 0.9167
+```
+
+三 run 按 fault 聚合：
+
+| Fault | Cases | Top-1 hits | Top-5 hits | Observation |
+| --- | ---: | ---: | ---: | --- |
+| 1-9 | 27 | 27 | 27 | 全命中 |
+| 10 | 3 | 2 | 3 | run 1 top-1 偏向 `faultanchor:stream_2_feed_temperature`，expected rank 3 |
+| 11-14 | 12 | 12 | 12 | 全命中 |
+| 15 | 3 | 1 | 3 | miss 时 top-1 偏向 `faultanchor:stream_2_feed_temperature`，expected rank 2 |
+| 16-17 | 6 | 6 | 6 | 全命中 |
+| 18 | 3 | 1 | 1 | miss 时 top-1 偏向 `faultanchor:stream_2_feed_temperature`，需要继续诊断 condenser family 竞争 |
+| 19 | 3 | 3 | 3 | 全命中 |
+| 20 | 3 | 0 | 0 | 当前 Root-KGD asset 中没有 fault 20 对应 anchor，evaluation fallback expected 为 `Fault20` |
+
+因此，当前 TEP 结果应分层表述：
+
+1. **三 case sanity**：fault 01/02/06 已 top-1 全命中，验证 producer ->
+   Evidence -> Root-KGD runtime 链路成立。
+2. **20 fault / 60 case smoke**：整体 top1=0.8667、top5=0.9167，说明迁移后的
+   Root-KGD runtime 已具备可用 RCA 能力。
+3. **剩余问题**：fault 10/15/18 是相邻 thermal/feed-temperature anchor 竞争；
+   fault 20 是 KG asset/reference coverage 问题，不能简单算作模型排序错误。
+
 当前 KGTraceVis TEP producer/evaluation 默认参数已对齐到上述 TEP_KG 风格：
 `window_size=100`、`row_stride=25`、`n_components=18`、
 `fault_free_max_rows=None`。当前 native evaluation 会通过
