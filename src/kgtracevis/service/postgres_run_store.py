@@ -202,6 +202,10 @@ class PostgresRunStore:
                         step.model_dump(mode="json") for step in detail.workflow_steps
                     ],
                     "source_dataset_label": detail.run.dataset,
+                    "ranked_root_causes_by_case": {
+                        str(entry["case_id"]): entry.get("ranked_root_causes", [])
+                        for entry in entries
+                    },
                 }
                 connection.execute(
                     """

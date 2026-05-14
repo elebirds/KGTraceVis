@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-14-tep-native-rca-provider/research/native-provider-slice.md", "reason": "native TEP RCA provider scope and scoring design"}
+{"file": ".trellis/tasks/archive/2026-05/05-14-tep-rca-integration-research/research/current-state.md", "reason": "prior survey of KGTraceVis, TEP_KG, and RootLens RCA flows"}
+{"file": ".trellis/tasks/archive/2026-05/05-14-tep-rca-integration-research/research/unified-pipeline-design.md", "reason": "unified RCA pipeline decision and route2 deprecation rationale"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "workflow/use-case layer boundaries and script/service separation"}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "adapter evidence contract and no-root-cause adapter rule"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "unified RCA payload, feedback, and KG/runtime persistence contracts"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "testing, lint, and typecheck expectations"}

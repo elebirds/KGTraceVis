@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from kgtracevis.service.postgres import PostgresConfig
+from kgtracevis.service.postgres_run_payloads import detail_payload
 from kgtracevis.service.postgres_run_store import PostgresRunStore
 
 
@@ -182,6 +183,16 @@ def test_postgres_run_store_persists_run_detail_to_normalized_tables() -> None:
                         ],
                     }
                 ],
+                "ranked_root_causes": [
+                    {
+                        "ranking_id": "rca_mvtec_unit_mechanicalcontact",
+                        "rank": 1,
+                        "candidate_id": "MechanicalContact",
+                        "candidate_name": "Mechanical contact",
+                        "score": 0.9,
+                        "scoring_method": "relation_weighted_path",
+                    }
+                ],
             },
             "artifacts": {"input_path": "runs/input/case.json"},
         }
@@ -205,6 +216,10 @@ def test_postgres_run_store_persists_run_detail_to_normalized_tables() -> None:
     assert str(analysis_params[0]) == "33333333-3333-3333-3333-333333333333"
     assert analysis_params[2] == "mvtec"
     assert analysis_params[7] == 1
+    parameters = _json_obj(analysis_params[16])
+    assert parameters["ranked_root_causes_by_case"]["mvtec_unit"][0]["candidate_id"] == (
+        "MechanicalContact"
+    )
 
 
 def test_postgres_run_store_records_feedback_with_contract_mapping() -> None:
@@ -238,6 +253,107 @@ def test_postgres_run_store_records_feedback_with_contract_mapping() -> None:
     assert feedback_params[5] == "uncertain"
     assert feedback_params[7] == "source should be checked"
     assert connection.committed is True
+
+
+def test_postgres_detail_payload_preserves_stored_ranked_root_causes() -> None:
+    """Loaded Postgres run details should not replace stored RCA rankings with paths."""
+    root_cause = {
+        "ranking_id": "rca_tep_0001_reactorcoolingfault",
+        "rank": 1,
+        "candidate_id": "ReactorCoolingFault",
+        "candidate_name": "Reactor cooling fault",
+        "score": 0.88,
+        "scoring_method": "tep_artifact_bridge",
+    }
+
+    payload = detail_payload(
+        run_row={
+            "run_id": "33333333-3333-3333-3333-333333333333",
+            "started_at": datetime(2026, 5, 14, tzinfo=timezone.utc),
+            "mode": "evidence",
+            "source_filename": "tep.json",
+            "top_k": 1,
+            "run_dir": "runs/unit",
+            "status": "completed",
+            "dataset": "tep",
+            "case_count": 1,
+            "evidence_count": 1,
+            "label": "TEP · tep_0001",
+            "model_preset": None,
+            "model_backend": None,
+            "claim_boundary": "candidate/plausible explanation only",
+            "parameters": {
+                "ranked_root_causes_by_case": {"tep_0001": [root_cause]},
+                "workflow_steps": [],
+            },
+            "summary": {},
+        },
+        case_rows=[
+            {
+                "case_pk": "11111111-1111-1111-1111-111111111111",
+                "case_id": "tep_0001",
+                "dataset": "tep",
+                "evidence_payload": {
+                    "case_id": "tep_0001",
+                    "dataset": "tep",
+                    "raw_evidence": {},
+                    "normalized_evidence": {},
+                    "human_feedback": {},
+                },
+                "generated_evidence_path": None,
+            }
+        ],
+        linked_rows=[],
+        consistency_rows=[],
+        correction_rows=[],
+        path_rows=[
+            {
+                "case_pk": "11111111-1111-1111-1111-111111111111",
+                "path_id": "path_1",
+                "rank": 1,
+                "source_entity_id": "XMEAS_1",
+                "target_entity_id": "FallbackPathCause",
+                "node_ids": ["XMEAS_1", "FallbackPathCause"],
+                "relation_ids": ["RELATED_TO"],
+                "score": 0.5,
+                "confidence": 0.5,
+                "evidence_match": 0.5,
+                "supporting_evidence": [],
+                "payload": {},
+            }
+        ],
+        artifact_rows=[],
+    )
+
+    assert payload["ranked_root_causes"] == [root_cause]
+    assert payload["analysis"]["ranked_root_causes"] == [root_cause]
+    assert payload["cases"][0]["ranked_root_causes"] == [root_cause]
+
+
+def test_postgres_run_store_records_root_cause_feedback() -> None:
+    """Unified root-cause candidates should be valid Postgres feedback targets."""
+    connection = FakeConnection()
+    store = PostgresRunStore(
+        PostgresConfig(dsn="postgresql://unit-test"),
+        connection_factory=lambda: connection,
+    )
+
+    store.record_feedback(
+        {
+            "run_id": "33333333-3333-3333-3333-333333333333",
+            "target_type": "root_cause_candidate",
+            "target_id": "rca_tep_0001_reactorcoolingfault",
+            "action": "accept",
+        }
+    )
+
+    feedback_params = next(
+        params
+        for sql, params in connection.cursor_obj.executions
+        if "INSERT INTO feedback_records" in sql
+    )
+    assert feedback_params[3] == "root_cause_candidate"
+    assert feedback_params[4] == "rca_tep_0001_reactorcoolingfault"
 
 
 def test_postgres_run_store_records_feedback_against_matching_run_case() -> None:

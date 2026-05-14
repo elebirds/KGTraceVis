@@ -1,5 +1,8 @@
 import type {
   DashboardBootstrap,
+  KGConstructionBuildResponse,
+  KGConstructionSourceFormat,
+  KGConstructionSourceType,
   KGDraftAction,
   KGSourceDraftResponse,
   KGStudioPayload,
@@ -16,6 +19,19 @@ export interface UploadFormState {
   defectType: string;
   modelPreset: string;
   topK: number;
+}
+
+export interface KGConstructionBuildFormState {
+  outputName: string;
+  overwrite: boolean;
+  sourceType: KGConstructionSourceType;
+  sourceId: string;
+  scenario: string;
+  sourceFormat: KGConstructionSourceFormat;
+  sourcePath: string;
+  sourceText: string;
+  semanticNodesPath: string;
+  semanticEdgesPath: string;
 }
 
 export interface AppState {
@@ -43,6 +59,9 @@ export interface AppState {
   sourceDraftScenario: string;
   sourceDraftConfidence: string;
   sourceDraftResult: KGSourceDraftResponse | null;
+  kgConstructionBuild: KGConstructionBuildFormState;
+  kgConstructionResult: KGConstructionBuildResponse | null;
+  kgConstructionStatus: string | null;
 }
 
 export type AppAction =
@@ -82,6 +101,8 @@ export type AppAction =
       >;
     }
   | { type: "sourceDraftGenerated"; result: KGSourceDraftResponse }
+  | { type: "kgConstructionChanged"; patch: Partial<KGConstructionBuildFormState> }
+  | { type: "kgConstructionBuilt"; result: KGConstructionBuildResponse }
   | { type: "loading"; value: boolean }
   | { type: "error"; error: string | null };
 
@@ -118,7 +139,22 @@ export const initialState: AppState = {
   sourceDraftSourceId: "dashboard_source",
   sourceDraftScenario: "mvtec",
   sourceDraftConfidence: "0.55",
-  sourceDraftResult: null
+  sourceDraftResult: null,
+  kgConstructionBuild: {
+    outputName: "runtime",
+    overwrite: false,
+    sourceType: "manual_table",
+    sourceId: "kg_studio_manual_source",
+    scenario: "shared",
+    sourceFormat: "csv",
+    sourcePath: "",
+    sourceText:
+      "id,name,label,head,relation,tail,scenario,evidence,confidence\nScratchDefect,Scratch defect,Defect,,,,mvtec,Manual source row defines the defect entity.,0.55\nMechanicalContact,Mechanical contact,ProcessMechanism,,,,mvtec,Manual source row defines the candidate mechanism.,0.55\n,,,ScratchDefect,SUGGESTS_PLAUSIBLE_MECHANISM,MechanicalContact,mvtec,Manual source row supports a candidate mechanism.,0.55",
+    semanticNodesPath: "/Users/hhm/code/TEP_KG/data/processed/kg/nodes.csv",
+    semanticEdgesPath: "/Users/hhm/code/TEP_KG/data/processed/kg/edges.csv"
+  },
+  kgConstructionResult: null,
+  kgConstructionStatus: null
 };
 
 export function reducer(state: AppState, action: AppAction): AppState {
@@ -196,6 +232,19 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, ...action.patch };
     case "sourceDraftGenerated":
       return { ...state, sourceDraftResult: action.result, error: null };
+    case "kgConstructionChanged":
+      return {
+        ...state,
+        kgConstructionBuild: { ...state.kgConstructionBuild, ...action.patch },
+        kgConstructionStatus: null
+      };
+    case "kgConstructionBuilt":
+      return {
+        ...state,
+        kgConstructionResult: action.result,
+        kgConstructionStatus: `${action.result.status}: ${action.result.output_dir}`,
+        error: null
+      };
     case "loading":
       return { ...state, loading: action.value };
     case "error":

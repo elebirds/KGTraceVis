@@ -92,6 +92,106 @@ couple runtime persistence to upload orchestration and makes future service
 splits brittle. If the store needs API payload shapes, import from
 `run_models.py`, `run_enrichment.py`, or `postgres_run_payloads.py`.
 
+Unified RCA results are persisted through stable run payloads as
+`ranked_root_causes` and exposed as feedback targets with
+`target_type=root_cause_candidate`. When reconstructing Postgres run details,
+stored `ranked_root_causes` must be preferred over any fallback projection from
+`top_k_paths`.
+
+## Scenario: Unified RCA Runtime Payloads
+
+### 1. Scope / Trigger
+
+- Trigger: changing RCA output, run-detail payloads, dashboard fields,
+  feedback targets, or Postgres run persistence.
+- Reason: RCA candidates cross the core pipeline, evidence runtime schema,
+  service DTOs, Postgres replay, dashboard summaries, and human feedback.
+
+### 2. Signatures
+
+Core pipeline:
+
+```python
+class RootCauseProvider(Protocol):
+    def rank_root_causes(
+        self,
+        evidence: Evidence,
+        *,
+        top_k: int = 5,
+        top_k_paths: list[dict[str, Any]] | None = None,
+    ) -> list[RankedRootCause]:
+        ...
+```
+
+Runtime payload fields:
+
+```text
+AnalysisResult.ranked_root_causes: list[RankedRootCause]
+RunDetail.ranked_root_causes: list[dict]
+Evidence.kg_analysis.ranked_root_causes: list[dict]
+feedback_records.target_type: root_cause_candidate
+```
+
+### 3. Contracts
+
+- `ranked_root_causes` is the canonical RCA ranking output.
+- `top_k_paths` remains a compatibility and explanation-path field.
+- If a provider returns candidates, preserve those candidates as-is in the
+  service/Postgres payload instead of re-deriving from paths.
+- If no provider returns candidates, derive a fallback root-cause list from
+  `top_k_paths` with `scoring_method=relation_weighted_path`.
+- Root-cause candidates must carry stable `ranking_id`, `candidate_id`, `rank`,
+  `score`, `scoring_method`, and enough supporting path/evidence data for
+  review.
+- Review targets for these candidates use
+  `target_type=root_cause_candidate` and `target_id=<ranking_id>`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Expected behavior |
+| --- | --- |
+| Provider returns RCA candidates | Preserve provider rankings and metadata |
+| Provider returns `[]` | Fall back to projection from `top_k_paths` |
+| Postgres replay has stored `ranked_root_causes` | Use stored candidates, not path projection |
+| Postgres replay lacks stored candidates | Reconstruct fallback candidates from paths |
+| Evidence is revalidated with runtime `kg_analysis` | Keep `ranked_root_causes` |
+| Feedback target is a root-cause candidate | Store as `root_cause_candidate` |
+| Artifact ranking row is unscoped to a TEP scenario | Ignore unless explicitly configured as global |
+
+### 5. Good/Base/Bad Cases
+
+- Good: TEP artifact provider returns `tep_artifact_bridge` candidates with
+  selector metadata; Postgres replay returns the same candidates.
+- Base: MVTec path ranking produces paths only; pipeline projects them into
+  `ranked_root_causes` with path-derived supporting edges.
+- Bad: service code rebuilds RCA candidates from paths after a provider already
+  produced Root-KGD/RBC-derived candidates.
+
+### 6. Tests Required
+
+- Pipeline serialization asserts both `top_k_paths` and `ranked_root_causes`.
+- Evidence schema tests assert `KGAnalysis` preserves `ranked_root_causes`.
+- Postgres payload tests assert stored RCA candidates win over path fallback.
+- Feedback tests assert `root_cause_candidate` is accepted.
+- TEP provider tests assert selector-scoped matching and no unscoped leakage.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```python
+payload["ranked_root_causes"] = ranked_root_causes_from_paths(case_id, paths)
+```
+
+Correct:
+
+```python
+payload["ranked_root_causes"] = (
+    stored_ranked_root_causes
+    or ranked_root_causes_from_paths(case_id, paths)
+)
+```
+
 Backward-compatible re-exports from `service.runs` are allowed for public API
 tests and existing service callers, but new code should import the focused
 module directly.
@@ -154,6 +254,90 @@ rule source unless the private source explicitly mentions `Loc`.
 
 Tests for private-source KG extensions should assert both the positive edge and
 the absence of leakage onto nearby/shared classes.
+
+## Scenario: Candidate KG Overlay Validation
+
+### 1. Scope / Trigger
+
+Use this when a source-to-KG construction run produces candidate `nodes.csv` and
+`edges.csv` artifacts that should be tested with the reasoning pipeline or
+prepared for Neo4j publication.
+
+### 2. Signatures
+
+- Build candidate CSVs: `uv run python scripts/build_source_kg.py ...`
+- Run examples with candidate overlay:
+  `uv run python scripts/run_examples.py --kg-node-path <nodes.csv> --kg-edge-path <edges.csv>`
+- Validate import overlay:
+  `uv run python scripts/import_kg.py --include-defaults --nodes <nodes.csv> --edges <edges.csv> --dry-run`
+- Construction manifest:
+  `kg_construction_manifest.json` with `artifact_type=source_to_kg_construction_manifest_v1`
+
+### 3. Contracts
+
+- Candidate CSVs must obey the existing KG node and edge contracts.
+- Source-to-KG builds write `nodes.csv`, `edges.csv`,
+  `kg_construction_summary.json`, and `kg_construction_manifest.json`.
+- The construction manifest must include run metadata, source payloads,
+  flattened draft rows, summary counts, artifact paths, and append-only review
+  decisions when available.
+- Candidate layers are appended after `DEFAULT_NODE_PATHS` and
+  `DEFAULT_EDGE_PATHS` when `--include-defaults` or example overlay flags are
+  used.
+- `run_examples.py` reports `kg_backend=explicit_seed_overlay` when explicit KG
+  CSV paths are supplied.
+- TEP semantic-lift `full_kg_entity_ids` are entity-resolution cluster members,
+  not KGTraceVis node aliases. Do not import them into `aliases` unless the
+  alias-review and endpoint-rewrite logic explicitly supports that behavior.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|---|---|
+| Candidate edge head/tail missing from constructed nodes | construction runner raises `ValueError` before CSV export |
+| Candidate overlay conflicts with a reviewed default edge | graph merge raises unless overwrite is explicitly allowed |
+| Custom import paths without `--include-defaults` | import only those custom paths |
+| Custom import paths with `--include-defaults` | append custom paths to default KG layers |
+| KG Studio sees `nodes.csv` / `edges.csv` with a manifest | expose manifest path and payload in the Studio bootstrap response |
+| KG Studio review action is submitted | persist an append-only review decision; do not mutate KG CSV files |
+| TEP cluster member imported as alias and collapses an `ALIGNS_TO` node | treat as a construction bug; keep cluster members in metadata/evidence instead |
+
+### 5. Good/Base/Bad Cases
+
+- Good: build a TEP candidate layer, run examples with the overlay, then dry-run
+  import with `--include-defaults`.
+- Base: `scripts/import_kg.py --dry-run` validates the tracked seed KG only.
+- Bad: publish candidate CSVs to Neo4j before confirming all edge endpoints
+  exist in the merged graph.
+
+### 6. Tests Required
+
+- Construction tests assert candidate edge endpoints exist after node cleaning.
+- TEP importer tests assert `full_kg_entity_ids` do not collapse explicit
+  `ALIGNS_TO` alias nodes.
+- CLI tests assert `import_kg.py --include-defaults` increases row counts over
+  overlay-only import.
+- CLI tests assert `run_examples.py --kg-node-path ... --kg-edge-path ...`
+  reports `explicit_seed_overlay`.
+- Manifest tests assert source-to-KG builds write
+  `kg_construction_manifest.json` with draft rows and artifact paths.
+- KG Studio tests assert both legacy candidate CSV names and source-to-KG build
+  artifact names are readable.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```text
+semantic_lift.full_kg_entity_ids -> KGNode.aliases
+```
+
+Correct:
+
+```text
+semantic_lift.node_id/entity_id/tep_channel -> KGNode.aliases
+semantic_lift.full_kg_entity_ids -> draft metadata or evidence only
+```
 
 ## Scenario: Neo4j + Postgres Runtime Foundation
 

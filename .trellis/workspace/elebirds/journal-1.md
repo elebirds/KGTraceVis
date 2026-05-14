@@ -205,3 +205,335 @@ Refactored Analysis Detail into a paper-demo evidence-to-reasoning workspace wit
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: TEP RCA unified integration
+
+**Date**: 2026-05-14
+**Task**: TEP RCA unified integration
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Unified TEP RCA output into KGTracePipeline via ranked_root_causes, added TEP artifact provider with scenario selector, persisted RCA candidates through service/Postgres payloads, and documented the runtime contract.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5de8f77` | (see git log) |
+| `3b9f1d7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 8: TEP native RCA provider
+
+**Date**: 2026-05-14
+**Task**: TEP native RCA provider
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Implemented a KGTraceVis-native TEP RCA provider that ranks root-cause candidates from TEP variable evidence and KG support paths through the unified RootCauseProvider contract, with tests and workflow spec updates.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `746482b` | (see git log) |
+| `2265871` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 9: Source-to-KG runtime workflow
+
+**Date**: 2026-05-14
+**Task**: Source-to-KG runtime workflow
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Verified and closed the reusable source-to-KG construction runtime workflow, including service route, KG Studio discovery, CLI compatibility, and restored the full project quality gate.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6e165df` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 10: Source-to-KG construction pipeline
+
+**Date**: 2026-05-14
+**Task**: Source-to-KG construction pipeline
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Implemented the reusable source-to-KG construction pipeline methodology: source registry, extraction/draft models, TEP importers, candidate KG overlay validation, manifests, Neo4j-compatible CSV outputs, CLI integration, docs, and tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `70fb684` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 11: KG Studio source-to-KG construction page
+
+**Date**: 2026-05-14
+**Task**: KG Studio source-to-KG construction page
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added the KG Studio Build tab, frontend construction API contracts/client, build form state, candidate KG build result display, KG Studio refresh after construction, documentation, and task PRD/verification notes.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a8a7b68` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 12: Backend KG construction source upload API
+
+**Date**: 2026-05-14
+**Task**: Backend KG construction source upload API
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added backend-only construction source upload/list APIs, safe runtime source artifact storage, build-ready source references, upload validation, tests, and KG construction docs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `34a41a7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 13: KG construction build registry API
+
+**Date**: 2026-05-14
+**Task**: KG construction build registry API
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added backend build registry/list/detail/validation APIs for source-to-KG construction outputs, including manifest scanning, build summaries, structured KG QA validation, service tests, and documentation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2306590` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 14: KG construction publish dry-run API
+
+**Date**: 2026-05-14
+**Task**: KG construction publish dry-run API
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added a backend publish endpoint for source-to-KG builds. The API defaults to dry-run over the default KG plus candidate overlay, supports candidate-only counts, and requires explicit confirmation before live Neo4j writes.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c148600` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 15: KG construction edge review API
+
+**Date**: 2026-05-14
+**Task**: KG construction edge review API
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added a backend review endpoint for source-to-KG construction edges. Accept and reject actions update candidate edge review_status and feedback counters, append manifest review decisions, and keep Neo4j publication as a separate explicit step.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c7987a9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 16: KG construction review queue API
+
+**Date**: 2026-05-14
+**Task**: KG construction review queue API
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added a read-only backend review queue endpoint for source-to-KG construction edges. The queue supports status/source/scenario/relation/text filters, offset-limit pagination, facet summaries, and stable target keys for later review UI integration.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `04b2932` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

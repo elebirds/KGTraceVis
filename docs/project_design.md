@@ -73,7 +73,38 @@ not emit root causes, ranked paths, or prefilled `kg_analysis`.
 
 `KGTracePipeline` is the reusable reasoning facade. It consumes validated
 Evidence and writes runtime analysis outputs: linked entities, consistency
-score, inconsistent fields, correction candidates, and top-k candidate paths.
+score, inconsistent fields, correction candidates, top-k explanation paths, and
+ranked root-cause candidates.
+
+## Unified RCA Reasoning Contract
+
+RCA is a scenario-aware reasoning stage inside `KGTracePipeline`, not an
+adapter responsibility. Adapters remain evidence-only and must not emit root
+causes, ranked paths, or prefilled `kg_analysis`.
+
+The RCA stage returns one unified result containing both:
+
+- `top_k_paths`: reviewable explanation/support paths.
+- `ranked_root_causes`: feedback-compatible root-cause candidates.
+
+Both fields must come from the same RCA strategy for a case. The generic graph
+strategy ranks KG paths and projects those paths into root-cause candidates for
+MVTec, wafer, and default behavior. Scenario-specific strategies may replace
+that generic path search when they have better native evidence, but they must
+still emit the same output fields.
+
+For TEP native RCA, the strategy is the Root-KGD provider. It is the only
+supported TEP RCA mode exposed by KGTracePipeline and loads the runtime graph
+and learned Root-KGD parameters from
+`data/kg/tep_root_kgd/`, then ranks candidates from the current Evidence's
+`channel_contributions`, Root-KGD `graph_contributions`, and current-window
+dynamic features. Public adapter, upload, and evaluation workflows do not expose
+provider mode switches. It must not read precomputed per-scenario ranking
+artifacts such as `baseline_root_scores.csv`, `topk_subgraphs`, or
+`rbc_contributions` for runtime scoring, and it does not use fault-number labels
+as scoring input. Its `top_k_paths` are the same support paths referenced by the
+selected `ranked_root_causes[*].explanation_paths`, so visual analytics,
+feedback targets, and persisted run details stay aligned.
 
 Scripts under `scripts/` should only orchestrate these modules. The FastAPI
 service under `src/kgtracevis/service/` should also call the same pipeline

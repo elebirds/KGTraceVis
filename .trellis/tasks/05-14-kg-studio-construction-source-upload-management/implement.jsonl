@@ -1,0 +1,4 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Validate source upload inputs and map expected errors to 4xx"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Service route should call backend helper/workflow rather than own business logic"}
+{"file": ".trellis/tasks/05-14-kg-studio-construction-source-upload-management/prd.md", "reason": "Backend-only source upload management scope"}

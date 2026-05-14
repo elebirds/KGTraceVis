@@ -19,6 +19,9 @@ def evidence_with_analysis(evidence: Evidence, analysis: AnalysisResult) -> dict
         "inconsistent_fields": analysis.inconsistent_fields,
         "correction_candidates": analysis.correction_candidates,
         "top_k_paths": analysis.top_k_paths,
+        "ranked_root_causes": [
+            item.model_dump(mode="json") for item in analysis.ranked_root_causes
+        ],
     }
     return payload
 
@@ -32,17 +35,22 @@ def dashboard_fields_from_analysis(
     source_edges = unique_source_edges(top_k_paths)
     correction_candidates = list(analysis.correction_candidates)
     linked_entities = list(analysis.linked_entities)
+    ranked_root_causes = [
+        item.model_dump(mode="json") for item in analysis.ranked_root_causes
+    ]
     return {
         "evidence_summary": compact_evidence_summary(evidence),
         "linked_entities": linked_entities,
         "correction_candidates": correction_candidates,
         "top_k_paths": top_k_paths,
+        "ranked_root_causes": ranked_root_causes,
         "path_graph": path_graph_from_paths(top_k_paths),
         "source_edge_provenance": source_edges,
         "review_targets": review_targets(
             linked_entities=linked_entities,
             correction_candidates=correction_candidates,
             top_k_paths=top_k_paths,
+            ranked_root_causes=ranked_root_causes,
             source_edges=source_edges,
         ),
     }
@@ -75,6 +83,7 @@ def enrich_run_detail(detail: RunDetail) -> RunDetail:
     for case in detail.cases:
         row = dict(case)
         top_k_paths = list_of_dicts(row.get("top_k_paths"))
+        ranked_root_causes = list_of_dicts(row.get("ranked_root_causes"))
         linked_entities = list_of_dicts(row.get("linked_entities"))
         correction_candidates = list_of_dicts(row.get("correction_candidates"))
         source_edges = list_of_dicts(row.get("source_edge_provenance"))
@@ -86,6 +95,7 @@ def enrich_run_detail(detail: RunDetail) -> RunDetail:
                 linked_entities=linked_entities,
                 correction_candidates=correction_candidates,
                 top_k_paths=top_k_paths,
+                ranked_root_causes=ranked_root_causes,
                 source_edges=source_edges,
             )
             changed = True
@@ -108,6 +118,7 @@ def enriched_case_rows(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for case in cases:
         row = dict(case)
         top_k_paths = list_of_dicts(row.get("top_k_paths"))
+        ranked_root_causes = list_of_dicts(row.get("ranked_root_causes"))
         linked_entities = list_of_dicts(row.get("linked_entities"))
         correction_candidates = list_of_dicts(row.get("correction_candidates"))
         source_edges = list_of_dicts(row.get("source_edge_provenance"))
@@ -116,6 +127,7 @@ def enriched_case_rows(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
             linked_entities=linked_entities,
             correction_candidates=correction_candidates,
             top_k_paths=top_k_paths,
+            ranked_root_causes=ranked_root_causes,
             source_edges=source_edges,
         )
         enriched.append(row)
@@ -127,6 +139,7 @@ def dashboard_fields_from_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
     linked_entities: list[dict[str, Any]] = []
     correction_candidates: list[dict[str, Any]] = []
     top_k_paths: list[dict[str, Any]] = []
+    ranked_root_causes: list[dict[str, Any]] = []
     source_edges_by_id: dict[str, dict[str, Any]] = {}
     evidence_summary: dict[str, Any] | None = None
 
@@ -136,6 +149,7 @@ def dashboard_fields_from_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
         linked_entities.extend(list_of_dicts(case.get("linked_entities")))
         correction_candidates.extend(list_of_dicts(case.get("correction_candidates")))
         top_k_paths.extend(list_of_dicts(case.get("top_k_paths")))
+        ranked_root_causes.extend(list_of_dicts(case.get("ranked_root_causes")))
         for edge in list_of_dicts(case.get("source_edge_provenance")):
             edge_id = str(edge.get("edge_id", ""))
             if edge_id:
@@ -147,12 +161,14 @@ def dashboard_fields_from_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
         "linked_entities": linked_entities,
         "correction_candidates": correction_candidates,
         "top_k_paths": top_k_paths,
+        "ranked_root_causes": ranked_root_causes,
         "path_graph": path_graph_from_paths(top_k_paths),
         "source_edge_provenance": source_edges,
         "review_targets": review_targets(
             linked_entities=linked_entities,
             correction_candidates=correction_candidates,
             top_k_paths=top_k_paths,
+            ranked_root_causes=ranked_root_causes,
             source_edges=source_edges,
         ),
     }
@@ -258,6 +274,7 @@ def review_targets(
     correction_candidates: list[dict[str, Any]],
     top_k_paths: list[dict[str, Any]],
     source_edges: list[dict[str, Any]],
+    ranked_root_causes: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build review target references for path, edge, link, and correction feedback."""
     targets: list[dict[str, Any]] = []
@@ -270,6 +287,21 @@ def review_targets(
                     "target_id": str(path_id),
                     "target_key": review_target_key("path", path_id),
                     "label": str(path.get("target_entity_id") or path_id),
+                }
+            )
+    for root_cause in ranked_root_causes or []:
+        ranking_id = root_cause.get("ranking_id") or root_cause.get("candidate_id")
+        if ranking_id:
+            targets.append(
+                {
+                    "target_type": "root_cause_candidate",
+                    "target_id": str(ranking_id),
+                    "target_key": review_target_key("root_cause_candidate", ranking_id),
+                    "label": str(
+                        root_cause.get("candidate_name")
+                        or root_cause.get("candidate_id")
+                        or ranking_id
+                    ),
                 }
             )
     for edge in source_edges:

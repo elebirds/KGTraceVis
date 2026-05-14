@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-14-tep-rca-integration-research/prd.md", "reason": "requirements and target unified RCA design"}
+{"file": ".trellis/tasks/05-14-tep-rca-integration-research/research/current-state.md", "reason": "current-state survey across KGTraceVis TEP_KG RootLens"}
+{"file": ".trellis/tasks/05-14-tep-rca-integration-research/research/unified-pipeline-design.md", "reason": "unified RCA engine design"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "backend module layout and reusable src boundary"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "workflow/use-case layer and script/service boundaries"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "KG graph and runtime schema conventions"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "testing and quality bar"}

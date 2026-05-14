@@ -30,7 +30,7 @@ starts one step earlier:
 
 ```text
 producer-output records -> Evidence adapters -> Evidence JSON -> KGTracePipeline
--> candidate/plausible explanation paths
+-> scenario-aware candidate/plausible RCA reasoning
 ```
 
 The optional real-data producer layer can now build normalized JSONL records
@@ -136,13 +136,14 @@ Large datasets are not committed.
 Place datasets as follows:
 
 - Defect Spectrum / DS-MVTec: `data/external/ds_mvtec/`
-- Tennessee Eastman Process: `data/external/tep/`
+- Tennessee Eastman Process raw CSV: `data/raw/tep/`
 - Wafer data: `data/external/wafer/`
 
 Use this convention:
 
 ```text
 data/external/     original datasets, not tracked
+data/raw/          large raw source datasets, not tracked
 data/interim/      intermediate processing outputs, not tracked
 data/processed/    generated reproducible outputs, not tracked
 data/kg/           small curated KG CSV files, tracked
@@ -224,6 +225,10 @@ Validate example evidence:
 ```bash
 uv run python scripts/run_examples.py
 ```
+
+TEP Root-KGD RCA is the single supported TEP RCA mode in `KGTracePipeline`.
+Generic adapter/upload workflows do not expose provider mode switches.
+`scripts/run_examples.py` remains a lightweight evidence/KG smoke.
 
 Build KG CSV files:
 
@@ -316,13 +321,25 @@ uv run python scripts/build_dataset_records.py --dataset wm811k \
   --model-source-repo radai-agent/radai-wm811k-defect-detection \
   --model-source-file best_radai_resnet.pt \
   --overwrite
+
+uv run python scripts/build_dataset_records.py --dataset tep \
+  --input-root data/raw/tep \
+  --output-jsonl data/processed/records/tep_rbc_subset.jsonl \
+  --faults 1,2,6 \
+  --tep-window-size 100 \
+  --tep-max-runs-per-fault 3 \
+  --max-cases 9 \
+  --overwrite
 ```
 
-Use `--model-backend fake` for checkpoint-free smoke runs. Anomalib is imported
-only for `anomalib-engine`, `anomalib-torch`, or `anomalib-openvino`; sklearn
-joblib/pickle checkpoints must be trusted local files. The public WM811K ResNet
-asset is a defect-pattern classifier over the labeled WM811K patterns only; it
-does not provide verified root-cause labels or a normal-wafer detector.
+Command-line producer backends are real local backends; deterministic fake
+predictors remain only in the test suite. Anomalib is imported only for
+`anomalib-engine`, `anomalib-torch`, or `anomalib-openvino`; sklearn joblib or
+pickle checkpoints must be trusted local files. The public WM811K ResNet asset
+is a defect-pattern classifier over the labeled WM811K patterns only; it does
+not provide verified root-cause labels or a normal-wafer detector.
+TEP defaults to the native `tep-rbc` residual-contribution backend and does not
+need a checkpoint.
 `--include-wm811k-data` downloads the public Hugging Face dataset table
 `lslattery/wafer-defect-detection` / `test.pkl` into
 `runs/real_model_pipeline/assets/wm811k/input_tables/`; override it with
@@ -470,7 +487,10 @@ MVTec demo case that triggers correction candidates. The example JSON files are
 observed evidence inputs only: adapters or manual demo annotations provide
 object/anomaly/location/morphology/variable/log-event fields, while
 `KGTracePipeline` computes entity linking, consistency, correction candidates,
-and candidate/plausible RCA path ranking at runtime. MVTec demo RCA source
+and candidate/plausible RCA reasoning at runtime. The RCA stage emits aligned
+`top_k_paths` and `ranked_root_causes`: generic graph reasoning derives root
+causes from ranked KG paths, while scenario-aware reasoners such as native TEP
+can provide both fields from native support-path logic. MVTec demo RCA source
 edges are curated plausible references, and displayed paths are runtime
 candidates, not real factory RCA labels.
 
@@ -623,6 +643,41 @@ uv run python scripts/run_adapter_pipeline.py \
   --output-dir outputs/adapter_pipeline_v0/wm811k \
   --overwrite
 ```
+
+For TEP records, `scripts/run_adapter_pipeline.py` uses the single Root-KGD RCA
+provider:
+
+```bash
+uv run python scripts/run_adapter_pipeline.py \
+  --input data/processed/records/tep_rbc_subset.jsonl \
+  --dataset tep \
+  --output-dir outputs/adapter_pipeline_v0/tep \
+  --overwrite
+```
+
+The TEP provider consumes the current Evidence variable contributions plus
+dynamic window features, then populates both `top_k_paths` and
+`ranked_root_causes`. Precomputed TEP_KG ranking artifacts are not part of this
+runtime path, and fault-number labels are evaluation references only, not
+scoring input.
+
+To run the paper-facing TEP RCA evaluation from raw TEP CSVs:
+
+```bash
+uv run python scripts/evaluate_tep_rca.py \
+  --output-dir runs/tep_raw_batch_eval_unified \
+  --raw-data-dir data/raw/tep \
+  --faults 1,2,6 \
+  --max-runs-per-fault 2 \
+  --top-k 5 \
+  --overwrite
+```
+
+This dedicated evaluation command explicitly defaults to the native TEP
+Root-KGD provider, rebuilds TEP producer records, runs the adapter and
+`KGTracePipeline`, then writes `tep_rca_evaluation_summary.json` and
+`tep_rca_evaluation_cases.csv`. Fault labels are used only for metric
+calculation, not for native RCA scoring.
 
 WM811K records keep `dataset="wafer"` and identify the adapter with
 `adapter="wm811k"` or `source_dataset="wm811k"`. Adapters emit observed evidence

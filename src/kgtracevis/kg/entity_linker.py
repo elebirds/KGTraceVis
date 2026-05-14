@@ -76,6 +76,9 @@ def link_evidence_entities(
             continue
         selected = candidates[0]
         second_score = candidates[1].score if len(candidates) > 1 else 0.0
+        ambiguity_margin = (
+            round(selected.score - second_score, 4) if second_score else None
+        )
         links.append(
             _link_payload(
                 mention_item,
@@ -83,7 +86,10 @@ def link_evidence_entities(
                 selected_entity_id=selected.entity_id,
                 score=round(selected.score, 4),
                 match_type=selected.match_type,
-                ambiguous=bool(second_score and selected.score - second_score < 0.08),
+                ambiguous=bool(
+                    ambiguity_margin is not None and ambiguity_margin < 0.08
+                ),
+                ambiguity_margin=ambiguity_margin,
                 candidates=[candidate.model_dump() for candidate in candidates],
             )
         )
@@ -129,6 +135,7 @@ def _link_payload(
     score: float = 0.0,
     match_type: str = "unmatched",
     ambiguous: bool = False,
+    ambiguity_margin: float | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "link_id": link_id,
@@ -138,6 +145,7 @@ def _link_payload(
         "score": score,
         "match_type": match_type,
         "ambiguous": ambiguous,
+        "ambiguity_margin": ambiguity_margin,
         "candidates": candidates,
     }
     if mention.obs_id is not None:

@@ -59,4 +59,6 @@ Each observation may also include `display_name`, `value`, `value_type`,
 When `adapter` is present, `adapter.produces_root_cause` must be `false` for
 dataset adapters. Adapters produce observed anomaly evidence only;
 `kg_analysis` is empty at ingestion time and is populated by `KGTracePipeline`
-at runtime.
+at runtime. Runtime `kg_analysis` may include `linked_entities`,
+`consistency_score`, `inconsistent_fields`, `correction_candidates`,
+`top_k_paths`, and the unified RCA candidate list `ranked_root_causes`.

@@ -19,6 +19,9 @@ import { useNavigate } from "react-router-dom";
 
 import { KG_STUDIO_TABS } from "../../app/routes";
 import type {
+  KGConstructionBuildResponse,
+  KGConstructionSourceFormat,
+  KGConstructionSourceType,
   KGDraftAction,
   KGSourceDraftResponse,
   KGStudioGraphEdge,
@@ -36,13 +39,26 @@ import {
 
 const { Title, Paragraph } = Typography;
 
-export type KGStudioView = "overview" | "sources" | "graph" | "review" | "drafts";
+export type KGStudioView = "overview" | "sources" | "build" | "graph" | "review" | "drafts";
 
 interface KGFilters {
   query: string;
   scenario: string;
   source: string;
   reviewStatus: string;
+}
+
+interface KGConstructionBuildForm {
+  outputName: string;
+  overwrite: boolean;
+  sourceType: KGConstructionSourceType;
+  sourceId: string;
+  scenario: string;
+  sourceFormat: KGConstructionSourceFormat;
+  sourcePath: string;
+  sourceText: string;
+  semanticNodesPath: string;
+  semanticEdgesPath: string;
 }
 
 const EMPTY_FILTERS: KGFilters = {
@@ -68,6 +84,9 @@ export function KGStudioPage({
   sourceDraftScenario,
   sourceDraftConfidence,
   sourceDraftResult,
+  constructionBuild,
+  constructionResult,
+  constructionStatus,
   onRefresh,
   onTargetSelected,
   onReviewNoteChanged,
@@ -75,7 +94,9 @@ export function KGStudioPage({
   onDraftChanged,
   onSubmitDraft,
   onSourceDraftChanged,
-  onGenerateSourceDraft
+  onGenerateSourceDraft,
+  onConstructionBuildChanged,
+  onBuildKGConstruction
 }: {
   view: KGStudioView;
   payload: KGStudioPayload | null;
@@ -92,6 +113,9 @@ export function KGStudioPage({
   sourceDraftScenario: string;
   sourceDraftConfidence: string;
   sourceDraftResult: KGSourceDraftResponse | null;
+  constructionBuild: KGConstructionBuildForm;
+  constructionResult: KGConstructionBuildResponse | null;
+  constructionStatus: string | null;
   onRefresh: () => void;
   onTargetSelected: (targetKey: string) => void;
   onReviewNoteChanged: (note: string) => void;
@@ -114,6 +138,8 @@ export function KGStudioPage({
     }>
   ) => void;
   onGenerateSourceDraft: () => void;
+  onConstructionBuildChanged: (patch: Partial<KGConstructionBuildForm>) => void;
+  onBuildKGConstruction: () => void;
 }) {
   const navigate = useNavigate();
   const [filters, setFilters] = useState<KGFilters>(EMPTY_FILTERS);
@@ -185,6 +211,17 @@ export function KGStudioPage({
               sourceDraftResult={sourceDraftResult}
               onSourceDraftChanged={onSourceDraftChanged}
               onGenerateSourceDraft={onGenerateSourceDraft}
+            />
+          )}
+          {view === "build" && (
+            <KGConstructionBuild
+              payload={payload}
+              form={constructionBuild}
+              result={constructionResult}
+              status={constructionStatus}
+              onChange={onConstructionBuildChanged}
+              onBuild={onBuildKGConstruction}
+              onOpenGraph={() => navigate("/kg-studio/graph")}
             />
           )}
           {view === "graph" && (
@@ -348,6 +385,254 @@ function KGSources({
       </Card>
     </section>
   );
+}
+
+function KGConstructionBuild({
+  payload,
+  form,
+  result,
+  status,
+  onChange,
+  onBuild,
+  onOpenGraph
+}: {
+  payload: KGStudioPayload;
+  form: KGConstructionBuildForm;
+  result: KGConstructionBuildResponse | null;
+  status: string | null;
+  onChange: (patch: Partial<KGConstructionBuildForm>) => void;
+  onBuild: () => void;
+  onOpenGraph: () => void;
+}) {
+  const usesRecordSource =
+    form.sourceType === "manual_table" || form.sourceType === "structured_records";
+  const usesSemanticLift = form.sourceType === "tep_semantic_lift";
+  const usesVariableMapping = form.sourceType === "tep_variable_mapping";
+  const canBuild = constructionBuildReady(form);
+  return (
+    <section className="two-column wide-left">
+      <Card title="Construction Run">
+        <div className="form-grid">
+          <label className="form-field">
+            <span>Output name</span>
+            <Input
+              value={form.outputName}
+              onChange={(value) => onChange({ outputName: value })}
+            />
+          </label>
+          <label className="form-field">
+            <span>Source type</span>
+            <Select
+              value={form.sourceType}
+              onChange={(value) =>
+                onChange({
+                  sourceType: value as KGConstructionSourceType,
+                  sourcePath: "",
+                  sourceText:
+                    value === "manual_table" || value === "structured_records"
+                      ? form.sourceText
+                      : ""
+                })
+              }
+              options={[
+                { label: "manual table", value: "manual_table" },
+                { label: "structured records", value: "structured_records" },
+                { label: "TEP semantic lift", value: "tep_semantic_lift" },
+                { label: "TEP variable mapping", value: "tep_variable_mapping" }
+              ]}
+            />
+          </label>
+          <label className="form-field">
+            <span>Scenario</span>
+            <Input value={form.scenario} onChange={(value) => onChange({ scenario: value })} />
+          </label>
+          <label className="form-field">
+            <span>Source ID</span>
+            <Input value={form.sourceId} onChange={(value) => onChange({ sourceId: value })} />
+          </label>
+          <label className="form-field">
+            <span>Source format</span>
+            <Select
+              value={form.sourceFormat}
+              disabled={usesSemanticLift || usesVariableMapping}
+              onChange={(value) => onChange({ sourceFormat: value as KGConstructionSourceFormat })}
+              options={[
+                { label: "csv", value: "csv" },
+                { label: "jsonl", value: "jsonl" },
+                { label: "json", value: "json" }
+              ]}
+            />
+          </label>
+          <label className="inline-switch build-overwrite">
+            <Switch
+              size="small"
+              checked={form.overwrite}
+              onChange={(value) => onChange({ overwrite: value })}
+            />
+            <span>overwrite existing output</span>
+          </label>
+        </div>
+
+        {usesRecordSource && (
+          <div className="form-grid single">
+            <label className="form-field">
+              <span>Source file path</span>
+              <Input
+                value={form.sourcePath}
+                onChange={(value) => onChange({ sourcePath: value })}
+                placeholder="optional local csv/json/jsonl path"
+              />
+            </label>
+            <label className="form-field">
+              <span>Inline source text</span>
+              <Input.TextArea
+                value={form.sourceText}
+                onChange={(value) => onChange({ sourceText: value })}
+                disabled={Boolean(form.sourcePath.trim())}
+                autoSize={{ minRows: 5, maxRows: 9 }}
+              />
+            </label>
+          </div>
+        )}
+
+        {usesSemanticLift && (
+          <div className="form-grid single">
+            <label className="form-field">
+              <span>Semantic lift directory</span>
+              <Input
+                value={form.sourcePath}
+                onChange={(value) => onChange({ sourcePath: value })}
+                placeholder="optional directory with TEP semantic KG artifacts"
+              />
+            </label>
+            <label className="form-field">
+              <span>Semantic nodes path</span>
+              <Input
+                value={form.semanticNodesPath}
+                onChange={(value) => onChange({ semanticNodesPath: value })}
+                disabled={Boolean(form.sourcePath.trim())}
+              />
+            </label>
+            <label className="form-field">
+              <span>Semantic edges path</span>
+              <Input
+                value={form.semanticEdgesPath}
+                onChange={(value) => onChange({ semanticEdgesPath: value })}
+                disabled={Boolean(form.sourcePath.trim())}
+              />
+            </label>
+          </div>
+        )}
+
+        {usesVariableMapping && (
+          <div className="form-grid single">
+            <label className="form-field">
+              <span>Variable mapping path</span>
+              <Input value={form.sourcePath} onChange={(value) => onChange({ sourcePath: value })} />
+            </label>
+          </div>
+        )}
+
+        <Space wrap>
+          <Button type="primary" disabled={!canBuild} onClick={onBuild}>
+            Build candidate KG
+          </Button>
+          <Button onClick={onOpenGraph}>Open graph</Button>
+        </Space>
+        {!canBuild && (
+          <Alert
+            type="warning"
+            title="Complete the required source fields before running construction."
+          />
+        )}
+        {status && <Alert type="success" title={status} />}
+      </Card>
+
+      <Card title="Build Output">
+        {!result ? (
+          <div className="compact-list">
+            <div>
+              <strong>current candidate layer</strong>
+              <span>{payload.candidate_dir ? shortId(payload.candidate_dir, 72) : "none discovered"}</span>
+            </div>
+            <div>
+              <strong>claim boundary</strong>
+              <span>{payload.claim_boundary}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="page-stack">
+            <section className="metric-grid build-metrics">
+              <MetricCard label="status" value={result.status} hint={shortId(result.run_id, 20)} />
+              <MetricCard
+                label="nodes"
+                value={summaryMetric(result.summary, "node_count")}
+                hint="candidate"
+              />
+              <MetricCard
+                label="edges"
+                value={summaryMetric(result.summary, "edge_count")}
+                hint="candidate"
+              />
+              <MetricCard
+                label="sources"
+                value={summaryMetric(result.summary, "source_count")}
+                hint="input"
+              />
+            </section>
+            <div className="compact-list">
+              {constructionArtifacts(result).map((item) => (
+                <div key={item.label}>
+                  <strong>{item.label}</strong>
+                  <span>{item.value}</span>
+                </div>
+              ))}
+            </div>
+            <JsonBlock value={result.summary} />
+            <Alert type="info" title={result.claim_boundary} />
+          </div>
+        )}
+      </Card>
+    </section>
+  );
+}
+
+function constructionBuildReady(form: KGConstructionBuildForm): boolean {
+  if (!form.outputName.trim() || !form.sourceId.trim() || !form.scenario.trim()) return false;
+  if (form.sourceType === "manual_table" || form.sourceType === "structured_records") {
+    return Boolean(form.sourcePath.trim() || form.sourceText.trim());
+  }
+  if (form.sourceType === "tep_semantic_lift") {
+    return Boolean(
+      form.sourcePath.trim() ||
+        (form.semanticNodesPath.trim() && form.semanticEdgesPath.trim())
+    );
+  }
+  return Boolean(form.sourcePath.trim());
+}
+
+function constructionArtifacts(result: KGConstructionBuildResponse) {
+  return [
+    { label: "output", value: result.output_dir },
+    { label: "nodes", value: result.nodes_path },
+    { label: "edges", value: result.edges_path },
+    { label: "summary", value: result.summary_path },
+    { label: "manifest", value: result.manifest_path }
+  ];
+}
+
+function summaryMetric(summary: Record<string, unknown>, key: string): string {
+  const direct = summary[key];
+  if (direct !== undefined) return valueText(direct);
+  const output = summary.output;
+  if (typeof output === "object" && output !== null && key in output) {
+    return valueText((output as Record<string, unknown>)[key]);
+  }
+  const counts = summary.counts;
+  if (typeof counts === "object" && counts !== null && key in counts) {
+    return valueText((counts as Record<string, unknown>)[key]);
+  }
+  return "unknown";
 }
 
 function KGGraphBrowser({

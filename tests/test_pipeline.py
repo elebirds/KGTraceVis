@@ -7,6 +7,7 @@ from typing import Any
 
 from kgtracevis.core import KGTracePipeline
 from kgtracevis.kg.graph import KnowledgeGraph
+from kgtracevis.schema.evidence_schema import KGAnalysis
 from kgtracevis.schema.validators import load_evidence_json
 
 EDGE_CONTRACT_KEYS = {
@@ -66,7 +67,15 @@ def test_pipeline_result_serializes_feedback_compatible_contract() -> None:
     assert payload["inconsistent_fields"] == []
     assert payload["correction_candidates"] == []
     assert payload["top_k_paths"]
+    assert payload["ranked_root_causes"]
     assert payload["human_feedback"] == feedback
+    kg_analysis = KGAnalysis.model_validate(
+        {
+            "top_k_paths": payload["top_k_paths"],
+            "ranked_root_causes": payload["ranked_root_causes"],
+        }
+    )
+    assert kg_analysis.ranked_root_causes[0]["candidate_id"] == "MechanicalContact"
 
     anomaly_link = _link_for_field(payload["linked_entities"], "anomaly_type")
     assert anomaly_link["link_id"] == "link_mvtec_0001_anomaly_type_scratch"
@@ -115,6 +124,12 @@ def test_pipeline_path_contract_for_known_example() -> None:
     ]
     assert path["source_edges"]
     _assert_edge_contract(path["source_edges"][0])
+
+    root_cause = result.ranked_root_causes[0]
+    assert root_cause.candidate_id == "MechanicalContact"
+    assert root_cause.scoring_method == "relation_weighted_path"
+    assert root_cause.explanation_paths[0]["path_id"] == "path_mvtec_0001_742df5e1c9"
+    assert root_cause.supporting_edges
 
 
 def test_pipeline_does_not_mutate_input_evidence() -> None:

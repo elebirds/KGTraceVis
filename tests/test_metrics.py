@@ -82,8 +82,8 @@ def test_correction_and_noise_recovery_metrics_cover_topk() -> None:
 def test_ranking_metrics_cover_hits_mrr_and_paths() -> None:
     """Ranking metrics should support target IDs and path dictionaries."""
     ranked = [
-        [{"target_entity_id": "Wrong"}, {"target_entity_id": "CauseA"}],
-        [{"target_entity_id": "CauseB"}],
+        [{"target_entity_id": "Wrong"}, {"candidate_id": "CauseA"}],
+        [{"root_cause_candidate_id": "CauseB"}],
     ]
     paths = [
         [{"path_id": "p2"}, {"path_id": "p1"}],

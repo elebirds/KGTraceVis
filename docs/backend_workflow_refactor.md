@@ -18,7 +18,7 @@ Evidence
 -> entity linking
 -> consistency checking
 -> correction generation
--> path ranking
+-> scenario-aware RCA reasoning
 -> AnalysisResult
 ```
 
@@ -171,6 +171,32 @@ Expected responsibilities of this backend workflow refactor:
 Do not couple `KGTracePipeline` directly to a construction pipeline. It should
 consume a `KnowledgeGraph`, Neo4j-backed snapshot repository, or future provider
 adapter with the same scenario-scoped semantics.
+
+## Unified RCA Reasoner Boundary
+
+`KGTracePipeline` owns the case-level RCA stage. It delegates that stage through
+a shared RCA reasoner contract that returns both `top_k_paths` and
+`ranked_root_causes` together. This keeps the explanation paths displayed in the
+app aligned with the root-cause candidates persisted for feedback.
+
+The default reasoner is graph-path based: it calls the existing relation-weighted
+path ranker, then projects those paths into `RankedRootCause` candidates when no
+scenario reasoner supplies richer rankings.
+
+Scenario-aware reasoners may override the default path search when a scenario
+has native RCA evidence. TEP native RCA is the first such case: the single TEP
+RCA provider is the Root-KGD runtime provider, which scores candidates from the
+current Evidence's TEP contributions and dynamic features using the checked-in
+Root-KGD graph/model assets under `data/kg/tep_root_kgd/`. Public adapter,
+upload, and evaluation workflows do not expose provider mode switches. Runtime
+scoring must not use fault-number labels as scoring input and must not read
+precomputed scenario ranking outputs such as `baseline_root_scores.csv`,
+`topk_subgraphs`, or `rbc_contributions`.
+
+Compatibility rule: `KGTracePipeline` accepts only the unified
+`reason_root_causes(...)` contract for scenario-aware RCA overrides. Older
+`rank_root_causes(...)`-only provider implementations are not wrapped by the
+main pipeline.
 
 ## Migration Phases
 

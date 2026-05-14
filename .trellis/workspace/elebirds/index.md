@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 16
 - **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~207 | Active |
+| `journal-1.md` | ~539 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,16 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 16 | 2026-05-14 | KG construction review queue API | `04b2932` | `codex/rebuild-web-arco-echarts` |
+| 15 | 2026-05-14 | KG construction edge review API | `c7987a9` | `codex/rebuild-web-arco-echarts` |
+| 14 | 2026-05-14 | KG construction publish dry-run API | `c148600` | `codex/rebuild-web-arco-echarts` |
+| 13 | 2026-05-14 | KG construction build registry API | `2306590` | `codex/rebuild-web-arco-echarts` |
+| 12 | 2026-05-14 | Backend KG construction source upload API | `34a41a7` | `codex/rebuild-web-arco-echarts` |
+| 11 | 2026-05-14 | KG Studio source-to-KG construction page | `a8a7b68` | `codex/rebuild-web-arco-echarts` |
+| 10 | 2026-05-14 | Source-to-KG construction pipeline | `70fb684` | `codex/rebuild-web-arco-echarts` |
+| 9 | 2026-05-14 | Source-to-KG runtime workflow | `6e165df` | `codex/rebuild-web-arco-echarts` |
+| 8 | 2026-05-14 | TEP native RCA provider | `746482b`, `2265871` | `codex/rebuild-web-arco-echarts` |
+| 7 | 2026-05-14 | TEP RCA unified integration | `5de8f77`, `3b9f1d7` | `codex/rebuild-web-arco-echarts` |
 | 6 | 2026-05-14 | Analysis detail evidence-to-reasoning workspace | `c937ad6` | `main` |
 | 5 | 2026-05-14 | KG Studio overview workflow actions | `51d85ee` | `main` |
 | 4 | 2026-05-14 | KG Studio sources workspace tabs | `b92a45f` | `main` |

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import csv
 import importlib.util
+import inspect
 import json
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import SimpleNamespace
@@ -54,8 +57,10 @@ from kgtracevis.producers.mvtec_calibration import (
     threshold_config_from_mapping,
 )
 from kgtracevis.producers.mvtec_records import build_mvtec_records, mask_stats_from_array
+from kgtracevis.producers.tep_records import TEP_RBC_BACKEND, build_tep_records
 from kgtracevis.producers.wm811k_records import build_wm811k_records
 from kgtracevis.workflows import dataset_records as dataset_record_workflow
+from kgtracevis.workflows.tep_rca import tep_scenario_selector
 
 BUILD_SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "build_dataset_records.py"
 
@@ -703,6 +708,142 @@ def test_wm811k_producer_emits_adapter_compatible_model_records(tmp_path: Path) 
     assert evidence[0].kg_analysis.top_k_paths == []
 
 
+def test_tep_raw_producer_emits_adapter_compatible_rbc_records(tmp_path: Path) -> None:
+    """TEP producer should turn raw CSV windows into adapter-ready variable evidence."""
+    raw_dir = _write_tiny_tep_csvs(tmp_path / "tep")
+
+    records = build_tep_records(
+        raw_dir,
+        row_stride=1,
+        window_size=4,
+        faults=(1,),
+        max_runs_per_fault=1,
+        max_cases=1,
+        top_variables=2,
+        n_components=1,
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record["dataset"] == "tep"
+    assert record["source"] == "tep_csv_rbc"
+    assert record["fault_number"] == 1
+    assert record["simulation_run"] == 1
+    assert record["variables"][0] == "XMEAS_2"
+    assert record["variable_contributions"]["XMEAS_2"] > 0.5
+    assert record["extra"]["graph_contributions"]["variable:xmeas_2"] > 0.5
+    dynamic_features = record["extra"]["root_kgd_dynamic_features"]
+    assert dynamic_features["feature_version"] == "scenario_dynamic_v1"
+    assert "xmeas_2__mean" in dynamic_features["features"]
+    assert "xmv_1__std" in dynamic_features["features"]
+    assert record["detector"]["backend"] == TEP_RBC_BACKEND
+    assert record["detector"]["produces_root_cause"] is False
+    assert _forbidden_keys(record) == []
+
+    evidence = evidence_from_records(records, dataset="tep")[0]
+    selector = tep_scenario_selector(evidence)
+    assert evidence.adapter is not None
+    assert evidence.adapter.name == "tep"
+    assert selector.fault_numbers == (1,)
+    assert selector.simulation_runs == (1,)
+
+
+def test_tep_producer_defaults_align_with_tepkg_style(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TEP producer/workflow/CLI defaults should match RootLens/TEP_KG-style runs."""
+    producer_signature = inspect.signature(build_tep_records)
+    assert producer_signature.parameters["window_size"].default == 100
+    assert producer_signature.parameters["row_stride"].default == 25
+    assert producer_signature.parameters["fault_free_max_rows"].default is None
+    assert producer_signature.parameters["n_components"].default == 18
+
+    workflow_config = dataset_record_workflow.DatasetRecordBuildConfig(
+        dataset="tep",
+        output_jsonl=Path("records.jsonl"),
+        model_backend=TEP_RBC_BACKEND,
+    )
+    assert workflow_config.tep_window_size == 100
+    assert workflow_config.tep_row_stride == 25
+    assert workflow_config.tep_fault_free_max_rows is None
+    assert workflow_config.tep_n_components == 18
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build_dataset_records.py",
+            "--dataset",
+            "tep",
+            "--input-root",
+            "data/raw/tep",
+            "--output-jsonl",
+            "records.jsonl",
+        ],
+    )
+    args = build_script.parse_args()
+    assert args.tep_window_size == 100
+    assert args.tep_row_stride == 25
+    assert args.tep_fault_free_max_rows is None
+    assert args.tep_n_components == 18
+
+
+def test_tep_raw_producer_accepts_compact_channel_headers(tmp_path: Path) -> None:
+    """TEP CSV aliases like xmeas1/xmv1 should still emit canonical channel names."""
+    raw_dir = _write_tiny_tep_csvs(tmp_path / "tep", compact_channel_headers=True)
+
+    records = build_tep_records(
+        raw_dir,
+        row_stride=1,
+        window_size=4,
+        faults=(1,),
+        max_runs_per_fault=1,
+        max_cases=1,
+        top_variables=2,
+        n_components=1,
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record["variables"][0] == "XMEAS_2"
+    assert set(record["extra"]["source_columns"]) == {"xmeas1", "xmeas2", "xmv1"}
+    assert "XMEAS_2" in record["variable_contributions"]
+    assert "variable:xmeas_2" in record["extra"]["graph_contributions"]
+    assert "variable:manipulated_variable_1_d_feed" in record["extra"]["graph_contributions"]
+    assert "xmeas_2__std" in record["extra"]["root_kgd_dynamic_features"]["features"]
+    assert evidence_from_records(records, dataset="tep")[0].adapter is not None
+
+
+def test_dataset_record_workflow_supports_tep_raw_producer(tmp_path: Path) -> None:
+    """Unified dataset-record workflow should include the native TEP producer branch."""
+    raw_dir = _write_tiny_tep_csvs(tmp_path / "tep")
+    output_jsonl = tmp_path / "records" / "tep.jsonl"
+
+    result = dataset_record_workflow.build_dataset_records(
+        dataset_record_workflow.DatasetRecordBuildConfig(
+            dataset="tep",
+            input_root=raw_dir,
+            output_jsonl=output_jsonl,
+            model_backend=TEP_RBC_BACKEND,
+            max_cases=1,
+            overwrite=True,
+            tep_faults=(1,),
+            tep_window_size=4,
+            tep_row_stride=1,
+            tep_max_runs_per_fault=1,
+            tep_top_variables=2,
+            tep_n_components=1,
+        )
+    )
+
+    assert result.output_path == output_jsonl
+    assert result.summary["dataset"] == "tep"
+    assert result.summary["record_count"] == 1
+    assert result.summary["labels"] == {"1": 1}
+    assert (tmp_path / "records" / "tep" / "tep_fault_free_profile.json").exists()
+    assert load_records(output_jsonl)[0]["fault_number"] == 1
+
+
 def test_sklearn_backend_loads_trusted_joblib_checkpoint(tmp_path: Path) -> None:
     """Sklearn WM811K backend should load a tiny local joblib model and use predict_proba."""
     checkpoint = tmp_path / "wm811k_model.joblib"
@@ -983,7 +1124,11 @@ def test_producer_jsonl_writer_and_forbidden_filter_round_trip(tmp_path: Path) -
         "object": "bottle",
         "defect_type": "scratch",
         "root_cause": "not_allowed",
-        "extra": {"top_k_paths": [{"path_id": "not_allowed"}], "kept": True},
+        "extra": {
+            "ranked_root_causes": [{"candidate_id": "not_allowed"}],
+            "top_k_paths": [{"path_id": "not_allowed"}],
+            "kept": True,
+        },
     }
     output_path = write_jsonl_records([dirty_record], tmp_path / "records.jsonl")
 
@@ -1053,6 +1198,7 @@ def test_filter_forbidden_outputs_recurses_through_records() -> None:
         {
             "case_id": "x",
             "kg_analysis": {"top_k_paths": []},
+            "ranked_root_causes": [{"candidate_id": "bad"}],
             "records": [{"root_cause": "bad", "safe": "ok"}],
             "array": np.asarray([{"candidate_root_cause": "bad", "safe": "array"}], dtype=object),
         }
@@ -1063,6 +1209,35 @@ def test_filter_forbidden_outputs_recurses_through_records() -> None:
         "records": [{"safe": "ok"}],
         "array": [{"safe": "array"}],
     }
+
+
+def _write_tiny_tep_csvs(root: Path, *, compact_channel_headers: bool = False) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    channel_header = (
+        ["xmeas1", "xmeas2", "xmv1"]
+        if compact_channel_headers
+        else ["xmeas_1", "xmeas_2", "xmv_1"]
+    )
+    header = ["faultNumber", "simulationRun", "sample", *channel_header]
+    fault_free_rows = [
+        [0, 1, sample, sample, sample * 0.1, sample * 2.0]
+        for sample in range(1, 21)
+    ]
+    faulty_rows = [
+        [1, 1, sample, sample, sample * 0.1 + 20.0, sample * 2.0]
+        for sample in range(1, 7)
+    ]
+    _write_csv(root / "TEP_FaultFree_Training.csv", header, fault_free_rows)
+    _write_csv(root / "TEP_Faulty_Training.csv", header, faulty_rows)
+    return root
+
+
+def _write_csv(path: Path, header: Sequence[str], rows: Sequence[Sequence[Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(header)
+        writer.writerows(rows)
 
 
 def _touch(path: Path) -> None:
@@ -1119,6 +1294,7 @@ def _forbidden_keys(value: object) -> list[str]:
         "candidate_root_cause",
         "candidate_root_causes",
         "ranked_causes",
+        "ranked_root_causes",
         "top_k_paths",
         "kg_analysis",
     }

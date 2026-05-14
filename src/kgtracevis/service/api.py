@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict
 
+from kgtracevis.kg.import_neo4j import Neo4jImportError
 from kgtracevis.producers.model_assets import MODEL_ASSET_CHOICES, ModelAsset
 from kgtracevis.service.dashboard import dashboard_bootstrap
 from kgtracevis.service.handlers import (
@@ -20,6 +21,23 @@ from kgtracevis.service.handlers import (
     list_cases,
     record_feedback,
     what_if_request,
+)
+from kgtracevis.service.kg_construction import (
+    ConstructionSourceFormat,
+    ConstructionSourceType,
+    KGConstructionBuildRequest,
+    KGConstructionEdgeReviewRequest,
+    KGConstructionPublishRequest,
+    KGConstructionReviewQueueRequest,
+    get_kg_construction_build,
+    get_kg_construction_review_queue,
+    list_kg_construction_builds,
+    list_kg_construction_source_uploads,
+    publish_kg_construction_build,
+    review_kg_construction_edge,
+    run_kg_construction_build,
+    save_kg_construction_source_upload,
+    validate_kg_construction_build,
 )
 from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
 from kgtracevis.service.kg_source_drafts import (
@@ -101,7 +119,7 @@ def create_app() -> FastAPI:
     @app.post("/api/model-assets/download")
     def download_assets(request: ModelAssetDownloadRequest) -> dict[str, object]:
         try:
-            requested = request.models or ["mvtec-stfpm"]
+            requested = request.models or ["mvtec-patchcore"]
             invalid = sorted({model for model in requested if model not in MODEL_ASSET_CHOICES})
             if invalid:
                 supported = ", ".join(MODEL_ASSET_CHOICES)
@@ -136,6 +154,131 @@ def create_app() -> FastAPI:
     @app.post("/api/kg/source-draft")
     def kg_source_draft(request: KGSourceDraftRequest) -> dict[str, object]:
         return generate_source_kg_draft(request).model_dump(mode="json")
+
+    @app.post("/api/kg/construction/build")
+    def kg_construction_build(request: KGConstructionBuildRequest) -> dict[str, object]:
+        try:
+            return run_kg_construction_build(request).model_dump(mode="json")
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/builds")
+    def kg_construction_builds() -> dict[str, object]:
+        try:
+            return list_kg_construction_builds().model_dump(mode="json")
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/builds/{run_id}")
+    def kg_construction_build_detail(run_id: str) -> dict[str, object]:
+        try:
+            return get_kg_construction_build(run_id).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/builds/{run_id}/validate")
+    def kg_construction_build_validate(run_id: str) -> dict[str, object]:
+        try:
+            return validate_kg_construction_build(run_id).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/builds/{run_id}/publish")
+    def kg_construction_build_publish(
+        run_id: str,
+        request: Annotated[
+            KGConstructionPublishRequest | None,
+            Body(),
+        ] = None,
+    ) -> dict[str, object]:
+        try:
+            publish_request = request or KGConstructionPublishRequest()
+            return publish_kg_construction_build(
+                run_id,
+                publish_request,
+            ).model_dump(mode="json")
+        except Neo4jImportError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError as exc:
+            status_code = (
+                404 if "unknown construction build run_id" in str(exc) else 400
+            )
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/builds/{run_id}/review")
+    def kg_construction_edge_review(
+        run_id: str,
+        request: KGConstructionEdgeReviewRequest,
+    ) -> dict[str, object]:
+        try:
+            return review_kg_construction_edge(run_id, request).model_dump(mode="json")
+        except ValueError as exc:
+            status_code = (
+                404
+                if "unknown construction build run_id" in str(exc)
+                or "unknown construction edge target_key" in str(exc)
+                else 400
+            )
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/builds/{run_id}/review-queue")
+    def kg_construction_review_queue(
+        run_id: str,
+        review_status: Literal["auto", "reviewed", "rejected"] | None = None,
+        source: str | None = None,
+        scenario: str | None = None,
+        relation: str | None = None,
+        query: str | None = None,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    ) -> dict[str, object]:
+        try:
+            request = KGConstructionReviewQueueRequest(
+                review_status=review_status,
+                source=source,
+                scenario=scenario,
+                relation=relation,
+                query=query,
+                offset=offset,
+                limit=limit,
+            )
+            return get_kg_construction_review_queue(
+                run_id,
+                request,
+            ).model_dump(mode="json")
+        except ValueError as exc:
+            status_code = (
+                404 if "unknown construction build run_id" in str(exc) else 400
+            )
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/sources")
+    def kg_construction_sources() -> dict[str, object]:
+        try:
+            return list_kg_construction_source_uploads().model_dump(mode="json")
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/sources/upload")
+    async def kg_construction_source_upload(
+        file: Annotated[UploadFile, File()],
+        source_id: Annotated[str, Form()],
+        source_type: Annotated[str, Form()] = "manual_table",
+        scenario: Annotated[str, Form()] = "shared",
+        source_format: Annotated[str | None, Form()] = None,
+    ) -> dict[str, object]:
+        try:
+            content = await file.read()
+            return save_kg_construction_source_upload(
+                source_id=source_id,
+                source_type=cast(ConstructionSourceType, source_type),
+                scenario=scenario,
+                filename=file.filename or "source.csv",
+                content=content,
+                source_format=cast(ConstructionSourceFormat | None, source_format),
+            ).model_dump(mode="json")
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/runs/upload")
     async def upload_run(

@@ -1,0 +1,35 @@
+{
+  "families": {
+    "COMPOSITION": {
+      "priority": 2,
+      "sigma": 0.24
+    },
+    "CONTROL": {
+      "priority": 6,
+      "sigma": 0.14
+    },
+    "ENERGY_TRANSFER": {
+      "priority": 4,
+      "sigma": 0.26
+    },
+    "FAULT_SOURCE": {
+      "priority": 7,
+      "sigma": 0.1
+    },
+    "MATERIAL_FLOW": {
+      "priority": 5,
+      "sigma": 0.2
+    },
+    "OBSERVATION": {
+      "priority": 1,
+      "sigma": 0.32
+    },
+    "PHASE_CHANGE": {
+      "priority": 3,
+      "sigma": 0.3
+    }
+  },
+  "model_version": "root_kgd_edge_weight_v1",
+  "note": "V1 calibrates edge weights only and keeps family sigma/priority fixed.",
+  "trained": false
+}

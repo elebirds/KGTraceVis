@@ -30,7 +30,6 @@ from kgtracevis.producers.model_assets import ModelAsset
 from kgtracevis.producers.mvtec_models import (
     DEFAULT_MVTEC_EFFICIENTAD_CHECKPOINT,
     DEFAULT_MVTEC_PATCHCORE_CHECKPOINT,
-    DEFAULT_MVTEC_STFPM_CHECKPOINT,
     resolve_mvtec_model_selection,
 )
 from kgtracevis.schema.evidence_schema import DatasetName
@@ -56,9 +55,10 @@ from kgtracevis.service.run_store import (
 from kgtracevis.service.visual_evidence import (
     build_visual_evidence_artifacts,
 )
+from kgtracevis.workflows.root_cause_provider_selection import build_pipeline
 
 DEFAULT_RUNS_DIR = Path("runs/rootlens_sessions")
-DEFAULT_MVTEC_UPLOAD_CHECKPOINT = DEFAULT_MVTEC_STFPM_CHECKPOINT
+DEFAULT_MVTEC_UPLOAD_CHECKPOINT = DEFAULT_MVTEC_PATCHCORE_CHECKPOINT
 
 __all__ = [
     "RunDetail",
@@ -150,7 +150,7 @@ def create_run_from_upload(
     input_path.write_bytes(content)
 
     created_at = datetime.now(timezone.utc).isoformat()
-    active_pipeline = pipeline or KGTracePipeline()
+    active_pipeline = pipeline or build_pipeline()
     if mode == "evidence":
         detail = _run_evidence_upload(
             run_id=run_id,
@@ -557,7 +557,7 @@ def mvtec_model_presets() -> list[dict[str, Any]]:
 
 def download_model_assets(
     *,
-    models: tuple[ModelAsset, ...] = ("mvtec-stfpm",),
+    models: tuple[ModelAsset, ...] = ("mvtec-patchcore",),
     force: bool = False,
 ) -> dict[str, Any]:
     """Download trusted default model assets for service clients."""

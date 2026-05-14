@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-14-tep-rca-provider-selection/research/provider-selection-slice.md", "reason": "provider selection scope and entry points"}
+{"file": ".trellis/tasks/archive/2026-05/05-14-tep-rca-integration-research/research/unified-pipeline-design.md", "reason": "unified RCA pipeline and route2 deprecation rationale"}
+{"file": ".trellis/tasks/archive/2026-05/05-14-tep-native-rca-provider/research/native-provider-slice.md", "reason": "native provider behavior and constraints"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "workflow boundary and RootCauseProvider graph context contract"}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "adapter pipeline script contract"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "unified RCA payload contract"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "testing and quality bar"}

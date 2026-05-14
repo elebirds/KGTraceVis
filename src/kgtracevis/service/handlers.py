@@ -225,6 +225,9 @@ def _evidence_with_analysis(evidence: Evidence, analysis: AnalysisResult) -> dic
         "inconsistent_fields": analysis.inconsistent_fields,
         "correction_candidates": analysis.correction_candidates,
         "top_k_paths": analysis.top_k_paths,
+        "ranked_root_causes": [
+            item.model_dump(mode="json") for item in analysis.ranked_root_causes
+        ],
     }
     return payload
 

@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-route
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 
 import { api } from "../api/client";
-import type { ReviewAction } from "../api/contracts";
+import type { KGConstructionSourceInput, ReviewAction } from "../api/contracts";
 import { WorkbenchShell } from "../components/layout/WorkbenchShell";
 import {
   AnalysisDetailPage,
@@ -227,6 +227,26 @@ function RootLensWorkbench() {
     }
   }
 
+  async function buildKGConstruction() {
+    const form = state.kgConstructionBuild;
+    dispatch({ type: "loading", value: true });
+    try {
+      const source = buildKGConstructionSource(form);
+      const result = await api.buildKGConstruction({
+        output_name: form.outputName || "runtime",
+        overwrite: form.overwrite,
+        sources: [source]
+      });
+      dispatch({ type: "kgConstructionBuilt", result });
+      await loadKGStudio();
+      navigate("/kg-studio/build");
+    } catch (error) {
+      dispatch({ type: "error", error: (error as Error).message });
+    } finally {
+      dispatch({ type: "loading", value: false });
+    }
+  }
+
   return (
     <WorkbenchShell
       status={state.bootstrap?.status ?? "offline"}
@@ -293,7 +313,7 @@ function RootLensWorkbench() {
           }
         />
         <Route path="/kg-studio" element={<Navigate to="/kg-studio/overview" replace />} />
-        {(["overview", "sources", "graph", "review", "drafts"] as KGStudioView[]).map((view) => (
+        {(["overview", "sources", "build", "graph", "review", "drafts"] as KGStudioView[]).map((view) => (
           <Route
             key={view}
             path={`/kg-studio/${view}`}
@@ -314,6 +334,9 @@ function RootLensWorkbench() {
                 sourceDraftScenario={state.sourceDraftScenario}
                 sourceDraftConfidence={state.sourceDraftConfidence}
                 sourceDraftResult={state.sourceDraftResult}
+                constructionBuild={state.kgConstructionBuild}
+                constructionResult={state.kgConstructionResult}
+                constructionStatus={state.kgConstructionStatus}
                 onRefresh={loadKGStudio}
                 onTargetSelected={(targetKey) => dispatch({ type: "kgEdgeSelected", targetKey })}
                 onReviewNoteChanged={(note) => dispatch({ type: "kgReviewNoteChanged", note })}
@@ -322,6 +345,10 @@ function RootLensWorkbench() {
                 onSubmitDraft={submitKGDraft}
                 onSourceDraftChanged={(patch) => dispatch({ type: "sourceDraftChanged", patch })}
                 onGenerateSourceDraft={generateSourceDraft}
+                onConstructionBuildChanged={(patch) =>
+                  dispatch({ type: "kgConstructionChanged", patch })
+                }
+                onBuildKGConstruction={buildKGConstruction}
               />
             }
           />
@@ -340,4 +367,38 @@ function RootLensWorkbench() {
       </Routes>
     </WorkbenchShell>
   );
+}
+
+function buildKGConstructionSource(
+  form: typeof initialState.kgConstructionBuild
+): KGConstructionSourceInput {
+  const source: KGConstructionSourceInput = {
+    source_id: form.sourceId || "kg_studio_source",
+    source_type: form.sourceType,
+    scenario: form.scenario || "shared",
+    source_format: form.sourceFormat,
+    metadata: { submitted_from: "kg-studio-build-page" }
+  };
+  if (form.sourceType === "manual_table" || form.sourceType === "structured_records") {
+    const sourcePath = form.sourcePath.trim();
+    const sourceText = form.sourceText.trim();
+    if (sourcePath) {
+      source.path = sourcePath;
+    } else {
+      source.source_text = sourceText;
+    }
+    return source;
+  }
+  if (form.sourceType === "tep_semantic_lift") {
+    const sourcePath = form.sourcePath.trim();
+    if (sourcePath) {
+      source.path = sourcePath;
+    } else {
+      source.semantic_nodes_path = form.semanticNodesPath.trim();
+      source.semantic_edges_path = form.semanticEdgesPath.trim();
+    }
+    return source;
+  }
+  source.path = form.sourcePath.trim();
+  return source;
 }

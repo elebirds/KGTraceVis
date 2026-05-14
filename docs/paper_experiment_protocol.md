@@ -50,11 +50,13 @@ WM811K as wafer:
 
 TEP:
 
-- Remains a future supported scenario and is schema-compatible with the same
-  pipeline.
-- TEP may later support stronger path-ranking metrics because fault variables,
-  process units, and fault labels can be mapped more directly.
-- TEP is not required for the current MVTec/WM811K adapter-first milestone.
+- Is the current primary quantitative RCA/path-ranking scenario.
+- TEP fault numbers may be used as evaluation references because the benchmark
+  defines process fault types, but they must not be used as scoring input.
+- Native TEP RCA runs through the same `KGTracePipeline` output contract:
+  adapter evidence plus Root-KGD support paths produce both
+  `ranked_root_causes` and `top_k_paths`. Public workflows do not expose
+  provider mode switches.
 
 ## Reference Eligibility Rules
 
@@ -85,7 +87,7 @@ Current reference files:
 | --- | --- | --- |
 | `data/references/mvtec_plausible_rca_reference.csv` | Curated plausible visual explanation references for MVTec-style cases. | `path hit against curated plausible references`; not verified factory RCA. |
 | `data/references/wafer_plausible_reference.csv` | Wafer/WM811K traceability demo references. | `candidate/plausible explanation case study`; not public verified process RCA. |
-| `data/references/tep_rca_reference.csv` | TEP process-fault style demo references. | Future TEP path-ranking evaluation when the TEP adapter/scenario is active; not part of the current MVTec/WM811K milestone. |
+| `data/references/tep_rca_reference.csv` | TEP process-fault style demo references and fault-label evaluation scope. | TEP top-k RCA accuracy, MRR, and path hit when the command records producer inputs and confirms fault labels are evaluation-only. |
 
 ## Command And Artifact Map
 
@@ -99,6 +101,7 @@ Use these commands for the current paper-facing artifacts.
 | `uv run python scripts/build_paper_tables.py --overwrite` | `artifacts/paper_tables_v0/paper_manifest.csv`, `artifacts/paper_tables_v0/command_manifest.csv`, `artifacts/paper_tables_v0/paper_tables_summary.json` | Grouped paper-facing manifest by dataset, noise type, annotation/reference type, and metric scope. This records source command provenance but does not copy files into `paper/`. |
 | `uv run python scripts/run_noise_experiment.py` | `runs/<experiment_name>/summary.json` and noise outputs | Controlled noise/correction reproducibility over checked-in examples. |
 | `uv run python scripts/run_path_ranking.py --write-json` | `outputs/path_ranking_v0/path_ranking_summary.json` | Path ranking provenance; MVTec/WM811K rows remain plausible-reference or case-study outputs. |
+| `uv run python scripts/evaluate_tep_rca.py --output-dir runs/tep_raw_batch_eval_unified --raw-data-dir data/raw/tep --faults 1,2,6 --overwrite` | `tep_rca_evaluation_summary.json`, `tep_rca_evaluation_cases.csv`, generated TEP producer records, adapter pipeline summary | Current TEP RCA/path-ranking metric surface. Fault labels are evaluation references only; RCA scoring uses adapter variable evidence and KG support paths. |
 | `uv run python scripts/run_kg_qa.py --output outputs/kg_qa_report.json` | KG issue/warning report | Provenance and sanity check for KG CSV quality; not an experiment metric by itself. |
 
 Generated files under `runs/`, `outputs/`, and `artifacts/` are not committed.
@@ -119,5 +122,6 @@ Only reviewed stable paper assets should be copied into `paper/figures/` or
 - Use `paper_manifest.csv` as the first review surface for selected tables:
   check `source_artifact`, `source_command`, `annotation_type`, `metric_scope`,
   and `claim_boundary` before copying any stable table into `paper/`.
-- Keep TEP in the roadmap section for future stronger RCA/path-ranking
-  evaluation, not as a blocker for the current milestone.
+- For TEP RCA tables, report the evaluation command, `tep_records.jsonl`, KG
+  node/edge paths or Neo4j runtime status, and the statement that fault labels
+  were withheld from scoring and used only for metric computation.

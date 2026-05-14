@@ -21,8 +21,8 @@ MVTecResolvedPreset = Literal["stfpm", "patchcore", "efficientad"]
 
 DEFAULT_MVTEC_MODEL_PRESET: MVTecModelPreset = "auto"
 MVTEC_MODEL_PRESET_PRIORITY: tuple[MVTecResolvedPreset, ...] = (
-    "efficientad",
     "patchcore",
+    "efficientad",
     "stfpm",
 )
 MVTEC_MODEL_PRESET_DOWNLOAD_ASSETS: dict[MVTecResolvedPreset, str] = {
@@ -107,7 +107,7 @@ def list_mvtec_model_presets() -> list[dict[str, Any]]:
         {
             "preset": "auto",
             "label": "自动",
-            "description": "优先选择 EfficientAD，其次 PatchCore，再其次 STFPM。",
+            "description": "优先选择 PatchCore，其次 EfficientAD，再其次 STFPM。",
             "available": selected_auto is not None,
             "recommended": True,
             "backend": selected_auto.backend if selected_auto is not None else None,
@@ -127,7 +127,7 @@ def list_mvtec_model_presets() -> list[dict[str, Any]]:
                 "label": selection.label,
                 "description": selection.description,
                 "available": selection.available,
-                "recommended": selection.preset == "efficientad",
+                "recommended": selection.preset == "patchcore",
                 "backend": selection.backend,
                 "checkpoint_path": str(selection.checkpoint_path) if selection.available else None,
                 "checkpoint_hint": selection.checkpoint_hint,

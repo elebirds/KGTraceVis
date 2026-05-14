@@ -89,7 +89,14 @@ def _target_id(value: Any) -> str | None:
     if isinstance(value, str):
         return value
     if isinstance(value, dict):
-        for key in ("target_entity_id", "entity_id", "selected_entity_id", "root_cause_id"):
+        for key in (
+            "candidate_id",
+            "root_cause_candidate_id",
+            "target_entity_id",
+            "entity_id",
+            "selected_entity_id",
+            "root_cause_id",
+        ):
             item = value.get(key)
             if isinstance(item, str):
                 return item

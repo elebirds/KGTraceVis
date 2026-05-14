@@ -32,6 +32,10 @@ def test_record_kg_draft_writes_append_only_jsonl(tmp_path: Path) -> None:
     assert rows[0]["draft_action"] == "revise"
     assert rows[0]["target_key"] == request.target_key
     assert rows[0]["draft_id"].startswith("kgdraft_")
+    assert rows[0]["review_decision"]["action"] == "revise"
+    assert rows[0]["review_decision"]["proposed_payload"]["relation"] == (
+        "SUGGESTS_PLAUSIBLE_MECHANISM"
+    )
 
 
 def test_kg_draft_rejects_invalid_confidence() -> None:
@@ -42,4 +46,3 @@ def test_kg_draft_rejects_invalid_confidence() -> None:
             draft_action="revise",
             proposed_confidence=1.5,
         )
-

@@ -35,19 +35,22 @@ def rank_root_cause_paths(
     source_ids = {
         entity_id
         for field, entity_id in selected.items()
-        if field in SOURCE_FIELDS and entity_id in graph.nodes
+        if field in SOURCE_FIELDS and graph.node_in_scope(entity_id, evidence.dataset)
     }
     target_ids = {
         node.id
         for node in graph.nodes.values()
-        if node.label in ROOT_CAUSE_LABELS or node.id.endswith("Cause")
+        if node.scenario in {evidence.dataset, "shared"}
+        and (node.label in ROOT_CAUSE_LABELS or node.id.endswith("Cause"))
     }
 
     ranked: list[dict[str, Any]] = []
     for source_id in sorted(source_ids):
         for target_id in sorted(target_ids - {source_id}):
             for path in _simple_paths(graph, source_id, target_id, max_depth):
-                edges = _path_edges(graph, path)
+                if not all(graph.node_in_scope(node_id, evidence.dataset) for node_id in path):
+                    continue
+                edges = _path_edges(graph, path, scenario=evidence.dataset)
                 if not edges:
                     continue
                 relations = [edge.relation for edge in edges]
@@ -102,10 +105,15 @@ def _simple_paths(
         return []
 
 
-def _path_edges(graph: KnowledgeGraph, path: list[str]) -> list[KGEdge]:
+def _path_edges(
+    graph: KnowledgeGraph,
+    path: list[str],
+    *,
+    scenario: str | None = None,
+) -> list[KGEdge]:
     edges: list[KGEdge] = []
     for head, tail in zip(path, path[1:], strict=False):
-        edge_options = graph.edge_between(head, tail)
+        edge_options = graph.edge_between(head, tail, scenario=scenario)
         if not edge_options:
             return []
         edges.append(max(edge_options, key=lambda edge: edge.confidence))

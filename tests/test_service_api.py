@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import uuid
 from collections.abc import Generator
@@ -14,6 +15,7 @@ from fastapi.testclient import TestClient
 from kgtracevis.producers.backends import AMAZON_PATCHCORE_BACKEND, ANOMALIB_ENGINE_BACKEND
 from kgtracevis.service import api as service_api
 from kgtracevis.service import dashboard as service_dashboard
+from kgtracevis.service import kg_construction as service_kg_construction
 from kgtracevis.service import runs as service_runs
 from kgtracevis.service.api import app
 from kgtracevis.service.handlers import (
@@ -181,6 +183,548 @@ def test_default_upload_run_persists_detail_to_postgres(
     assert not (Path(detail.run.run_dir) / "manifest.json").exists()
 
 
+def test_upload_run_uses_tep_root_kgd_reasoner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TEP records upload should use the single supported Root-KGD provider."""
+    monkeypatch.setattr(service_runs, "DEFAULT_RUNS_DIR", tmp_path / "rootlens_sessions")
+
+    detail = service_runs.create_run_from_upload(
+        "tep_records.jsonl",
+        _tep_record_jsonl_bytes(),
+        mode="records",
+        dataset="tep",
+        top_k=2,
+    )
+
+    assert detail.run.dataset == "tep"
+    assert detail.summary is not None
+    assert detail.summary["pipeline"]["tep_rca_reasoner"] == "tep_root_kgd"
+    assert detail.cases is not None
+    ranked = detail.cases[0]["ranked_root_causes"]
+    assert ranked
+    assert ranked[0]["candidate_id"] == "faultanchor:stream_1_a_feed_loss"
+    assert ranked[0]["scoring_method"] == "tep_root_kgd"
+
+
+def test_kg_construction_build_route_writes_runtime_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The API should trigger a narrow source-to-KG build and return artifact paths."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "unit_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_api_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "built"
+    assert payload["run_id"] == "kgbuild_api_unit"
+    assert payload["summary"]["node_count"] == 2
+    assert payload["summary"]["edge_count"] == 1
+    assert Path(payload["nodes_path"]).is_file()
+    assert Path(payload["edges_path"]).is_file()
+    assert Path(payload["summary_path"]).is_file()
+    assert Path(payload["manifest_path"]).is_file()
+
+
+def test_kg_construction_build_registry_lists_details_and_validates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Construction builds should be discoverable and independently QA-able."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "registry_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_registry_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    list_response = client.get("/api/kg/construction/builds")
+    assert list_response.status_code == 200
+    builds = list_response.json()["builds"]
+    assert [build["run_id"] for build in builds] == ["kgbuild_registry_unit"]
+    assert builds[0]["node_count"] == 2
+    assert builds[0]["edge_count"] == 1
+
+    detail_response = client.get("/api/kg/construction/builds/kgbuild_registry_unit")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["build"]["summary_path"].endswith("kg_construction_summary.json")
+    assert detail["summary"]["node_count"] == 2
+    assert detail["manifest"]["run"]["run_id"] == "kgbuild_registry_unit"
+
+    validation_response = client.post(
+        "/api/kg/construction/builds/kgbuild_registry_unit/validate"
+    )
+    assert validation_response.status_code == 200
+    validation = validation_response.json()
+    assert validation["build"]["run_id"] == "kgbuild_registry_unit"
+    assert validation["qa_report"]["summary"]["passed"] is True
+    assert validation["qa_report"]["summary"]["edge_count"] == 1
+
+
+def test_kg_construction_publish_route_dry_runs_merged_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Construction publish should default to a read-only default+candidate dry-run."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "publish_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_publish_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    publish_response = client.post(
+        "/api/kg/construction/builds/kgbuild_publish_unit/publish",
+        json={},
+    )
+    candidate_only_response = client.post(
+        "/api/kg/construction/builds/kgbuild_publish_unit/publish",
+        json={"include_defaults": False},
+    )
+
+    assert publish_response.status_code == 200
+    payload = publish_response.json()
+    assert payload["build"]["run_id"] == "kgbuild_publish_unit"
+    assert payload["include_defaults"] is True
+    assert payload["import_summary"]["dry_run"] is True
+    assert payload["import_summary"]["node_count"] > 2
+    assert payload["import_summary"]["edge_count"] > 1
+    assert payload["node_paths"][-1].endswith("nodes.csv")
+    assert payload["edge_paths"][-1].endswith("edges.csv")
+    assert "candidate/reviewable" in payload["claim_boundary"]
+
+    assert candidate_only_response.status_code == 200
+    candidate_only = candidate_only_response.json()
+    assert candidate_only["include_defaults"] is False
+    assert candidate_only["import_summary"] == {
+        "node_count": 2,
+        "edge_count": 1,
+        "dry_run": True,
+    }
+
+
+def test_kg_construction_publish_route_requires_confirmation_for_real_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real Neo4j publication should fail closed without explicit confirmation."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "publish_guard_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_publish_guard_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    response = client.post(
+        "/api/kg/construction/builds/kgbuild_publish_guard_unit/publish",
+        json={"dry_run": False},
+    )
+
+    assert response.status_code == 400
+    assert "confirm_publish=true" in response.text
+
+
+def test_kg_construction_review_route_updates_edge_and_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edge review should update the candidate CSV counters and decision log."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "review_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_review_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+    build_payload = build_response.json()
+    edge_key = "ApiManualSource|BELONGS_TO|ApiManualTarget|tep"
+
+    accept_response = client.post(
+        "/api/kg/construction/builds/kgbuild_review_unit/review",
+        json={
+            "target_key": edge_key,
+            "action": "accept",
+            "reviewer": "unit-test",
+            "note": "looks source-backed",
+        },
+    )
+    reject_response = client.post(
+        "/api/kg/construction/builds/kgbuild_review_unit/review",
+        json={
+            "head": "ApiManualSource",
+            "relation": "BELONGS_TO",
+            "tail": "ApiManualTarget",
+            "scenario": "tep",
+            "action": "reject",
+            "reviewer": "unit-test",
+            "note": "exercise reject path",
+        },
+    )
+
+    assert accept_response.status_code == 200
+    accepted = accept_response.json()
+    assert accepted["edge"]["review_status"] == "reviewed"
+    assert accepted["edge"]["feedback_count"] == "1"
+    assert accepted["edge"]["accepted_count"] == "1"
+    assert accepted["edge"]["rejected_count"] == "0"
+    assert accepted["decision"]["target_key"] == edge_key
+    assert accepted["decision"]["action"] == "accept"
+    assert accepted["summary"]["review_status_counts"] == {"reviewed": 1}
+
+    assert reject_response.status_code == 200
+    rejected = reject_response.json()
+    assert rejected["edge"]["review_status"] == "rejected"
+    assert rejected["edge"]["feedback_count"] == "2"
+    assert rejected["edge"]["accepted_count"] == "1"
+    assert rejected["edge"]["rejected_count"] == "1"
+    assert rejected["decision"]["action"] == "reject"
+    assert rejected["summary"]["review_status_counts"] == {"rejected": 1}
+
+    edge_rows = _read_csv_rows(Path(build_payload["edges_path"]))
+    assert edge_rows[0]["review_status"] == "rejected"
+    assert edge_rows[0]["feedback_count"] == "2"
+    manifest = json.loads(Path(build_payload["manifest_path"]).read_text(encoding="utf-8"))
+    assert [item["action"] for item in manifest["review_decisions"]] == [
+        "accept",
+        "reject",
+    ]
+    assert manifest["summary"]["review_status_counts"] == {"rejected": 1}
+    assert manifest["run"]["status"] == "reviewed"
+
+
+def test_kg_construction_review_route_rejects_unknown_edge(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown edge review targets should be explicit 404s."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "review_missing_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_review_missing_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    response = client.post(
+        "/api/kg/construction/builds/kgbuild_review_missing_unit/review",
+        json={
+            "target_key": "MissingHead|BELONGS_TO|MissingTail|tep",
+            "action": "accept",
+        },
+    )
+
+    assert response.status_code == 404
+    assert "unknown construction edge target_key" in response.text
+
+
+def test_kg_construction_review_queue_filters_edges(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review queue should expose filterable read-only candidate edge rows."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "review_queue_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_review_queue_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    initial_response = client.get(
+        "/api/kg/construction/builds/kgbuild_review_queue_unit/review-queue",
+        params={
+            "review_status": "auto",
+            "source": "api_manual_unit",
+            "scenario": "tep",
+            "relation": "BELONGS_TO",
+            "query": "explicit api",
+            "limit": "10",
+        },
+    )
+    assert initial_response.status_code == 200
+    initial = initial_response.json()
+    assert initial["total_count"] == 1
+    assert initial["returned_count"] == 1
+    assert initial["summary"]["review_status_counts"] == {"auto": 1}
+    assert initial["summary"]["relation_counts"] == {"BELONGS_TO": 1}
+    assert initial["edges"][0]["target_key"] == (
+        "ApiManualSource|BELONGS_TO|ApiManualTarget|tep"
+    )
+    assert initial["edges"][0]["confidence"] == 0.71
+
+    review_response = client.post(
+        "/api/kg/construction/builds/kgbuild_review_queue_unit/review",
+        json={
+            "target_key": "ApiManualSource|BELONGS_TO|ApiManualTarget|tep",
+            "action": "reject",
+        },
+    )
+    assert review_response.status_code == 200
+
+    rejected_response = client.get(
+        "/api/kg/construction/builds/kgbuild_review_queue_unit/review-queue",
+        params={"review_status": "rejected", "offset": "0", "limit": "1"},
+    )
+    empty_page_response = client.get(
+        "/api/kg/construction/builds/kgbuild_review_queue_unit/review-queue",
+        params={"review_status": "rejected", "offset": "1", "limit": "1"},
+    )
+
+    assert rejected_response.status_code == 200
+    rejected = rejected_response.json()
+    assert rejected["total_count"] == 1
+    assert rejected["returned_count"] == 1
+    assert rejected["edges"][0]["review_status"] == "rejected"
+    assert rejected["edges"][0]["rejected_count"] == 1
+    assert rejected["summary"]["review_status_counts"] == {"rejected": 1}
+
+    assert empty_page_response.status_code == 200
+    empty_page = empty_page_response.json()
+    assert empty_page["total_count"] == 1
+    assert empty_page["returned_count"] == 0
+    assert empty_page["edges"] == []
+
+
+def test_kg_construction_build_registry_rejects_unknown_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown construction build IDs should be explicit 404s."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    detail_response = client.get("/api/kg/construction/builds/missing_build")
+    validation_response = client.post(
+        "/api/kg/construction/builds/missing_build/validate"
+    )
+
+    assert detail_response.status_code == 404
+    assert validation_response.status_code == 404
+    assert "unknown construction build run_id" in detail_response.text
+
+
+def test_kg_construction_build_route_rejects_missing_tep_paths() -> None:
+    """TEP runtime construction inputs should require explicit local artifacts."""
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "sources": [
+                {
+                    "source_id": "tep_semantic_unit",
+                    "source_type": "tep_semantic_lift",
+                    "scenario": "tep",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+    assert "tep_semantic_lift requires path" in response.text
+
+
+def test_kg_construction_source_upload_route_stores_build_ready_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Uploaded construction sources should be persisted and listable."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_SOURCE_DIR",
+        tmp_path / "source_uploads",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/kg/construction/sources/upload",
+        files={"file": ("manual_source.csv", _manual_source_csv(), "text/csv")},
+        data={
+            "source_id": "api_manual_upload",
+            "source_type": "manual_table",
+            "scenario": "tep",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "uploaded"
+    assert payload["source_id"] == "api_manual_upload"
+    assert payload["source_format"] == "csv"
+    assert Path(payload["path"]).is_file()
+    assert Path(payload["metadata_path"]).is_file()
+    assert payload["build_source"]["path"] == payload["path"]
+    assert payload["build_source"]["source_type"] == "manual_table"
+
+    listing = client.get("/api/kg/construction/sources")
+    assert listing.status_code == 200
+    sources = listing.json()["sources"]
+    assert [source["source_id"] for source in sources] == ["api_manual_upload"]
+
+
+def test_kg_construction_source_upload_route_rejects_invalid_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Source upload should reject unsupported extensions before persistence."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_SOURCE_DIR",
+        tmp_path / "source_uploads",
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/kg/construction/sources/upload",
+        files={"file": ("manual_source.txt", "not supported", "text/plain")},
+        data={"source_id": "bad_upload", "source_type": "manual_table"},
+    )
+
+    assert response.status_code == 400
+    assert "source upload filename must end with one of" in response.text
+    assert not (tmp_path / "source_uploads").exists()
+
+
 def test_upload_run_prepares_visual_evidence_artifacts(
     tmp_path: Path,
     monkeypatch,
@@ -342,7 +886,7 @@ def test_mvtec_model_preset_route_reports_available_default(
     payload = response.json()
     assert payload["default_preset"] == "auto"
     presets = {item["preset"]: item for item in payload["presets"]}
-    assert presets["auto"]["resolved_preset"] == "efficientad"
+    assert presets["auto"]["resolved_preset"] == "patchcore"
     assert presets["efficientad"]["available"] is True
 
 
@@ -484,7 +1028,7 @@ def test_model_asset_download_route_uses_default_asset(monkeypatch) -> None:
         return {
             "artifact_type": "model_asset_download_v0",
             "assets_root": "runs/real_model_pipeline/assets",
-            "assets": {"mvtec_stfpm": {"checkpoint": "checkpoint.xml"}},
+            "assets": {"mvtec_patchcore": {"checkpoint": "checkpoint.ckpt"}},
         }
 
     monkeypatch.setattr(service_api, "download_model_assets", _patched_download_model_assets)
@@ -493,8 +1037,8 @@ def test_model_asset_download_route_uses_default_asset(monkeypatch) -> None:
     response = client.post("/api/model-assets/download", json={})
 
     assert response.status_code == 200
-    assert captured == {"models": ("mvtec-stfpm",), "force": False}
-    assert response.json()["assets"]["mvtec_stfpm"]["checkpoint"] == "checkpoint.xml"
+    assert captured == {"models": ("mvtec-patchcore",), "force": False}
+    assert response.json()["assets"]["mvtec_patchcore"]["checkpoint"] == "checkpoint.ckpt"
 
 
 def test_model_asset_download_route_rejects_unknown_asset() -> None:
@@ -774,3 +1318,39 @@ def test_fastapi_routes_are_wired() -> None:
     assert case.json()["case"]["case_id"] == "mvtec_0001"
     assert analysis.status_code == 200
     assert analysis.json()["analysis"]["case_id"] == "mvtec_0001"
+
+
+def _manual_source_csv() -> str:
+    return "\n".join(
+        [
+            "id,name,label,head,relation,tail,scenario,evidence,confidence",
+            "ApiManualSource,API manual source,Variable,,,,tep,manual source row,0.71",
+            "ApiManualTarget,API manual target,ProcessUnit,,,,tep,manual target row,0.71",
+            ",,,ApiManualSource,BELONGS_TO,ApiManualTarget,tep,explicit API row,0.71",
+            "",
+        ]
+    )
+
+
+def _tep_record_jsonl_bytes() -> bytes:
+    return (
+        json.dumps(
+            {
+                "dataset": "tep",
+                "case_id": "tep_native_upload",
+                "object": "process",
+                "anomaly_type": "process_fault",
+                "location": "reactor",
+                "variables": ["XMEAS_1", "XMV_3"],
+                "variable_contributions": {"XMEAS_1": 0.7, "XMV_3": 0.3},
+                "fault_number": 6,
+                "confidence": 0.75,
+            }
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def _read_csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))

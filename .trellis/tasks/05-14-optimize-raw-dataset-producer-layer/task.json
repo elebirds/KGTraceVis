@@ -1,7 +1,7 @@
 {
-  "id": "source-to-kg-construction-methodology",
-  "name": "source-to-kg-construction-methodology",
-  "title": "brainstorm: source-to-KG construction methodology",
+  "id": "optimize-raw-dataset-producer-layer",
+  "name": "optimize-raw-dataset-producer-layer",
+  "title": "implement: optimize raw dataset producer layer",
   "description": "",
   "status": "in_progress",
   "dev_type": null,

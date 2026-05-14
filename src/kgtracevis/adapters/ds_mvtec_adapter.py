@@ -58,6 +58,7 @@ ROOT_CAUSE_KEYS = (
     "candidate_root_cause",
     "candidate_root_causes",
     "ranked_causes",
+    "ranked_root_causes",
     "top_k_paths",
 )
 DETECTOR_CONFIDENCE_KEYS = (*CONFIDENCE_KEYS, "pred_score", "detector_score", "anomaly_score")

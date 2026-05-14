@@ -49,6 +49,7 @@ from kgtracevis.producers.mvtec_models import (
     resolve_mvtec_model_selection,
 )
 from kgtracevis.producers.mvtec_records import build_mvtec_records
+from kgtracevis.producers.tep_records import TEP_RBC_BACKEND, build_tep_records
 from kgtracevis.producers.wm811k_records import build_wm811k_records
 
 __all__ = [
@@ -59,6 +60,7 @@ __all__ = [
     "MVTecAnomalyPredictor",
     "MVTecPrediction",
     "SKLEARN_BACKEND",
+    "TEP_RBC_BACKEND",
     "TORCH_RESNET_BACKEND",
     "DEFAULT_MVTEC_MODEL_PRESET",
     "MVTEC_MODEL_PRESET_PRIORITY",
@@ -77,6 +79,7 @@ __all__ = [
     "amazon_patchcore_prediction_to_mvtec_prediction",
     "anomalib_prediction_to_mvtec_prediction",
     "build_mvtec_records",
+    "build_tep_records",
     "build_wm811k_records",
     "deterministic_subset",
     "download_selected_model_assets",

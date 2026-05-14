@@ -1,0 +1,12 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"type":"spec","path":"AGENTS.md","note":"Project-wide rules for evidence schema, KG-compatible outputs, raw data, and testing."}
+{"type":"spec","path":".trellis/spec/core.md","note":"Core implementation conventions if present."}
+{"type":"spec","path":".trellis/spec/producers.md","note":"Producer-specific conventions if present."}
+{"type":"task","path":".trellis/tasks/05-14-tep-raw-dataset-producer/prd.md","note":"Task requirements and acceptance criteria."}
+{"type":"research","path":".trellis/tasks/05-14-tep-raw-dataset-producer/research/tep-rbc-reference.md","note":"TEP_KG RBC reference summary; reuse concepts, not code."}
+{"type":"code","path":"src/kgtracevis/producers/common.py","note":"Shared producer helpers and output filtering."}
+{"type":"code","path":"src/kgtracevis/producers/__init__.py","note":"Public producer exports."}
+{"type":"code","path":"src/kgtracevis/workflows/dataset_records.py","note":"Unified dataset producer workflow to extend with TEP."}
+{"type":"code","path":"scripts/build_dataset_records.py","note":"CLI entrypoint to extend with TEP options."}
+{"type":"code","path":"src/kgtracevis/adapters/tep_adapter.py","note":"Adapter record shape to satisfy."}
+{"type":"code","path":"tests/test_record_producers.py","note":"Producer test style and integration coverage."}

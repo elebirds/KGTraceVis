@@ -7,16 +7,19 @@ logic in their own entry points.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Protocol
+from typing import Any, Protocol
 
-from kgtracevis.core.result import AnalysisResult
+from kgtracevis.core.rca import (
+    GenericGraphPathReasoner,
+    RcaReasoner,
+)
+from kgtracevis.core.result import AnalysisResult, RcaReasoningResult
 from kgtracevis.kg.consistency_checker import check_consistency
 from kgtracevis.kg.correction_generator import generate_correction_candidates
 from kgtracevis.kg.entity_linker import link_evidence_entities
 from kgtracevis.kg.graph import KnowledgeGraph
 from kgtracevis.kg.import_neo4j import resolve_neo4j_config
 from kgtracevis.kg.neo4j_repository import Neo4jKGRepository
-from kgtracevis.kg.path_ranker import rank_root_cause_paths
 from kgtracevis.schema.evidence_schema import Evidence
 
 
@@ -35,9 +38,12 @@ class KGTracePipeline:
         graph: KnowledgeGraph | None = None,
         *,
         neo4j_repository: KGSnapshotRepository | None = None,
+        root_cause_reasoner: RcaReasoner | None = None,
     ) -> None:
         """Create a pipeline backed by runtime Neo4j unless a graph is explicit."""
         self.neo4j_repository = neo4j_repository
+        self.root_cause_reasoner = root_cause_reasoner
+        self._generic_rca_reasoner = GenericGraphPathReasoner()
         self.graph = graph
         self._graph_cache: dict[str, KnowledgeGraph] = {}
 
@@ -45,7 +51,7 @@ class KGTracePipeline:
         """Analyze one evidence object.
 
         The v0 pipeline runs entity linking, consistency checking, correction
-        candidate generation, and relation-weighted RCA path ranking.
+        candidate generation, and scenario-aware RCA reasoning.
         """
         graph = self.graph_for_evidence(evidence)
         linked_entities = link_evidence_entities(evidence, graph)
@@ -56,14 +62,20 @@ class KGTracePipeline:
             linked_entities,
             consistency,
         )
-        top_k_paths = rank_root_cause_paths(evidence, graph, linked_entities, top_k=top_k)
+        rca_result = self._reason_root_causes(
+            evidence,
+            graph=graph,
+            linked_entities=linked_entities,
+            top_k=top_k,
+        )
         return AnalysisResult(
             case_id=evidence.case_id,
             linked_entities=linked_entities,
             consistency_score=consistency["consistency_score"],
             inconsistent_fields=consistency["inconsistent_fields"],
             correction_candidates=correction_candidates,
-            top_k_paths=top_k_paths,
+            top_k_paths=rca_result.top_k_paths,
+            ranked_root_causes=rca_result.ranked_root_causes,
             human_feedback=deepcopy(evidence.human_feedback),
         )
 
@@ -85,3 +97,28 @@ class KGTracePipeline:
             return graph
         finally:
             repository.close()
+
+    def _reason_root_causes(
+        self,
+        evidence: Evidence,
+        *,
+        graph: KnowledgeGraph,
+        linked_entities: list[dict[str, Any]],
+        top_k: int,
+    ) -> RcaReasoningResult:
+        reasoner = self.root_cause_reasoner
+        if reasoner is not None:
+            result = reasoner.reason_root_causes(
+                evidence,
+                graph=graph,
+                linked_entities=linked_entities,
+                top_k=top_k,
+            )
+            if result.top_k_paths or result.ranked_root_causes:
+                return result
+        return self._generic_rca_reasoner.reason_root_causes(
+            evidence,
+            graph=graph,
+            linked_entities=linked_entities,
+            top_k=top_k,
+        )

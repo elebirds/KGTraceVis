@@ -34,7 +34,13 @@ def check_consistency(
         target_id = selected.get(target_field)
         if not source_id or not target_id:
             continue
-        matched_relation = _first_matching_relation(graph, source_id, target_id, relations)
+        matched_relation = _first_matching_relation(
+            graph,
+            source_id,
+            target_id,
+            relations,
+            scenario=evidence.dataset,
+        )
         passed = matched_relation is not None
         if not passed:
             inconsistent_fields.update({source_field, target_field})
@@ -66,8 +72,10 @@ def _first_matching_relation(
     source_id: str,
     target_id: str,
     relations: tuple[str, ...],
+    *,
+    scenario: str | None = None,
 ) -> str | None:
     for relation in relations:
-        if graph.has_edge(source_id, relation, target_id):
+        if graph.has_edge(source_id, relation, target_id, scenario=scenario):
             return relation
     return None

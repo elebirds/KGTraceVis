@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Pipeline/provider workflow boundary and RootCauseProvider compatibility rules."}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "Adapter evidence-only boundary and forbidden RCA output leakage rules."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Unified RCA payload and scenario scoping contracts."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Focused test and lint expectations for backend changes."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "RCA result flows across core, service payloads, and tests."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Search and reuse existing provider/path ranking logic before adding new contract code."}

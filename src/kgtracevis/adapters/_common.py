@@ -15,6 +15,7 @@ REASONING_OUTPUT_KEYS = {
     "candidate_root_cause",
     "candidate_root_causes",
     "ranked_causes",
+    "ranked_root_causes",
     "top_k_paths",
     "kg_analysis",
 }

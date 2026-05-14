@@ -14,6 +14,7 @@ from kgtracevis.adapters.batch import evidence_from_records, load_records, write
 from kgtracevis.core import KGTracePipeline
 from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
+from kgtracevis.workflows.root_cause_provider_selection import build_pipeline
 
 SUMMARY_FILENAME = "adapter_pipeline_summary.json"
 TABLE_FILENAME = "adapter_pipeline_table.csv"
@@ -189,6 +190,7 @@ def _run_summary(
             "top_k": top_k,
             "kg_node_paths": [str(path) for path in kg_node_paths or []],
             "kg_edge_paths": [str(path) for path in kg_edge_paths or []],
+            "tep_rca_reasoner": "tep_root_kgd",
         },
         "note": (
             "Path targets are candidate/plausible explanation nodes generated from "
@@ -205,13 +207,13 @@ def _pipeline_from_kg_paths(
     kg_edge_paths: list[str | Path] | None,
 ) -> KGTracePipeline:
     if not kg_node_paths and not kg_edge_paths:
-        return KGTracePipeline()
+        return build_pipeline()
     graph = KnowledgeGraph.from_paths(
         [*DEFAULT_NODE_PATHS, *(kg_node_paths or [])],
         [*DEFAULT_EDGE_PATHS, *(kg_edge_paths or [])],
         skip_missing=True,
     )
-    return KGTracePipeline(graph=graph)
+    return build_pipeline(graph=graph)
 
 
 def _case_summary(
@@ -222,6 +224,7 @@ def _case_summary(
     pipeline: KGTracePipeline,
 ) -> dict[str, Any]:
     top_k_paths = list(analysis["top_k_paths"])
+    ranked_root_causes = list(analysis.get("ranked_root_causes", []))
     source_edges = _unique_source_edges(top_k_paths)
     return {
         "case_id": evidence.case_id,
@@ -236,6 +239,7 @@ def _case_summary(
         "inconsistent_fields": analysis["inconsistent_fields"],
         "correction_candidates": analysis["correction_candidates"],
         "top_k_paths": top_k_paths,
+        "ranked_root_causes": ranked_root_causes,
         "candidate_plausible_explanation_targets": _candidate_targets(
             top_k_paths,
             source_edges=source_edges,
@@ -311,7 +315,13 @@ def _candidate_targets(
     targets: dict[str, dict[str, Any]] = {}
     edges_by_id = {edge["edge_id"]: edge for edge in source_edges}
     for path in top_k_paths:
-        target_id = str(path["target_entity_id"])
+        target_id = str(
+            path.get("root_cause_candidate_id")
+            or path.get("target_entity_id")
+            or ""
+        )
+        if not target_id:
+            continue
         target = targets.setdefault(
             target_id,
             _target_seed(target_id, graph=graph),

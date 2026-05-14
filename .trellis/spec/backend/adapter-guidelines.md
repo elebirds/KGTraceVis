@@ -105,6 +105,7 @@ root_causes
 candidate_root_cause
 candidate_root_causes
 ranked_causes
+ranked_root_causes
 top_k_paths
 kg_analysis
 ```
@@ -466,6 +467,26 @@ uv run python scripts/run_adapter_pipeline.py \
   --overwrite
 ```
 
+Optional TEP RCA provider flags:
+
+```bash
+uv run python scripts/run_adapter_pipeline.py \
+  --input data/examples/records/tep_records.jsonl \
+  --dataset tep \
+  --output-dir outputs/adapter_pipeline_v0/tep \
+  --tep-rca-provider native \
+  --overwrite
+```
+
+Rules:
+
+- `--tep-rca-provider none` preserves default path-projection behavior.
+- `--tep-rca-provider native` uses KGTraceVis-native TEP RCA scoring through
+  the unified `RootCauseProvider` contract.
+- `--tep-rca-provider artifact` must include `--tep-rca-artifact-dir` or
+  `--tep-rca-ranking-path` and must fail fast when no ranking artifact can be
+  resolved.
+
 ### 3. Contracts
 
 Inputs:
@@ -476,14 +497,17 @@ Inputs:
   metadata; WM811K should still use `--dataset wafer`.
 - `--top-k` must be at least 1.
 - `--overwrite` is required to replace an existing summary/table.
+- TEP RCA provider options are opt-in and must not create a dataset-specific
+  route outside `KGTracePipeline`.
 
 Outputs:
 
 - `evidence/` contains generated Evidence JSON files with empty adapter-level
   `kg_analysis` before runtime analysis.
 - `adapter_pipeline_summary.json` contains case summaries, linked entities,
-  consistency, correction candidates, `top_k_paths`, source edge provenance,
-  and candidate/plausible explanation targets.
+  consistency, correction candidates, `top_k_paths`, unified
+  `ranked_root_causes`, source edge provenance, and candidate/plausible
+  explanation targets.
 - `adapter_pipeline_table.csv` contains compact paper-review rows including
   `explanation_scope` and `claim_boundary`.
 - `explanation_scope` must remain

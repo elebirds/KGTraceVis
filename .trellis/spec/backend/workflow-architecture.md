@@ -62,6 +62,10 @@ def run_noise_experiment(
 def run_real_model_pipeline(
     config: RealModelPipelineConfig,
 ) -> RealModelPipelineResult: ...
+
+def run_source_kg_construction_workflow(
+    config: SourceKGConstructionWorkflowConfig,
+) -> SourceKGConstructionWorkflowResult: ...
 ```
 
 CLI modules may re-export moved helper functions briefly for backward
@@ -103,6 +107,82 @@ Rules:
 - Do not implement KG construction pipeline behavior as a side effect of an
   Evidence analysis workflow.
 
+#### RCA Reasoner Contract
+
+`RcaReasoner` is the extension point for scenario-specific RCA scoring inside
+the unified `KGTracePipeline`. Reasoners receive graph context and must return
+aligned path and candidate outputs:
+
+```python
+def reason_root_causes(
+    evidence: Evidence,
+    *,
+    graph: KnowledgeGraph,
+    linked_entities: list[dict[str, Any]],
+    top_k: int = 5,
+) -> RcaReasoningResult:
+    ...
+```
+
+Rules:
+
+- The reasoner must return unified `RcaReasoningResult` objects, not a
+  dataset-specific payload.
+- The pipeline passes the runtime graph snapshot to scenario-aware reasoners.
+- The pipeline does not wrap legacy `rank_root_causes(...)`-only providers.
+- Reasoners must not construct or mutate KG data as a side effect of ranking.
+- TEP-native support path search must stay scoped to `tep` and `shared` nodes
+  and edges.
+
+#### TEP Root-KGD Runtime Contract
+
+TEP native RCA means the Root-KGD runtime provider, not an artifact bridge and
+not the legacy direct-support fallback.
+
+Signatures and entry points:
+
+```python
+def build_root_cause_reasoner() -> RcaReasoner: ...
+
+def run_tep_rca_evaluation(
+    config: TepRcaEvaluationConfig,
+) -> TepRcaEvaluationOutput: ...
+```
+
+Runtime contracts:
+
+- `build_pipeline()` attaches `TepRootKgdRcaProvider` as the single supported
+  scenario-specific RCA reasoner.
+- Generic adapter, upload, and evaluation callers must not expose
+  `tep_rca_provider` switches. TEP RCA has no public `none/native/simple/artifact`
+  mode split.
+- `TepRootKgdRcaProvider` returns rankings only for TEP Evidence. For non-TEP
+  Evidence it returns an empty RCA result, and `KGTracePipeline` falls back to
+  the generic graph path reasoner.
+- `TepRootKgdRcaProvider` loads static model assets from
+  `data/kg/tep_root_kgd/`.
+- Runtime scoring reads the current `Evidence` payload:
+  `raw_evidence.variable_contributions`, `raw_evidence.extra.graph_contributions`,
+  `raw_evidence.extra.channel_contributions`, and
+  `raw_evidence.extra.root_kgd_dynamic_features`.
+- Runtime scoring must not read TEP_KG per-scenario ranking outputs such as
+  `baseline_root_scores.csv`, `topk_subgraphs`, `root_kgd_rankings.jsonl`, or
+  `rbc_contributions.jsonl`.
+- Fault numbers may appear in evaluation summaries as benchmark references,
+  but must not be used as scoring inputs.
+- `ranked_root_causes[*].explanation_paths` must be a subset of returned
+  `top_k_paths`, so visual review and feedback IDs stay aligned.
+
+Validation:
+
+| Condition | Behavior |
+|---|---|
+| TEP Evidence has no Root-KGD contributions | return empty RCA result, not artifact fallback |
+| public CLI/API asks for provider mode | do not expose that option; Root-KGD is the only TEP RCA mode |
+| Root-KGD asset file is missing | fail fast with the missing file name |
+| non-TEP Evidence reaches Root-KGD provider | return empty RCA result |
+| explanation path is not returned in `top_k_paths` | test failure; candidate paths must be reviewable |
+
 ### 5. Validation & Error Matrix
 
 | Condition | Behavior |
@@ -113,6 +193,12 @@ Rules:
 | API receives expected workflow `ValueError` | map to a structured 4xx response |
 | Runtime KG provider is unavailable for an analysis path | fail with configuration guidance unless an explicit test graph was supplied |
 | A workflow needs KG construction output | accept explicit paths/provider/version; do not run hidden extraction by default |
+| Source-to-KG workflow receives no sources | raise `ValueError` before writing artifacts |
+| Source-to-KG workflow output files already exist | raise `ValueError` unless overwrite is explicit |
+| Source-to-KG API receives unsupported source shape | reject with a structured 4xx response |
+| RCA reasoner is configured | pass the runtime `KnowledgeGraph` snapshot through `reason_root_causes` |
+| Legacy rank-only RCA provider is passed to pipeline | unsupported; implement `reason_root_causes` |
+| Native TEP provider sees non-TEP edges in a mixed graph | ignore them for TEP support-path ranking |
 
 ### 6. Good/Base/Bad Cases
 
@@ -145,6 +231,20 @@ Bad:
 analysis = analyze_and_rebuild_kg(request.evidence)
 ```
 
+Good:
+
+```python
+config = SourceKGConstructionWorkflowConfig(...)
+result = run_source_kg_construction_workflow(config)
+```
+
+Bad:
+
+```python
+# FastAPI route writes KG construction CSVs directly.
+export_kg_csv(nodes, edges, nodes_path=..., edges_path=...)
+```
+
 ### 7. Tests Required
 
 For each extraction:
@@ -168,5 +268,17 @@ uv run --extra dev pytest tests/test_record_producers.py \
   tests/test_noise_experiment_workflow.py \
   tests/test_real_model_pipeline_workflow.py
 uv run --extra dev ruff check src/kgtracevis/workflows scripts
+uv run --extra dev mypy src tests scripts
+```
+
+For source-to-KG construction workflow changes:
+
+```bash
+uv run --extra dev pytest tests/test_source_kg_construction_workflow.py \
+  tests/test_kg_construction_pipeline.py \
+  tests/test_kg_studio.py \
+  tests/test_service_api.py
+uv run --extra dev ruff check src/kgtracevis/workflows/source_kg_construction.py \
+  src/kgtracevis/service/kg_construction.py scripts/build_source_kg.py
 uv run --extra dev mypy src tests scripts
 ```

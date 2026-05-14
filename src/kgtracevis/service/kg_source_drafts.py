@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import csv
-from io import StringIO
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from kgtracevis.kg_construction.confidence_assigner import edge_weight
+from kgtracevis.kg_construction.draft import DraftRelation, draft_relations_from_source_text
 
 SourceDraftProvider = Literal["heuristic"]
 
@@ -62,11 +61,15 @@ class KGSourceDraftResponse(BaseModel):
 
 def generate_source_kg_draft(request: KGSourceDraftRequest) -> KGSourceDraftResponse:
     """Generate schema-compatible candidate edge drafts from structured source lines."""
-    edges = [
-        edge
-        for line in request.source_text.splitlines()
-        if (edge := _edge_from_line(line, request)) is not None
-    ]
+    relations = draft_relations_from_source_text(
+        source_id=request.source_id,
+        source_text=request.source_text,
+        extractor_name=request.provider,
+        extractor_version="v1",
+        default_scenario=request.default_scenario,
+        confidence=request.confidence,
+    )
+    edges = [_edge_from_draft_relation(relation) for relation in relations]
     return KGSourceDraftResponse(
         provider=request.provider,
         source_id=request.source_id,
@@ -75,34 +78,17 @@ def generate_source_kg_draft(request: KGSourceDraftRequest) -> KGSourceDraftResp
     )
 
 
-def _edge_from_line(
-    line: str,
-    request: KGSourceDraftRequest,
-) -> KGSourceDraftEdge | None:
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#"):
-        return None
-    row = next(csv.reader(StringIO(stripped)))
-    if len(row) < 3:
-        return None
-    head = row[0].strip()
-    relation = row[1].strip()
-    tail = row[2].strip()
-    scenario = row[3].strip() if len(row) >= 4 and row[3].strip() else request.default_scenario
-    evidence = row[4].strip() if len(row) >= 5 and row[4].strip() else stripped
-    if not head or not relation or not tail or not scenario:
-        return None
-    edge_id = "|".join([head, relation, tail, scenario])
+def _edge_from_draft_relation(relation: DraftRelation) -> KGSourceDraftEdge:
+    edge_id = "|".join([relation.head, relation.relation, relation.tail, relation.scenario])
     return KGSourceDraftEdge(
         edge_id=edge_id,
-        head=head,
-        relation=relation,
-        tail=tail,
-        scenario=scenario,
-        source=request.source_id,
-        evidence=evidence,
-        confidence=request.confidence,
-        weight=edge_weight(request.confidence),
+        head=relation.head,
+        relation=relation.relation,
+        tail=relation.tail,
+        scenario=relation.scenario,
+        source=relation.source_id,
+        evidence=relation.evidence,
+        confidence=relation.confidence,
+        weight=edge_weight(relation.confidence),
         review_status="auto",
     )
-
