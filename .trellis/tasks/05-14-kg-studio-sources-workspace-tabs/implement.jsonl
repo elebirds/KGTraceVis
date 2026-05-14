@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"Confirm KG invariants and dashboard/service separation before changing workspace UI."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Use current build/test expectations and non-mutating KG constraints for this frontend task."}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Keep source registry, document, and draft-generation UI state aligned with existing API payload contracts."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Reuse existing KG Studio components and avoid parallel source browsing implementations."}

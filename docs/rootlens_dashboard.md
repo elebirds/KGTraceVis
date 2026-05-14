@@ -119,8 +119,9 @@ panel:
 
 - `/kg-studio/overview` shows KG status, validation, source/scenario/review
   counts, and artifact paths.
-- `/kg-studio/sources` shows source registry rows, source documents, and the
-  source-to-KG draft generator.
+- `/kg-studio/sources` is split into in-page workspaces for Source Registry,
+  Source Documents, and Extract Draft, so source browsing and candidate
+  generation do not compete for the same panel space.
 - `/kg-studio/graph` shows the candidate graph, edge browser, and selected edge
   provenance.
 - `/kg-studio/review` shows the review queue and feedback decision panel.
@@ -129,7 +130,9 @@ panel:
 
 Graph, Review, and Draft Lab share a candidate-edge filter bar for text query,
 scenario, source, and review status. Sources has a separate source/document
-search so source curation does not disturb graph review filters. When an edge
+search so source curation does not disturb graph review filters. Inside Sources,
+Registry and Documents share a local source/document search, while Extract Draft
+keeps the structured candidate generation form separate and wider. When an edge
 filter changes, Graph, Review, and Draft Lab keep the selected edge aligned to
 the visible result set, so review and draft actions do not submit against a
 hidden stale edge.

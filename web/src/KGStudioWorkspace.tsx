@@ -10,6 +10,7 @@ import {
   Space,
   Statistic,
   Table,
+  Tabs,
   Tag,
   Typography
 } from "antd";
@@ -53,6 +54,7 @@ import type {
 const { Text, Title, Paragraph } = Typography;
 
 type KGStudioViewKey = "overview" | "sources" | "graph" | "review" | "drafts";
+type KGSourceWorkspaceKey = "registry" | "documents" | "extract";
 
 interface KGStudioFilters {
   query: string;
@@ -469,37 +471,194 @@ function KGStudioSourcesPage({
   ) => void;
   onGenerateSourceDraft: () => void;
 }) {
+  const [activeSourceTab, setActiveSourceTab] = useState<KGSourceWorkspaceKey>("registry");
   const filteredSources = filterSources(payload.sources, sourceQuery);
   const filteredDocuments = filterSourceDocuments(payload.source_documents, sourceQuery);
+  const sourceTabItems = [
+    {
+      key: "registry",
+      label: `Source Registry (${filteredSources.length})`,
+      children: (
+        <SourceRegistryPanel
+          sources={filteredSources}
+          totalCount={payload.sources.length}
+          sourceQuery={sourceQuery}
+          onSourceQueryChanged={onSourceQueryChanged}
+        />
+      )
+    },
+    {
+      key: "documents",
+      label: `Documents (${filteredDocuments.length})`,
+      children: (
+        <SourceDocumentsPanel
+          documents={filteredDocuments}
+          totalCount={payload.source_documents.length}
+          sourceQuery={sourceQuery}
+          onSourceQueryChanged={onSourceQueryChanged}
+        />
+      )
+    },
+    {
+      key: "extract",
+      label: "Extract Draft",
+      children: (
+        <SourceExtractPanel
+          sourceDraftText={sourceDraftText}
+          sourceDraftSourceId={sourceDraftSourceId}
+          sourceDraftScenario={sourceDraftScenario}
+          sourceDraftConfidence={sourceDraftConfidence}
+          sourceDraftResult={sourceDraftResult}
+          onSourceDraftChanged={onSourceDraftChanged}
+          onGenerateSourceDraft={onGenerateSourceDraft}
+        />
+      )
+    }
+  ];
   return (
     <div className="kg-workspace-stack">
-      <Card title="Source-to-KG Draft Generator">
-        <SourceToKGDraftForm
-          sourceText={sourceDraftText}
-          sourceId={sourceDraftSourceId}
-          scenario={sourceDraftScenario}
-          confidence={sourceDraftConfidence}
-          result={sourceDraftResult}
-          onChanged={onSourceDraftChanged}
-          onGenerate={onGenerateSourceDraft}
+      <Card className="source-workspace-card">
+        <Tabs
+          activeKey={activeSourceTab}
+          className="source-workspace-tabs"
+          items={sourceTabItems}
+          onChange={(key) => setActiveSourceTab(key as KGSourceWorkspaceKey)}
         />
       </Card>
-      <Card className="kg-filter-card">
-        <Input.Search
-          allowClear
-          value={sourceQuery}
-          onChange={(event) => onSourceQueryChanged(event.target.value)}
-          placeholder="Search source registry and documents"
-        />
-      </Card>
-      <section className="kg-two-column">
-        <Card title="Source Registry">
-          <KGSourceList sources={filteredSources} />
-        </Card>
-        <Card title="Source Documents">
-          <KGSourceDocumentList documents={filteredDocuments} />
-        </Card>
-      </section>
+    </div>
+  );
+}
+
+function SourceRegistryPanel({
+  sources,
+  totalCount,
+  sourceQuery,
+  onSourceQueryChanged
+}: {
+  sources: KGStudioSource[];
+  totalCount: number;
+  sourceQuery: string;
+  onSourceQueryChanged: (query: string) => void;
+}) {
+  return (
+    <section className="source-workspace-panel">
+      <SourceWorkspaceToolbar
+        title="Registered Sources"
+        description="Source rows available to KG generation, review, and provenance display."
+        resultText={`${sources.length} of ${totalCount} sources`}
+        query={sourceQuery}
+        placeholder="Search source id, title, usage, or path"
+        onQueryChanged={onSourceQueryChanged}
+      />
+      <KGSourceList sources={sources} />
+    </section>
+  );
+}
+
+function SourceDocumentsPanel({
+  documents,
+  totalCount,
+  sourceQuery,
+  onSourceQueryChanged
+}: {
+  documents: KGStudioSourceDocument[];
+  totalCount: number;
+  sourceQuery: string;
+  onSourceQueryChanged: (query: string) => void;
+}) {
+  return (
+    <section className="source-workspace-panel">
+      <SourceWorkspaceToolbar
+        title="Source Documents"
+        description="Downloaded notes and source documents used to ground KG candidate edges."
+        resultText={`${documents.length} of ${totalCount} documents`}
+        query={sourceQuery}
+        placeholder="Search document title, path, or line count"
+        onQueryChanged={onSourceQueryChanged}
+      />
+      <KGSourceDocumentList documents={documents} />
+    </section>
+  );
+}
+
+function SourceExtractPanel({
+  sourceDraftText,
+  sourceDraftSourceId,
+  sourceDraftScenario,
+  sourceDraftConfidence,
+  sourceDraftResult,
+  onSourceDraftChanged,
+  onGenerateSourceDraft
+}: {
+  sourceDraftText: string;
+  sourceDraftSourceId: string;
+  sourceDraftScenario: string;
+  sourceDraftConfidence: string;
+  sourceDraftResult: KGSourceDraftResponse | null;
+  onSourceDraftChanged: (
+    patch: Partial<{
+      sourceDraftText: string;
+      sourceDraftSourceId: string;
+      sourceDraftScenario: string;
+      sourceDraftConfidence: string;
+    }>
+  ) => void;
+  onGenerateSourceDraft: () => void;
+}) {
+  return (
+    <section className="source-workspace-panel source-extract-panel">
+      <div className="source-workspace-heading">
+        <div>
+          <Text strong>Source-to-KG Draft Generator</Text>
+          <Text type="secondary">
+            Convert structured source lines into non-mutating candidate KG edges for review.
+          </Text>
+        </div>
+        <Tag color="gold">append-only preview</Tag>
+      </div>
+      <SourceToKGDraftForm
+        sourceText={sourceDraftText}
+        sourceId={sourceDraftSourceId}
+        scenario={sourceDraftScenario}
+        confidence={sourceDraftConfidence}
+        result={sourceDraftResult}
+        onChanged={onSourceDraftChanged}
+        onGenerate={onGenerateSourceDraft}
+      />
+    </section>
+  );
+}
+
+function SourceWorkspaceToolbar({
+  title,
+  description,
+  resultText,
+  query,
+  placeholder,
+  onQueryChanged
+}: {
+  title: string;
+  description: string;
+  resultText: string;
+  query: string;
+  placeholder: string;
+  onQueryChanged: (query: string) => void;
+}) {
+  return (
+    <div className="source-workspace-toolbar">
+      <div className="source-workspace-heading">
+        <div>
+          <Text strong>{title}</Text>
+          <Text type="secondary">{description}</Text>
+        </div>
+        <Tag color="blue">{resultText}</Tag>
+      </div>
+      <Input.Search
+        allowClear
+        value={query}
+        onChange={(event) => onQueryChanged(event.target.value)}
+        placeholder={placeholder}
+      />
     </div>
   );
 }
