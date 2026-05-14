@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import uuid
+from collections.abc import Generator
 from pathlib import Path
 
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
 from kgtracevis.producers.backends import AMAZON_PATCHCORE_BACKEND, ANOMALIB_ENGINE_BACKEND
@@ -21,6 +24,62 @@ from kgtracevis.service.handlers import (
     record_feedback,
     what_if_request,
 )
+
+
+class InMemoryRunStore:
+    """Small test double for the Postgres run store contract."""
+
+    def __init__(self) -> None:
+        self.details: dict[str, service_runs.RunDetail] = {}
+        self.feedback: list[dict[str, object]] = []
+
+    def save_run(self, detail: service_runs.RunDetail) -> service_runs.RunDetail:
+        self.details[detail.run.run_id] = detail
+        return detail
+
+    def list_runs(self) -> list[service_runs.RunSummary]:
+        return sorted(
+            [detail.run for detail in self.details.values()],
+            key=lambda item: item.created_at,
+            reverse=True,
+        )
+
+    def get_run_detail(self, run_id: str) -> service_runs.RunDetail:
+        if run_id not in self.details:
+            raise ValueError(f"unknown run session: {run_id}")
+        return self.details[run_id]
+
+    def get_artifact_path(self, run_id: str, artifact_name: str) -> str:
+        detail = self.get_run_detail(run_id)
+        artifact_path = Path(detail.run.run_dir) / "artifacts" / artifact_name
+        if not artifact_path.is_file():
+            raise ValueError(f"unknown run artifact: {artifact_name}")
+        return str(artifact_path)
+
+    def record_feedback(self, request: FeedbackRequest) -> dict[str, object]:
+        record = {
+            "feedback_id": str(uuid.uuid4()),
+            **request.model_dump(mode="json"),
+            "action": request.review_action(),
+            "note": request.review_note(),
+        }
+        self.feedback.append(record)
+        return {"status": "recorded", "record": record}
+
+
+@pytest.fixture(autouse=True)
+def postgres_run_store_fixture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[InMemoryRunStore, None, None]:
+    """Route service tests through the run-store contract without a live database."""
+    store = InMemoryRunStore()
+    service_runs.configure_run_store_for_testing(store)
+    monkeypatch.setattr(
+        "kgtracevis.service.handlers._default_feedback_store",
+        lambda: store,
+    )
+    yield store
+    service_runs.configure_run_store_for_testing(None)
 
 
 def test_case_index_includes_checked_in_and_real_output_cases() -> None:
@@ -47,21 +106,21 @@ def test_case_detail_returns_analysis_for_real_outputs() -> None:
 
 
 def test_upload_run_route_persists_a_run_manifest(tmp_path: Path, monkeypatch) -> None:
-    """Uploaded sample bundles should create reusable run-session artifacts."""
+    """Uploaded sample bundles should create reusable Postgres-backed run state."""
     original = service_api.create_run_from_upload
     original_list_runs = service_api.list_runs
     original_get_run_detail = service_api.get_run_detail
 
     def _patched_create_run_from_upload(*args, **kwargs):
-        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        kwargs["runs_dir"] = tmp_path / "run_artifacts"
         return original(*args, **kwargs)
 
     def _patched_list_runs(*args, **kwargs):
-        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        kwargs["runs_dir"] = tmp_path / "run_artifacts"
         return original_list_runs(*args, **kwargs)
 
     def _patched_get_run_detail(*args, **kwargs):
-        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        kwargs["runs_dir"] = tmp_path / "run_artifacts"
         return original_get_run_detail(*args, **kwargs)
 
     monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
@@ -87,8 +146,7 @@ def test_upload_run_route_persists_a_run_manifest(tmp_path: Path, monkeypatch) -
     assert all("review_targets" in case for case in payload["cases"])
 
     run_id = payload["run"]["run_id"]
-    manifest_path = tmp_path / "web_sessions" / run_id / "manifest.json"
-    assert manifest_path.is_file()
+    assert not (tmp_path / "run_artifacts" / run_id / "manifest.json").exists()
 
     runs = client.get("/api/runs")
     run_detail = client.get(f"/api/runs/{run_id}")
@@ -103,6 +161,26 @@ def test_upload_run_route_persists_a_run_manifest(tmp_path: Path, monkeypatch) -
     assert all("target_key" in target for target in payload["review_targets"])
 
 
+def test_default_upload_run_persists_detail_to_postgres(
+    tmp_path: Path,
+    monkeypatch,
+    postgres_run_store_fixture: InMemoryRunStore,
+) -> None:
+    """Default upload persistence should write run detail through the Postgres store."""
+    monkeypatch.setattr(service_runs, "DEFAULT_RUNS_DIR", tmp_path / "rootlens_sessions")
+
+    detail = service_runs.create_run_from_upload(
+        "mvtec_0001.json",
+        Path("data/examples/ds_mvtec_example.json").read_bytes(),
+        mode="evidence",
+        top_k=2,
+    )
+
+    uuid.UUID(detail.run.run_id)
+    assert postgres_run_store_fixture.details[detail.run.run_id].run.run_id == detail.run.run_id
+    assert not (Path(detail.run.run_dir) / "manifest.json").exists()
+
+
 def test_upload_run_prepares_visual_evidence_artifacts(
     tmp_path: Path,
     monkeypatch,
@@ -112,11 +190,11 @@ def test_upload_run_prepares_visual_evidence_artifacts(
     original_get_artifact_path = service_api.get_run_artifact_path
 
     def _patched_create_run_from_upload(*args, **kwargs):
-        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        kwargs["runs_dir"] = tmp_path / "run_artifacts"
         return original(*args, **kwargs)
 
     def _patched_get_run_artifact_path(*args, **kwargs):
-        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        kwargs["runs_dir"] = tmp_path / "run_artifacts"
         return original_get_artifact_path(*args, **kwargs)
 
     monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
@@ -186,42 +264,31 @@ def test_upload_run_prepares_visual_evidence_artifacts(
     assert artifact_response.headers["content-type"] == "image/png"
 
 
-def test_default_run_store_prefers_rootlens_and_reads_legacy(
-    tmp_path: Path,
-) -> None:
-    """Dashboard run discovery should use RootLens sessions while reading legacy runs."""
-    rootlens_detail = service_runs.create_run_from_upload(
-        "mvtec_records.jsonl",
-        Path("data/examples/records/mvtec_records.jsonl").read_bytes(),
-        mode="records",
-        top_k=2,
-        runs_dir=tmp_path / "rootlens_sessions",
+def test_default_run_store_reads_configured_store() -> None:
+    """Default run discovery should use Postgres, not legacy filesystem sessions."""
+    detail = service_runs.RunDetail(
+        run=service_runs.RunSummary(
+            run_id="33333333-3333-3333-3333-333333333333",
+            created_at="2026-05-14T00:00:00+00:00",
+            mode="records",
+            source_filename="records.jsonl",
+            top_k=2,
+            run_dir="runs/rootlens_sessions/33333333-3333-3333-3333-333333333333",
+            status="completed",
+            dataset="mvtec",
+            case_count=1,
+            evidence_count=1,
+            label="records.jsonl · 1 cases",
+        ),
+        workflow_steps=[],
+        claim_boundary="candidate/plausible explanation only",
     )
-    legacy_detail = service_runs.create_run_from_upload(
-        "wafer_record.jsonl",
-        Path("data/examples/records/wm811k_records.jsonl").read_bytes(),
-        mode="records",
-        top_k=2,
-        runs_dir=tmp_path / "web_sessions",
-    )
+    service_runs._run_store().save_run(detail)
 
-    monkeypatch_dirs = (tmp_path / "rootlens_sessions", tmp_path / "web_sessions")
-    original_default = service_runs.DEFAULT_RUNS_DIR
-    original_legacy = service_runs.LEGACY_WEB_RUNS_DIR
-    try:
-        service_runs.DEFAULT_RUNS_DIR = monkeypatch_dirs[0]
-        service_runs.LEGACY_WEB_RUNS_DIR = monkeypatch_dirs[1]
-        runs = service_runs.list_runs()
-        assert {run.run_id for run in runs} == {
-            rootlens_detail.run.run_id,
-            legacy_detail.run.run_id,
-        }
-        assert service_runs.get_run_detail(legacy_detail.run.run_id).run.run_id == (
-            legacy_detail.run.run_id
-        )
-    finally:
-        service_runs.DEFAULT_RUNS_DIR = original_default
-        service_runs.LEGACY_WEB_RUNS_DIR = original_legacy
+    runs = service_runs.list_runs()
+
+    assert [run.run_id for run in runs] == ["33333333-3333-3333-3333-333333333333"]
+    assert service_runs.get_run_detail(runs[0].run_id).run.run_id == runs[0].run_id
 
 
 def test_image_upload_mode_defaults_to_unknown_label_when_unspecified(
@@ -232,7 +299,7 @@ def test_image_upload_mode_defaults_to_unknown_label_when_unspecified(
     original = service_api.create_run_from_upload
 
     def _patched_create_run_from_upload(*args, **kwargs):
-        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        kwargs["runs_dir"] = tmp_path / "run_artifacts"
         return original(*args, **kwargs)
 
     monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
@@ -409,7 +476,7 @@ def test_mvtec_model_preset_route_ignores_amazon_patchcore_lfs_pointers(
 
 def test_model_asset_download_route_uses_default_asset(monkeypatch) -> None:
     """The API should expose a trusted default model asset download action."""
-    captured: dict[str, object] = {}
+    captured: dict[str, dict[str, object]] = {}
 
     def _patched_download_model_assets(*, models, force=False):
         captured["models"] = models
@@ -447,7 +514,7 @@ def test_image_upload_missing_requested_model_preset_returns_400(
     original = service_api.create_run_from_upload
 
     def _patched_create_run_from_upload(*args, **kwargs):
-        kwargs["runs_dir"] = tmp_path / "web_sessions"
+        kwargs["runs_dir"] = tmp_path / "run_artifacts"
         return original(*args, **kwargs)
 
     monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
@@ -501,7 +568,7 @@ def test_image_upload_mode_runs_mvtec_producer_path(tmp_path: Path, monkeypatch)
         defect_type="crack",
         model_preset="patchcore",
         top_k=2,
-        runs_dir=tmp_path / "web_sessions",
+        runs_dir=tmp_path / "run_artifacts",
     )
 
     assert detail.run.mode == "image"
@@ -554,7 +621,7 @@ def test_image_upload_mode_resolves_amazon_patchcore_object_root(
         defect_type=None,
         model_preset="patchcore",
         top_k=2,
-        runs_dir=tmp_path / "web_sessions",
+        runs_dir=tmp_path / "run_artifacts",
     )
 
     assert captured["checkpoint"] == capsule_checkpoint
@@ -583,9 +650,8 @@ def test_what_if_request_clears_stale_observations_and_runs_analysis() -> None:
     assert result["analysis"]["case_id"] == "mvtec_0001"
 
 
-def test_feedback_record_is_appended_to_jsonl(tmp_path: Path) -> None:
-    """Feedback submissions should persist as JSONL for later review."""
-    output_path = tmp_path / "feedback.jsonl"
+def test_feedback_record_is_persisted_to_postgres_store() -> None:
+    """Feedback submissions should persist through the Postgres store contract."""
     receipt = record_feedback(
         FeedbackRequest(
             case_id="mvtec_0001",
@@ -594,23 +660,20 @@ def test_feedback_record_is_appended_to_jsonl(tmp_path: Path) -> None:
             decision="accept",
             comment="good candidate",
         ),
-        output_path=output_path,
     )
 
     assert receipt["status"] == "recorded"
-    assert output_path.exists()
-    saved = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
-    assert saved[0]["case_id"] == "mvtec_0001"
-    assert saved[0]["target_id"] == "path_123"
-    assert saved[0]["action"] == "accept"
+    saved = receipt["record"]
+    assert saved["case_id"] == "mvtec_0001"
+    assert saved["target_id"] == "path_123"
+    assert saved["action"] == "accept"
 
 
-def test_review_feedback_contract_accepts_dashboard_actions(tmp_path: Path) -> None:
+def test_review_feedback_contract_accepts_dashboard_actions() -> None:
     """Dashboard review actions should persist without mutating the base KG."""
-    output_path = tmp_path / "feedback.jsonl"
     receipt = record_feedback(
         FeedbackRequest(
-            run_id="run_123",
+            run_id="33333333-3333-3333-3333-333333333333",
             case_id="mvtec_0001",
             target_type="edge",
             target_id="ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
@@ -619,15 +682,65 @@ def test_review_feedback_contract_accepts_dashboard_actions(tmp_path: Path) -> N
             reviewer="analyst",
             source="rootlens-dashboard",
         ),
-        output_path=output_path,
     )
 
     assert receipt["status"] == "recorded"
-    saved = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
-    assert saved[0]["target_type"] == "edge"
-    assert saved[0]["action"] == "needs_review"
-    assert saved[0]["note"] == "expert wants source checked"
-    assert saved[0]["source"] == "rootlens-dashboard"
+    saved = receipt["record"]
+    assert saved["target_type"] == "edge"
+    assert saved["action"] == "needs_review"
+    assert saved["note"] == "expert wants source checked"
+    assert saved["source"] == "rootlens-dashboard"
+
+
+def test_feedback_record_defaults_to_postgres_store(monkeypatch) -> None:
+    """Feedback without an explicit output path should use Postgres persistence."""
+    captured: dict[str, dict[str, object]] = {}
+
+    class FakeStore:
+        def record_feedback(self, request):
+            record = {
+                **request.model_dump(mode="json"),
+                "action": request.review_action(),
+                "note": request.review_note(),
+            }
+            captured["record"] = record
+            return {"status": "recorded", "record": record}
+
+    monkeypatch.setattr(
+        "kgtracevis.service.handlers._default_feedback_store",
+        lambda: FakeStore(),
+    )
+
+    receipt = record_feedback(
+        FeedbackRequest(
+            run_id="33333333-3333-3333-3333-333333333333",
+            target_type="path",
+            target_id="path_123",
+            action="accept",
+        )
+    )
+
+    assert receipt["status"] == "recorded"
+    assert captured["record"]["target_type"] == "path"
+    assert captured["record"]["action"] == "accept"
+
+
+def test_feedback_record_requires_configured_postgres_store(monkeypatch) -> None:
+    """Feedback should fail explicitly when no Postgres runtime store is configured."""
+    monkeypatch.setattr(
+        "kgtracevis.service.handlers._default_feedback_store",
+        lambda: None,
+    )
+
+    with pytest.raises(ValueError, match="Postgres feedback store is not configured"):
+        record_feedback(
+            FeedbackRequest(
+                run_id="33333333-3333-3333-3333-333333333333",
+                target_type="path",
+                target_id="path_123",
+                action="accept",
+            )
+        )
 
 
 def test_fastapi_routes_are_wired() -> None:

@@ -86,3 +86,17 @@ POSTGRES_DB
 POSTGRES_USER
 POSTGRES_PASSWORD
 ```
+
+## API Runtime State
+
+The FastAPI run-history and feedback endpoints use Postgres as the runtime
+source of truth. `analysis_runs.run_id` is the public API run ID and is stored as
+a UUID. Run detail responses are assembled from `evidence_cases`,
+`analysis_runs`, `run_evidence_cases`, `linked_entities`,
+`consistency_checks`, `correction_candidates`, `ranked_paths`, `artifacts`, and
+`feedback_records`; there is no legacy filesystem runtime fallback and no
+run-detail snapshot table.
+
+Uploaded source files and generated visualization artifacts can still live under
+the run artifact directory so the API can serve files, but list/detail/feedback
+state should be queried from Postgres by default.

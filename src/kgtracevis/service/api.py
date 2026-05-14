@@ -180,7 +180,10 @@ def create_app() -> FastAPI:
 
     @app.post("/api/feedback")
     def feedback(request: FeedbackRequest) -> dict[str, object]:
-        return record_feedback(request)
+        try:
+            return record_feedback(request)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return app
 

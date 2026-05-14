@@ -44,12 +44,11 @@ from kgtracevis.service.visual_evidence import (
     normalize_visual_evidence_items,
 )
 
-ROOTLENS_RUNS_DIR = Path("runs/rootlens_sessions")
-LEGACY_WEB_RUNS_DIR = Path("runs/web_sessions")
-DEFAULT_RUNS_DIR = ROOTLENS_RUNS_DIR
+DEFAULT_RUNS_DIR = Path("runs/rootlens_sessions")
 DEFAULT_MVTEC_UPLOAD_CHECKPOINT = DEFAULT_MVTEC_STFPM_CHECKPOINT
 UploadMode = Literal["evidence", "records", "image"]
 RunStatus = Literal["completed", "failed"]
+_RUN_STORE_OVERRIDE: Any | None = None
 
 
 class WorkflowStep(BaseModel):
@@ -112,23 +111,11 @@ def list_runs(
     runs_dir: str | Path | None = None,
 ) -> list[RunSummary]:
     """Return persisted uploaded-sample runs, newest first."""
-    runs: list[RunSummary] = []
-    seen: set[str] = set()
-    for base in _run_store_dirs(runs_dir):
-        if not base.exists():
-            continue
-        for manifest_path in sorted(base.glob("*/manifest.json")):
-            try:
-                detail = RunDetail.model_validate_json(
-                    manifest_path.read_text(encoding="utf-8")
-                )
-            except Exception:
-                continue
-            if detail.run.run_id in seen:
-                continue
-            seen.add(detail.run.run_id)
-            runs.append(detail.run)
-    return sorted(runs, key=lambda item: item.created_at, reverse=True)
+    _ = runs_dir
+    store = _run_store()
+    if store is None:
+        return []
+    return [RunSummary.model_validate(item) for item in store.list_runs()]
 
 
 def get_run_detail(
@@ -137,14 +124,11 @@ def get_run_detail(
     runs_dir: str | Path | None = None,
 ) -> RunDetail:
     """Load one persisted run detail by ID."""
-    for base in _run_store_dirs(runs_dir):
-        manifest_path = base / run_id / "manifest.json"
-        if manifest_path.is_file():
-            detail = RunDetail.model_validate_json(
-                manifest_path.read_text(encoding="utf-8")
-            )
-            return _enrich_run_detail(detail)
-    raise ValueError(f"unknown run session: {run_id}")
+    _ = runs_dir
+    store = _run_store()
+    if store is None:
+        raise ValueError("Postgres run store is not configured")
+    return _enrich_run_detail(RunDetail.model_validate(store.get_run_detail(run_id)))
 
 
 def get_run_artifact_path(
@@ -156,8 +140,11 @@ def get_run_artifact_path(
     """Return a safe run artifact path by filename."""
     if artifact_name != Path(artifact_name).name:
         raise ValueError("artifact name must not contain path separators")
-    detail = get_run_detail(run_id, runs_dir=runs_dir)
-    artifact_path = Path(detail.run.run_dir) / "artifacts" / artifact_name
+    _ = runs_dir
+    store = _run_store()
+    if store is None:
+        raise ValueError("Postgres run store is not configured")
+    artifact_path = Path(store.get_artifact_path(run_id, artifact_name))
     if not artifact_path.is_file():
         raise ValueError(f"unknown run artifact: {artifact_name}")
     return artifact_path
@@ -181,7 +168,7 @@ def create_run_from_upload(
         raise ValueError("top_k must be >= 1")
 
     base_dir = Path(runs_dir or DEFAULT_RUNS_DIR)
-    run_id = _build_run_id(filename)
+    run_id = _build_run_id()
     run_dir = base_dir / run_id
     input_dir = run_dir / "input"
     output_dir = run_dir / "output"
@@ -232,9 +219,10 @@ def create_run_from_upload(
     else:
         raise ValueError("upload mode must be evidence, records, or image")
 
-    manifest_path = run_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(detail.model_dump(mode="json"), indent=2), encoding="utf-8")
-    return detail
+    store = _run_store()
+    if store is None:
+        raise ValueError("Postgres run store is not configured")
+    return RunDetail.model_validate(store.save_run(detail))
 
 
 def parse_upload_mode(value: str) -> UploadMode:
@@ -498,11 +486,13 @@ def _run_records_upload(
         if isinstance(first_case, dict):
             inferred_dataset = first_case.get("dataset")
     dataset_name = str(
-        summary.get("input", {}).get("dataset_override")
-        or dataset
+        dataset
         or inferred_dataset
-        or "auto"
+        or summary.get("input", {}).get("dataset_override")
+        or "mvtec"
     )
+    if dataset_name not in {"mvtec", "tep", "wafer"}:
+        dataset_name = "mvtec"
     run = RunSummary(
         run_id=run_id,
         created_at=created_at,
@@ -786,6 +776,25 @@ def _enrich_run_detail(detail: RunDetail) -> RunDetail:
     visual_evidence = normalize_visual_evidence_items(detail.visual_evidence)
     if visual_evidence != detail.visual_evidence:
         changed = True
+    cases = []
+    for case in detail.cases:
+        row = dict(case)
+        top_k_paths = _list_of_dicts(row.get("top_k_paths"))
+        linked_entities = _list_of_dicts(row.get("linked_entities"))
+        correction_candidates = _list_of_dicts(row.get("correction_candidates"))
+        source_edges = _list_of_dicts(row.get("source_edge_provenance"))
+        if not row.get("path_graph"):
+            row["path_graph"] = _path_graph_from_paths(top_k_paths)
+            changed = True
+        if not row.get("review_targets"):
+            row["review_targets"] = _review_targets(
+                linked_entities=linked_entities,
+                correction_candidates=correction_candidates,
+                top_k_paths=top_k_paths,
+                source_edges=source_edges,
+            )
+            changed = True
+        cases.append(row)
     if not changed:
         return detail
     return detail.model_copy(
@@ -793,6 +802,7 @@ def _enrich_run_detail(detail: RunDetail) -> RunDetail:
             "path_graph": path_graph,
             "review_targets": review_targets,
             "visual_evidence": visual_evidence,
+            "cases": cases,
         }
     )
 
@@ -1028,18 +1038,22 @@ def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
     return [dict(item) for item in value if isinstance(item, dict)]
 
 
-def _run_store_dirs(runs_dir: str | Path | None) -> list[Path]:
-    if runs_dir is None:
-        return [DEFAULT_RUNS_DIR, LEGACY_WEB_RUNS_DIR]
-    primary = Path(runs_dir)
-    if primary != DEFAULT_RUNS_DIR:
-        return [primary]
-    return [DEFAULT_RUNS_DIR, LEGACY_WEB_RUNS_DIR]
+def configure_run_store_for_testing(store: Any | None) -> None:
+    """Override the runtime run store in tests."""
+    global _RUN_STORE_OVERRIDE
+    _RUN_STORE_OVERRIDE = store
 
 
-def _build_run_id(filename: str) -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return f"run_{stamp}_{uuid.uuid4().hex[:8]}_{_safe_filename(Path(filename).stem)}"
+def _build_run_id() -> str:
+    return str(uuid.uuid4())
+
+
+def _run_store() -> Any:
+    if _RUN_STORE_OVERRIDE is not None:
+        return _RUN_STORE_OVERRIDE
+    from kgtracevis.service.postgres_run_store import PostgresRunStore
+
+    return PostgresRunStore.from_environment()
 
 
 def _safe_filename(value: str) -> str:

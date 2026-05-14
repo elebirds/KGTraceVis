@@ -5,12 +5,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
 
 from fastapi.testclient import TestClient
 
 from kgtracevis.service import api as service_api
-from kgtracevis.service import handlers as service_handlers
 from kgtracevis.service import kg_drafts as service_kg_drafts
 from kgtracevis.service import runs as service_runs
 
@@ -36,22 +34,14 @@ def main() -> None:
         "--persist-runs",
         type=Path,
         default=None,
-        help="Optional run directory. By default, temporary smoke artifacts are removed.",
-    )
-    parser.add_argument(
-        "--feedback-path",
-        type=Path,
-        default=None,
-        help="Optional feedback JSONL path. Defaults to the smoke artifact directory.",
+        help="Optional artifact directory. By default, temporary smoke artifacts are removed.",
     )
     args = parser.parse_args()
 
     if args.persist_runs is not None:
-        feedback_path = args.feedback_path or args.persist_runs / "feedback.jsonl"
         _run_smoke(
             args.example,
             run_dir=args.persist_runs,
-            feedback_path=feedback_path,
             draft_path=args.persist_runs / "kg_drafts.jsonl",
             top_k=args.top_k,
         )
@@ -62,7 +52,6 @@ def main() -> None:
         _run_smoke(
             args.example,
             run_dir=temp_path / "runs",
-            feedback_path=args.feedback_path or temp_path / "feedback.jsonl",
             draft_path=temp_path / "kg_drafts.jsonl",
             top_k=args.top_k,
         )
@@ -72,7 +61,6 @@ def _run_smoke(
     example_path: Path,
     *,
     run_dir: Path,
-    feedback_path: Path,
     draft_path: Path,
     top_k: int,
 ) -> None:
@@ -83,19 +71,12 @@ def _run_smoke(
 
     run_dir.mkdir(parents=True, exist_ok=True)
     service_runs.DEFAULT_RUNS_DIR = run_dir
-    service_runs.LEGACY_WEB_RUNS_DIR = run_dir / "legacy"
-
-    def record_feedback_to_smoke_path(
-        request: service_handlers.FeedbackRequest,
-    ) -> dict[str, Any]:
-        return service_handlers.record_feedback(request, output_path=feedback_path)
 
     def record_kg_draft_to_smoke_path(
         request: service_kg_drafts.KGDraftRequest,
     ) -> dict[str, object]:
         return service_kg_drafts.record_kg_draft(request, output_path=draft_path)
 
-    service_api.record_feedback = record_feedback_to_smoke_path
     service_api.record_kg_draft = record_kg_draft_to_smoke_path
 
     client = TestClient(service_api.create_app())
@@ -218,11 +199,10 @@ def _run_smoke(
     )
     _require(feedback.status_code == 200, f"feedback submit failed: {feedback.text}")
     _require(feedback.json()["status"] == "recorded", "feedback was not recorded")
-    _require(feedback_path.is_file(), "feedback JSONL was not written")
 
     print(
         "RootLens dashboard smoke passed: "
-        f"run_id={run_id}, target_key={target['target_key']}, feedback_path={feedback_path}"
+        f"run_id={run_id}, target_key={target['target_key']}"
     )
 
 

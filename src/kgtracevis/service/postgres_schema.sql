@@ -21,11 +21,14 @@ BEGIN
         'correction_candidate',
         'ranked_path',
         'kg_edge',
-        'kg_node'
+        'kg_node',
+        'case'
     );
 EXCEPTION
     WHEN duplicate_object THEN NULL;
 END $$;
+
+ALTER TYPE feedback_target_type ADD VALUE IF NOT EXISTS 'case';
 
 DO $$
 BEGIN
@@ -77,6 +80,7 @@ CREATE TABLE IF NOT EXISTS evidence_cases (
     anomaly_type text,
     source text,
     timestamp timestamptz,
+    evidence_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
     raw_evidence jsonb NOT NULL,
     normalized_evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
     human_feedback jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -87,8 +91,18 @@ CREATE TABLE IF NOT EXISTS evidence_cases (
 
 CREATE TABLE IF NOT EXISTS analysis_runs (
     run_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    case_pk uuid NOT NULL REFERENCES evidence_cases(id) ON DELETE CASCADE,
+    case_pk uuid REFERENCES evidence_cases(id) ON DELETE SET NULL,
     dataset dataset_name NOT NULL,
+    mode text NOT NULL DEFAULT 'evidence',
+    source_filename text NOT NULL DEFAULT 'upload',
+    top_k integer NOT NULL DEFAULT 5,
+    run_dir text NOT NULL DEFAULT '',
+    case_count integer NOT NULL DEFAULT 0,
+    evidence_count integer NOT NULL DEFAULT 0,
+    label text NOT NULL DEFAULT 'Analysis run',
+    claim_boundary text NOT NULL DEFAULT 'candidate/plausible explanation only; not a verified root-cause label',
+    model_preset text,
+    model_backend text,
     kg_version text REFERENCES kg_versions(kg_version),
     pipeline_version text,
     status text NOT NULL DEFAULT 'completed',
@@ -99,9 +113,19 @@ CREATE TABLE IF NOT EXISTS analysis_runs (
     error_message text
 );
 
+CREATE TABLE IF NOT EXISTS run_evidence_cases (
+    run_id uuid NOT NULL REFERENCES analysis_runs(run_id) ON DELETE CASCADE,
+    case_pk uuid NOT NULL REFERENCES evidence_cases(id) ON DELETE CASCADE,
+    case_order integer NOT NULL DEFAULT 0,
+    generated_evidence_path text,
+    adapter_name text,
+    PRIMARY KEY (run_id, case_pk)
+);
+
 CREATE TABLE IF NOT EXISTS linked_entities (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     run_id uuid NOT NULL REFERENCES analysis_runs(run_id) ON DELETE CASCADE,
+    case_pk uuid REFERENCES evidence_cases(id) ON DELETE CASCADE,
     link_id text NOT NULL,
     field text NOT NULL,
     mention text NOT NULL,
@@ -111,12 +135,13 @@ CREATE TABLE IF NOT EXISTS linked_entities (
     match_type text NOT NULL,
     ambiguous boolean NOT NULL DEFAULT false,
     candidates jsonb NOT NULL DEFAULT '[]'::jsonb,
-    UNIQUE (run_id, link_id)
+    UNIQUE (run_id, case_pk, link_id)
 );
 
 CREATE TABLE IF NOT EXISTS consistency_checks (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     run_id uuid NOT NULL REFERENCES analysis_runs(run_id) ON DELETE CASCADE,
+    case_pk uuid REFERENCES evidence_cases(id) ON DELETE CASCADE,
     consistency_score double precision NOT NULL,
     inconsistent_fields text[] NOT NULL DEFAULT '{}',
     checks jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -126,6 +151,7 @@ CREATE TABLE IF NOT EXISTS consistency_checks (
 CREATE TABLE IF NOT EXISTS correction_candidates (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     run_id uuid NOT NULL REFERENCES analysis_runs(run_id) ON DELETE CASCADE,
+    case_pk uuid REFERENCES evidence_cases(id) ON DELETE CASCADE,
     candidate_id text NOT NULL,
     field text NOT NULL,
     original_value text,
@@ -135,12 +161,13 @@ CREATE TABLE IF NOT EXISTS correction_candidates (
     reason text,
     source_edges jsonb NOT NULL DEFAULT '[]'::jsonb,
     payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-    UNIQUE (run_id, candidate_id)
+    UNIQUE (run_id, case_pk, candidate_id)
 );
 
 CREATE TABLE IF NOT EXISTS ranked_paths (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     run_id uuid NOT NULL REFERENCES analysis_runs(run_id) ON DELETE CASCADE,
+    case_pk uuid REFERENCES evidence_cases(id) ON DELETE CASCADE,
     path_id text NOT NULL,
     rank integer NOT NULL,
     source_entity_id text,
@@ -153,7 +180,7 @@ CREATE TABLE IF NOT EXISTS ranked_paths (
     source_edge_ids text[] NOT NULL DEFAULT '{}',
     supporting_evidence jsonb NOT NULL DEFAULT '[]'::jsonb,
     payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-    UNIQUE (run_id, path_id)
+    UNIQUE (run_id, case_pk, path_id)
 );
 
 CREATE TABLE IF NOT EXISTS feedback_records (
@@ -208,20 +235,106 @@ CREATE TABLE IF NOT EXISTS artifacts (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE evidence_cases
+    ADD COLUMN IF NOT EXISTS evidence_payload jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE analysis_runs
+    ALTER COLUMN case_pk DROP NOT NULL;
+
+ALTER TABLE analysis_runs
+    ADD COLUMN IF NOT EXISTS mode text NOT NULL DEFAULT 'evidence',
+    ADD COLUMN IF NOT EXISTS source_filename text NOT NULL DEFAULT 'upload',
+    ADD COLUMN IF NOT EXISTS top_k integer NOT NULL DEFAULT 5,
+    ADD COLUMN IF NOT EXISTS run_dir text NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS case_count integer NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS evidence_count integer NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS label text NOT NULL DEFAULT 'Analysis run',
+    ADD COLUMN IF NOT EXISTS claim_boundary text NOT NULL DEFAULT 'candidate/plausible explanation only; not a verified root-cause label',
+    ADD COLUMN IF NOT EXISTS model_preset text,
+    ADD COLUMN IF NOT EXISTS model_backend text;
+
+ALTER TABLE linked_entities
+    ADD COLUMN IF NOT EXISTS case_pk uuid REFERENCES evidence_cases(id) ON DELETE CASCADE;
+
+ALTER TABLE consistency_checks
+    ADD COLUMN IF NOT EXISTS case_pk uuid REFERENCES evidence_cases(id) ON DELETE CASCADE;
+
+ALTER TABLE correction_candidates
+    ADD COLUMN IF NOT EXISTS case_pk uuid REFERENCES evidence_cases(id) ON DELETE CASCADE;
+
+ALTER TABLE ranked_paths
+    ADD COLUMN IF NOT EXISTS case_pk uuid REFERENCES evidence_cases(id) ON DELETE CASCADE;
+
+ALTER TABLE linked_entities
+    DROP CONSTRAINT IF EXISTS linked_entities_run_id_link_id_key;
+ALTER TABLE correction_candidates
+    DROP CONSTRAINT IF EXISTS correction_candidates_run_id_candidate_id_key;
+ALTER TABLE ranked_paths
+    DROP CONSTRAINT IF EXISTS ranked_paths_run_id_path_id_key;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'linked_entities_run_case_link_key'
+    ) THEN
+        ALTER TABLE linked_entities
+            ADD CONSTRAINT linked_entities_run_case_link_key UNIQUE (run_id, case_pk, link_id);
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'correction_candidates_run_case_candidate_key'
+    ) THEN
+        ALTER TABLE correction_candidates
+            ADD CONSTRAINT correction_candidates_run_case_candidate_key
+            UNIQUE (run_id, case_pk, candidate_id);
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'ranked_paths_run_case_path_key'
+    ) THEN
+        ALTER TABLE ranked_paths
+            ADD CONSTRAINT ranked_paths_run_case_path_key UNIQUE (run_id, case_pk, path_id);
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_evidence_cases_dataset_case
     ON evidence_cases(dataset, case_id);
 CREATE INDEX IF NOT EXISTS idx_analysis_runs_case
     ON analysis_runs(case_pk, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_analysis_runs_dataset
     ON analysis_runs(dataset, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_run_evidence_cases_run
+    ON run_evidence_cases(run_id, case_order);
 CREATE INDEX IF NOT EXISTS idx_linked_entities_run
     ON linked_entities(run_id);
+CREATE INDEX IF NOT EXISTS idx_linked_entities_case
+    ON linked_entities(case_pk);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_linked_entities_run_case_link_unique
+    ON linked_entities(run_id, case_pk, link_id);
 CREATE INDEX IF NOT EXISTS idx_consistency_checks_run
     ON consistency_checks(run_id);
+CREATE INDEX IF NOT EXISTS idx_consistency_checks_case
+    ON consistency_checks(case_pk);
 CREATE INDEX IF NOT EXISTS idx_correction_candidates_run
     ON correction_candidates(run_id);
+CREATE INDEX IF NOT EXISTS idx_correction_candidates_case
+    ON correction_candidates(case_pk);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_correction_candidates_run_case_candidate_unique
+    ON correction_candidates(run_id, case_pk, candidate_id);
 CREATE INDEX IF NOT EXISTS idx_ranked_paths_run_rank
     ON ranked_paths(run_id, rank);
+CREATE INDEX IF NOT EXISTS idx_ranked_paths_case_rank
+    ON ranked_paths(case_pk, rank);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ranked_paths_run_case_path_unique
+    ON ranked_paths(run_id, case_pk, path_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_target
     ON feedback_records(target_type, target_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_run

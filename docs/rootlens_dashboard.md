@@ -80,8 +80,8 @@ the baseline dashboard smoke.
   and recent runs.
 - `POST /api/runs/upload` accepts evidence JSON, producer records, or one
   MVTec image upload.
-- `GET /api/runs` lists persisted run summaries from `runs/rootlens_sessions/`
-  and legacy `runs/web_sessions/`.
+- `GET /api/runs` lists persisted run summaries from Postgres
+  `analysis_runs`.
 - `GET /api/runs/{run_id}` returns a run detail with workflow steps, evidence
   summary, linked entities, correction candidates, top-k paths, a derived
   `path_graph`, visual evidence previews, source edge provenance, and review
@@ -97,12 +97,13 @@ the baseline dashboard smoke.
 - `POST /api/kg/source-draft` converts structured source lines into
   schema-compatible candidate edge drafts. The default `heuristic` provider runs
   without external LLM credentials and keeps all generated rows review-only.
-- `POST /api/feedback` appends review feedback records with `target_type`,
+- `POST /api/feedback` writes review feedback records to Postgres
+  `feedback_records` with `target_type`,
   `target_id`, `action`, optional note/reviewer/source metadata, and run/case
   context.
 
-Review feedback is append-only history under `runs/web_feedback/feedback.jsonl`.
-It does not promote or mutate KG CSV edges.
+Review feedback does not promote or mutate KG edges directly. It remains
+reviewable application state in Postgres.
 
 The run detail view includes a focused evidence workspace. MVTec producer
 records can expose source image, mask, and heatmap previews; WM811K records can

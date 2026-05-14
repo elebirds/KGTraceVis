@@ -159,6 +159,14 @@ queries, app-state persistence, or schema migrations.
 - Postgres app truth: evidence cases, analysis runs, linked entities,
   consistency checks, correction candidates, ranked paths, feedback, drafts,
   review actions, artifacts, KG version metadata
+- API run history and feedback default to Postgres. Uploaded files may remain
+  artifact files, but `/api/runs` list/detail and `/api/feedback` must not use
+  legacy `runs/rootlens_sessions` or `runs/web_sessions` JSON as runtime
+  fallback.
+- `analysis_runs.run_id` is the public API run ID. New service run IDs must be
+  UUID strings rather than mapped through an `external_run_id`.
+- Do not add a run-detail snapshot table; reconstruct API details from
+  normalized runtime tables.
 
 ### 4. Validation & Error Matrix
 

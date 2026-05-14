@@ -187,6 +187,11 @@ Postgres  evidence cases, analysis runs, feedback, drafts, review state
 CSV/JSON   seed/import/export artifacts for reproducibility, not runtime state
 ```
 
+API run history and feedback use Postgres as the source of truth. Uploaded
+input files and generated artifacts may still be written under `runs/`, but the
+default `/api/runs` and `/api/feedback` paths do not read or append legacy
+session JSON files.
+
 Start the local services:
 
 ```bash
@@ -537,9 +542,10 @@ If Make is not available, use the PowerShell helper instead:
 
 The FastAPI upload workflow currently accepts evidence JSON, producer-record
 bundles (`.json`, `.jsonl`, or `.csv`), or a raw MVTec-style image, and writes
-new dashboard run artifacts under `runs/rootlens_sessions/`. Run history still
-reads legacy `runs/web_sessions/` manifests for compatibility. Image mode uses
-a selectable MVTec anomaly-detection/localization preset. `auto` prefers
+new dashboard run artifacts under `runs/rootlens_sessions/`. Run list/detail
+state is read from Postgres `analysis_runs` and related runtime tables, not
+legacy session manifests. Image mode uses a selectable MVTec
+anomaly-detection/localization preset. `auto` prefers
 EfficientAD, then PatchCore, then the checked-in STFPM OpenVINO checkpoint.
 Configure replacement
 weights with `KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT` or
@@ -559,8 +565,8 @@ trusted source.
 The RootLens dashboard initializes through `GET /api/dashboard/bootstrap`,
 uploads through `POST /api/runs/upload`, reloads history through `GET /api/runs`
 and `GET /api/runs/{run_id}`, and records review feedback with `POST
-/api/feedback`. Review feedback is persisted as history under
-`runs/web_feedback/feedback.jsonl`; it does not mutate base KG CSV files.
+/api/feedback`. Run history and review feedback are persisted in Postgres; they
+do not mutate the Neo4j KG or tracked KG seed CSV files.
 
 ## Unified Evidence Schema
 

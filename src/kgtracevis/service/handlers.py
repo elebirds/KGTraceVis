@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -21,8 +19,6 @@ DEFAULT_EVIDENCE_DIRS = (
     Path("runs/real_model_pipeline/assets/mvtec/adapter_pipeline/evidence"),
     Path("runs/real_model_pipeline/assets/wm811k/adapter_pipeline/evidence"),
 )
-DEFAULT_FEEDBACK_PATH = Path("runs/web_feedback/feedback.jsonl")
-
 FeedbackTargetType = Literal["path", "edge", "entity_link", "correction", "case", "link"]
 FeedbackAction = Literal["accept", "reject", "needs_review"]
 FeedbackDecision = Literal["accept", "reject", "comment"]
@@ -178,27 +174,14 @@ def what_if_request(
 def record_feedback(
     request: FeedbackRequest,
     *,
-    output_path: str | Path = DEFAULT_FEEDBACK_PATH,
+    output_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Append one lightweight feedback record to JSONL and return a receipt."""
-    destination = Path(output_path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    action = request.review_action()
-    note = request.review_note()
-    record = {
-        "feedback_id": _feedback_id(request),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        **request.model_dump(mode="json"),
-        "action": action,
-        "note": note,
-    }
-    with destination.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-    return {
-        "status": "recorded",
-        "feedback_path": str(destination),
-        "record": record,
-    }
+    """Persist one lightweight feedback record in Postgres and return a receipt."""
+    _ = output_path
+    store = _default_feedback_store()
+    if store is None:
+        raise ValueError("Postgres feedback store is not configured")
+    return store.record_feedback(request)
 
 
 def _analysis_envelope(
@@ -336,8 +319,7 @@ def _clean_list(values: Sequence[str]) -> list[str]:
     return [str(value).strip() for value in values if str(value).strip()]
 
 
-def _feedback_id(request: FeedbackRequest) -> str:
-    target = request.target_id or request.target_type
-    context = request.case_id or request.run_id or "unknown"
-    raw = f"{context}_{request.target_type}_{target}_{request.review_action()}"
-    return "fb_" + "_".join("".join(ch.lower() if ch.isalnum() else " " for ch in raw).split())
+def _default_feedback_store() -> Any:
+    from kgtracevis.service.postgres_run_store import PostgresRunStore
+
+    return PostgresRunStore.from_environment()
