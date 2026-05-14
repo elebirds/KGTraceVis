@@ -471,3 +471,36 @@ Added a backend publish endpoint for source-to-KG builds. The API defaults to dr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: KG construction edge review API
+
+**Date**: 2026-05-14
+**Task**: KG construction edge review API
+**Branch**: `codex/rebuild-web-arco-echarts`
+
+### Summary
+
+Added a backend review endpoint for source-to-KG construction edges. Accept and reject actions update candidate edge review_status and feedback counters, append manifest review decisions, and keep Neo4j publication as a separate explicit step.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c7987a9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
