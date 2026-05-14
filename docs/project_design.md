@@ -16,6 +16,23 @@ raw data / local model inputs
 -> service / app / script consumers
 ```
 
+KG construction is the knowledge supply layer for this reasoning architecture:
+
+```text
+registered sources
+-> pluggable extractors
+-> draft entities and relations
+-> optional review/editing
+-> versioned Neo4j KG
+-> KGTracePipeline runtime reasoning
+```
+
+The detailed construction methodology is documented in
+[`source_to_kg_construction_system.md`](source_to_kg_construction_system.md).
+The important separation is that construction builds a source-grounded,
+versioned runtime KG, while `KGTracePipeline` consumes that KG to analyze one
+Evidence case at a time.
+
 The core package under `src/kgtracevis/` owns schema validation, KG construction,
 entity linking, consistency checking, correction generation, path ranking, noise
 injection, metrics, and feedback-compatible result models.
@@ -63,3 +80,10 @@ service under `src/kgtracevis/service/` should also call the same pipeline
 APIs. The legacy Streamlit demo and old React/Vite frontend have been removed;
 the future RootLens dashboard should be rebuilt cleanly against the FastAPI
 backend.
+
+For backend refactoring, KGTraceVis follows a workflow/use-case architecture
+rather than a traditional MVC split. Scripts, FastAPI handlers, and experiments
+should call reusable workflows under `src/kgtracevis/workflows/` for multi-step
+producer, adapter, analysis, artifact, and run-session behavior. The target
+architecture and migration rules are documented in
+[`backend_workflow_refactor.md`](backend_workflow_refactor.md).

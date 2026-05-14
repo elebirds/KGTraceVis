@@ -55,6 +55,7 @@ from kgtracevis.producers.mvtec_calibration import (
 )
 from kgtracevis.producers.mvtec_records import build_mvtec_records, mask_stats_from_array
 from kgtracevis.producers.wm811k_records import build_wm811k_records
+from kgtracevis.workflows import dataset_records as dataset_record_workflow
 
 BUILD_SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "build_dataset_records.py"
 
@@ -764,18 +765,22 @@ def test_cli_backend_selection_supports_real_backend_names(
         def predict(self, image_path: Path) -> MVTecPrediction:
             return {"score": 0.3}
 
-    monkeypatch.setattr(build_script, "AnomalibMVTecBackend", SentinelAnomalibBackend)
     monkeypatch.setattr(
-        build_script,
+        dataset_record_workflow,
+        "AnomalibMVTecBackend",
+        SentinelAnomalibBackend,
+    )
+    monkeypatch.setattr(
+        dataset_record_workflow,
         "AmazonPatchCoreBackend",
         SentinelAmazonPatchCoreBackend,
     )
     monkeypatch.setattr(
-        build_script,
+        dataset_record_workflow,
         "AmazonPatchCoreObjectRouter",
         SentinelAmazonPatchCoreObjectRouter,
     )
-    mvtec_predictor = build_script.build_mvtec_predictor(
+    mvtec_predictor = dataset_record_workflow.build_mvtec_predictor(
         model_backend=ANOMALIB_OPENVINO_BACKEND,
         checkpoint=tmp_path / "model.xml",
         device="cpu",
@@ -784,7 +789,7 @@ def test_cli_backend_selection_supports_real_backend_names(
     assert mvtec_predictor.kwargs["backend"] == ANOMALIB_OPENVINO_BACKEND
     assert mvtec_predictor.kwargs["device"] == "cpu"
 
-    amazon_predictor = build_script.build_mvtec_predictor(
+    amazon_predictor = dataset_record_workflow.build_mvtec_predictor(
         model_backend=AMAZON_PATCHCORE_BACKEND,
         checkpoint=tmp_path / "amazon_patchcore" / "mvtec_bottle",
         device="cpu",
@@ -793,7 +798,7 @@ def test_cli_backend_selection_supports_real_backend_names(
     assert amazon_predictor.kwargs["checkpoint"] == tmp_path / "amazon_patchcore" / "mvtec_bottle"
     assert amazon_predictor.kwargs["device"] == "cpu"
 
-    amazon_router = build_script.build_mvtec_predictor(
+    amazon_router = dataset_record_workflow.build_mvtec_predictor(
         model_backend=AMAZON_PATCHCORE_BACKEND,
         object_checkpoint_root=tmp_path / "amazon_patchcore",
         device="cpu",

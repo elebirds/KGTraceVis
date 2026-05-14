@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate for backend refactor"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Check scripts and services respect workflow boundaries"}

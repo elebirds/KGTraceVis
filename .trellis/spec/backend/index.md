@@ -24,6 +24,7 @@ Before writing backend code:
 | [Adapter Guidelines](./adapter-guidelines.md) | Producer/adaptor contracts and dataset evidence boundaries | Active |
 | [Database Guidelines](./database-guidelines.md) | KG CSV, in-memory graph, and Neo4j conventions | Active |
 | [Error Handling](./error-handling.md) | Validation and ambiguity handling | Active |
+| [Workflow Architecture](./workflow-architecture.md) | Backend workflow/use-case layer and script/service boundaries | Active |
 | [MVTec Model Presets](./mvtec-model-presets.md) | Web image-upload model preset and checkpoint contracts | Active |
 | [WM811K Model Presets](./wm811k-model-presets.md) | Wafer model asset, producer metadata, and evidence-boundary contracts | Active |
 | [Quality Guidelines](./quality-guidelines.md) | Test, lint, and traceability rules | Active |

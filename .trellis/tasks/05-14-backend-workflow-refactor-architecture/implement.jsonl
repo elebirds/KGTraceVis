@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Reusable workflow modules must live under src/kgtracevis"}
+{"file": ".trellis/spec/backend/adapter-guidelines.md", "reason": "Dataset producer and adapter boundaries constrain workflow refactor"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Runtime KG/Postgres split informs architecture target"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Workflow/use-case boundary added during this refactor"}
