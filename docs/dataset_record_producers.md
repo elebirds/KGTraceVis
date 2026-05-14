@@ -18,6 +18,7 @@ Place raw datasets and checkpoints under ignored paths:
 
 - MVTec or DS-MVTec-like folders: `data/external/mvtec/`
 - WM811K tables: `data/external/wafer/`
+- TEP CSV files from Kaggle: `data/raw/tep/`
 - generated producer records: `data/processed/records/`
 - generated masks, heatmaps, wafer maps, or saliency arrays:
   `data/processed/records/<output-stem>/`
@@ -152,6 +153,34 @@ uv run python scripts/build_dataset_records.py \
   --model-backend sklearn \
   --checkpoint data/external/checkpoints/wm811k_classifier.joblib \
   --max-per-label 50 \
+  --overwrite
+```
+
+## TEP
+
+The TEP producer reads the raw Kaggle CSV files under `data/raw/tep/`:
+
+```text
+data/raw/tep/
+├── TEP_FaultFree_Training.csv
+└── TEP_Faulty_Training.csv
+```
+
+It fits a fault-free reconstruction profile, streams faulty windows grouped by
+`faultNumber` and `simulationRun`, and emits `dataset="tep"` records with top
+residual-contribution variables and adapter/RCA matching metadata. This is a
+producer of anomaly evidence only; it does not emit root causes or ranked paths.
+
+```bash
+uv run python scripts/build_dataset_records.py \
+  --dataset tep \
+  --input-root data/raw/tep \
+  --output-jsonl data/processed/records/tep_rbc_subset.jsonl \
+  --faults 1,2,6 \
+  --tep-window-size 100 \
+  --tep-max-runs-per-fault 3 \
+  --tep-top-variables 5 \
+  --max-cases 9 \
   --overwrite
 ```
 

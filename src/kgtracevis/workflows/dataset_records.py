@@ -14,6 +14,7 @@ from kgtracevis.producers import (
     ANOMALIB_OPENVINO_BACKEND,
     ANOMALIB_TORCH_BACKEND,
     SKLEARN_BACKEND,
+    TEP_RBC_BACKEND,
     TORCH_RESNET_BACKEND,
     AmazonPatchCoreBackend,
     AmazonPatchCoreObjectRouter,
@@ -26,6 +27,7 @@ from kgtracevis.producers import (
 )
 from kgtracevis.producers.mvtec_calibration import load_mvtec_threshold_config
 from kgtracevis.producers.mvtec_records import build_mvtec_records
+from kgtracevis.producers.tep_records import build_tep_records
 from kgtracevis.producers.wm811k_records import build_wm811k_records
 
 MVTEC_BACKENDS = (
@@ -35,9 +37,10 @@ MVTEC_BACKENDS = (
     AMAZON_PATCHCORE_BACKEND,
 )
 WM811K_BACKENDS = (SKLEARN_BACKEND, TORCH_RESNET_BACKEND)
-MODEL_BACKENDS = (*MVTEC_BACKENDS, *WM811K_BACKENDS)
+TEP_BACKENDS = (TEP_RBC_BACKEND,)
+MODEL_BACKENDS = (*MVTEC_BACKENDS, *WM811K_BACKENDS, *TEP_BACKENDS)
 
-DatasetRecordName = Literal["mvtec", "wm811k", "wafer"]
+DatasetRecordName = Literal["mvtec", "wm811k", "wafer", "tep"]
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,15 @@ class DatasetRecordBuildConfig:
     device: str | None = None
     include_good: bool = False
     overwrite: bool = False
+    fault_free_input: Path | None = None
+    faulty_input: Path | None = None
+    tep_faults: tuple[int, ...] = ()
+    tep_window_size: int = 100
+    tep_row_stride: int = 25
+    tep_fault_free_max_rows: int | None = None
+    tep_max_runs_per_fault: int = 3
+    tep_top_variables: int = 5
+    tep_n_components: int | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +91,8 @@ def build_dataset_records(config: DatasetRecordBuildConfig) -> DatasetRecordBuil
 
     if config.dataset == "mvtec":
         records = _build_mvtec_dataset_records(config, artifact_dir=artifact_dir)
+    elif config.dataset == "tep":
+        records = _build_tep_dataset_records(config, artifact_dir=artifact_dir)
     else:
         records = _build_wafer_dataset_records(config, artifact_dir=artifact_dir)
 
@@ -235,8 +249,38 @@ def _build_wafer_dataset_records(
     )
 
 
+def _build_tep_dataset_records(
+    config: DatasetRecordBuildConfig,
+    *,
+    artifact_dir: Path,
+) -> list[Mapping[str, Any]]:
+    if config.model_backend not in TEP_BACKENDS:
+        raise ValueError(
+            f"--model-backend for --dataset tep must be one of {TEP_BACKENDS}"
+        )
+    return build_tep_records(
+        config.input_root or Path("data/raw/tep"),
+        fault_free_path=config.fault_free_input,
+        faulty_path=config.faulty_input,
+        row_stride=config.tep_row_stride,
+        fault_free_max_rows=config.tep_fault_free_max_rows,
+        window_size=config.tep_window_size,
+        faults=config.tep_faults or None,
+        max_runs_per_fault=config.tep_max_runs_per_fault,
+        max_cases=config.max_cases,
+        top_variables=config.tep_top_variables,
+        n_components=config.tep_n_components,
+        profile_output_path=artifact_dir / "tep_fault_free_profile.json",
+    )
+
+
 def _label_counts(records: Sequence[Mapping[str, Any]]) -> Counter[str]:
     return Counter(
-        str(record.get("defect_type") or record.get("failure_pattern") or "unknown")
+        str(
+            record.get("defect_type")
+            or record.get("failure_pattern")
+            or record.get("fault_number")
+            or "unknown"
+        )
         for record in records
     )

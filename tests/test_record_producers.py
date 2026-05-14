@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import importlib.util
 import json
 from collections.abc import Mapping, Sequence
@@ -54,8 +55,10 @@ from kgtracevis.producers.mvtec_calibration import (
     threshold_config_from_mapping,
 )
 from kgtracevis.producers.mvtec_records import build_mvtec_records, mask_stats_from_array
+from kgtracevis.producers.tep_records import TEP_RBC_BACKEND, build_tep_records
 from kgtracevis.producers.wm811k_records import build_wm811k_records
 from kgtracevis.workflows import dataset_records as dataset_record_workflow
+from kgtracevis.workflows.tep_rca import tep_scenario_selector
 
 BUILD_SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "build_dataset_records.py"
 
@@ -703,6 +706,71 @@ def test_wm811k_producer_emits_adapter_compatible_model_records(tmp_path: Path) 
     assert evidence[0].kg_analysis.top_k_paths == []
 
 
+def test_tep_raw_producer_emits_adapter_compatible_rbc_records(tmp_path: Path) -> None:
+    """TEP producer should turn raw CSV windows into adapter-ready variable evidence."""
+    raw_dir = _write_tiny_tep_csvs(tmp_path / "tep")
+
+    records = build_tep_records(
+        raw_dir,
+        row_stride=1,
+        window_size=4,
+        faults=(1,),
+        max_runs_per_fault=1,
+        max_cases=1,
+        top_variables=2,
+        n_components=1,
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record["dataset"] == "tep"
+    assert record["source"] == "tep_csv_rbc"
+    assert record["fault_number"] == 1
+    assert record["simulation_run"] == 1
+    assert record["variables"][0] == "XMEAS_2"
+    assert record["variable_contributions"]["XMEAS_2"] > 0.5
+    assert record["detector"]["backend"] == TEP_RBC_BACKEND
+    assert record["detector"]["produces_root_cause"] is False
+    assert _forbidden_keys(record) == []
+
+    evidence = evidence_from_records(records, dataset="tep")[0]
+    selector = tep_scenario_selector(evidence)
+    assert evidence.adapter is not None
+    assert evidence.adapter.name == "tep"
+    assert selector.fault_numbers == (1,)
+    assert selector.simulation_runs == (1,)
+
+
+def test_dataset_record_workflow_supports_tep_raw_producer(tmp_path: Path) -> None:
+    """Unified dataset-record workflow should include the native TEP producer branch."""
+    raw_dir = _write_tiny_tep_csvs(tmp_path / "tep")
+    output_jsonl = tmp_path / "records" / "tep.jsonl"
+
+    result = dataset_record_workflow.build_dataset_records(
+        dataset_record_workflow.DatasetRecordBuildConfig(
+            dataset="tep",
+            input_root=raw_dir,
+            output_jsonl=output_jsonl,
+            model_backend=TEP_RBC_BACKEND,
+            max_cases=1,
+            overwrite=True,
+            tep_faults=(1,),
+            tep_window_size=4,
+            tep_row_stride=1,
+            tep_max_runs_per_fault=1,
+            tep_top_variables=2,
+            tep_n_components=1,
+        )
+    )
+
+    assert result.output_path == output_jsonl
+    assert result.summary["dataset"] == "tep"
+    assert result.summary["record_count"] == 1
+    assert result.summary["labels"] == {"1": 1}
+    assert (tmp_path / "records" / "tep" / "tep_fault_free_profile.json").exists()
+    assert load_records(output_jsonl)[0]["fault_number"] == 1
+
+
 def test_sklearn_backend_loads_trusted_joblib_checkpoint(tmp_path: Path) -> None:
     """Sklearn WM811K backend should load a tiny local joblib model and use predict_proba."""
     checkpoint = tmp_path / "wm811k_model.joblib"
@@ -1063,6 +1131,30 @@ def test_filter_forbidden_outputs_recurses_through_records() -> None:
         "records": [{"safe": "ok"}],
         "array": [{"safe": "array"}],
     }
+
+
+def _write_tiny_tep_csvs(root: Path) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    header = ["faultNumber", "simulationRun", "sample", "xmeas_1", "xmeas_2", "xmv_1"]
+    fault_free_rows = [
+        [0, 1, sample, sample, sample * 0.1, sample * 2.0]
+        for sample in range(1, 21)
+    ]
+    faulty_rows = [
+        [1, 1, sample, sample, sample * 0.1 + 20.0, sample * 2.0]
+        for sample in range(1, 7)
+    ]
+    _write_csv(root / "TEP_FaultFree_Training.csv", header, fault_free_rows)
+    _write_csv(root / "TEP_Faulty_Training.csv", header, faulty_rows)
+    return root
+
+
+def _write_csv(path: Path, header: Sequence[str], rows: Sequence[Sequence[Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(header)
+        writer.writerows(rows)
 
 
 def _touch(path: Path) -> None:

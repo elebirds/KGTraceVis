@@ -136,13 +136,14 @@ Large datasets are not committed.
 Place datasets as follows:
 
 - Defect Spectrum / DS-MVTec: `data/external/ds_mvtec/`
-- Tennessee Eastman Process: `data/external/tep/`
+- Tennessee Eastman Process raw CSV: `data/raw/tep/`
 - Wafer data: `data/external/wafer/`
 
 Use this convention:
 
 ```text
 data/external/     original datasets, not tracked
+data/raw/          large raw source datasets, not tracked
 data/interim/      intermediate processing outputs, not tracked
 data/processed/    generated reproducible outputs, not tracked
 data/kg/           small curated KG CSV files, tracked
@@ -321,13 +322,25 @@ uv run python scripts/build_dataset_records.py --dataset wm811k \
   --model-source-repo radai-agent/radai-wm811k-defect-detection \
   --model-source-file best_radai_resnet.pt \
   --overwrite
+
+uv run python scripts/build_dataset_records.py --dataset tep \
+  --input-root data/raw/tep \
+  --output-jsonl data/processed/records/tep_rbc_subset.jsonl \
+  --faults 1,2,6 \
+  --tep-window-size 100 \
+  --tep-max-runs-per-fault 3 \
+  --max-cases 9 \
+  --overwrite
 ```
 
-Use `--model-backend fake` for checkpoint-free smoke runs. Anomalib is imported
-only for `anomalib-engine`, `anomalib-torch`, or `anomalib-openvino`; sklearn
-joblib/pickle checkpoints must be trusted local files. The public WM811K ResNet
-asset is a defect-pattern classifier over the labeled WM811K patterns only; it
-does not provide verified root-cause labels or a normal-wafer detector.
+Command-line producer backends are real local backends; deterministic fake
+predictors remain only in the test suite. Anomalib is imported only for
+`anomalib-engine`, `anomalib-torch`, or `anomalib-openvino`; sklearn joblib or
+pickle checkpoints must be trusted local files. The public WM811K ResNet asset
+is a defect-pattern classifier over the labeled WM811K patterns only; it does
+not provide verified root-cause labels or a normal-wafer detector.
+TEP defaults to the native `tep-rbc` residual-contribution backend and does not
+need a checkpoint.
 `--include-wm811k-data` downloads the public Hugging Face dataset table
 `lslattery/wafer-defect-detection` / `test.pkl` into
 `runs/real_model_pipeline/assets/wm811k/input_tables/`; override it with
