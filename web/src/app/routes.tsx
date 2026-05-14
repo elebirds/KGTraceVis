@@ -56,6 +56,7 @@ export const ANALYSIS_TABS = [
 export const KG_STUDIO_TABS = [
   { key: "overview", path: "/kg-studio/overview", label: "Overview" },
   { key: "sources", path: "/kg-studio/sources", label: "Sources" },
+  { key: "build", path: "/kg-studio/build", label: "Build" },
   { key: "graph", path: "/kg-studio/graph", label: "Graph" },
   { key: "review", path: "/kg-studio/review", label: "Review" },
   { key: "drafts", path: "/kg-studio/drafts", label: "Draft Lab" }

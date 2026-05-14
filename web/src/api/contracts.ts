@@ -1,6 +1,12 @@
 export type UploadMode = "evidence" | "records" | "image";
 export type ReviewTargetType = "path" | "edge" | "entity_link" | "correction";
 export type ReviewAction = "accept" | "reject" | "needs_review";
+export type KGConstructionSourceType =
+  | "structured_records"
+  | "manual_table"
+  | "tep_semantic_lift"
+  | "tep_variable_mapping";
+export type KGConstructionSourceFormat = "csv" | "json" | "jsonl";
 
 export interface WorkflowStep {
   step_id: string;
@@ -276,4 +282,35 @@ export interface KGSourceDraftResponse {
   claim_boundary: string;
   candidate_edges: KGSourceDraftEdge[];
   note: string;
+}
+
+export interface KGConstructionSourceInput {
+  source_id: string;
+  source_type: KGConstructionSourceType;
+  scenario: string;
+  path?: string;
+  source_text?: string;
+  source_format?: KGConstructionSourceFormat;
+  semantic_nodes_path?: string;
+  semantic_edges_path?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface KGConstructionBuildRequest {
+  sources: KGConstructionSourceInput[];
+  output_name: string;
+  overwrite: boolean;
+  run_id?: string;
+}
+
+export interface KGConstructionBuildResponse {
+  status: string;
+  run_id: string;
+  output_dir: string;
+  nodes_path: string;
+  edges_path: string;
+  summary_path: string;
+  manifest_path: string;
+  summary: Record<string, unknown>;
+  claim_boundary: string;
 }

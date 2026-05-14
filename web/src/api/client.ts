@@ -1,5 +1,7 @@
 import type {
   DashboardBootstrap,
+  KGConstructionBuildRequest,
+  KGConstructionBuildResponse,
   KGDraftRequest,
   KGSourceDraftRequest,
   KGSourceDraftResponse,
@@ -54,6 +56,12 @@ export const api = {
     }),
   generateKGSourceDraft: (request: KGSourceDraftRequest) =>
     requestJson<KGSourceDraftResponse>("/api/kg/source-draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request)
+    }),
+  buildKGConstruction: (request: KGConstructionBuildRequest) =>
+    requestJson<KGConstructionBuildResponse>("/api/kg/construction/build", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request)

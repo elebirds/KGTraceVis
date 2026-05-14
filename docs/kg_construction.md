@@ -104,6 +104,12 @@ candidate `nodes.csv`, `edges.csv`, `kg_construction_summary.json`, and
 `kg_construction_manifest.json` files under `runs/source_kg_build/<output_name>`.
 It does not call live LLM extractors, parse source code, or publish to Neo4j.
 
+The maintained React workbench exposes this local workflow in KG Studio's
+`Build` tab. That page composes the same API-safe request shapes, displays the
+resulting artifact paths and summary manifest, and refreshes KG Studio so the
+candidate graph can be inspected in the existing `Graph`, `Review`, and
+`Draft Lab` tabs.
+
 For TEP-specific graph construction, the external `TEP_KG` implementation should
 be merged through extractor/import adapters rather than copied directly. See
 [`tep_kg_merge_assessment.md`](tep_kg_merge_assessment.md) for the recommended

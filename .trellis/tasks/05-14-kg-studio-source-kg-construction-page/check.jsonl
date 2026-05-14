@@ -1,0 +1,3 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/frontend/workbench-ui-guidelines.md", "reason": "Verify maintained frontend stack and build checks"}
+{"file": ".trellis/tasks/05-14-kg-studio-source-kg-construction-page/prd.md", "reason": "Acceptance criteria for KG Studio construction page"}

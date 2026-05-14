@@ -207,6 +207,10 @@ code {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
+.metric-grid.build-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .metric-card {
   min-height: 82px;
 }
@@ -555,6 +559,11 @@ code {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.build-overwrite {
+  align-self: end;
+  padding-bottom: 5px;
 }
 
 .kg-status-strip {
