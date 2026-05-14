@@ -1,0 +1,4 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Reusable service logic should live under src/kgtracevis"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Postgres runtime store is the app-state boundary"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Service run code should delegate reusable workflow/use-case behavior"}

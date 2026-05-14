@@ -5,17 +5,13 @@ from __future__ import annotations
 import json
 import os
 import re
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, cast
-
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any, cast
 
 from kgtracevis.adapters import evidence_from_mvtec_record
 from kgtracevis.adapters.batch import load_records as load_adapter_records
 from kgtracevis.core import KGTracePipeline
-from kgtracevis.core.result import AnalysisResult
 from kgtracevis.experiments.adapter_pipeline import run_adapter_pipeline
 from kgtracevis.producers import (
     AMAZON_PATCHCORE_BACKEND,
@@ -37,74 +33,48 @@ from kgtracevis.producers.mvtec_models import (
     DEFAULT_MVTEC_STFPM_CHECKPOINT,
     resolve_mvtec_model_selection,
 )
-from kgtracevis.schema.evidence_schema import DatasetName, Evidence
+from kgtracevis.schema.evidence_schema import DatasetName
 from kgtracevis.schema.validators import load_evidence_json
+from kgtracevis.service.run_enrichment import (
+    dashboard_fields_from_analysis,
+    dashboard_fields_from_cases,
+    enrich_run_detail,
+    enriched_case_rows,
+    evidence_with_analysis,
+    list_of_dicts,
+)
+from kgtracevis.service.run_models import RunDetail, RunSummary, UploadMode, WorkflowStep
+from kgtracevis.service.run_steps import (
+    workflow_steps_for_case,
+    workflow_steps_for_image_case,
+)
+from kgtracevis.service.run_store import (
+    build_run_id,
+    configure_run_store_for_testing,
+    run_store,
+)
 from kgtracevis.service.visual_evidence import (
     build_visual_evidence_artifacts,
-    normalize_visual_evidence_items,
 )
 
 DEFAULT_RUNS_DIR = Path("runs/rootlens_sessions")
 DEFAULT_MVTEC_UPLOAD_CHECKPOINT = DEFAULT_MVTEC_STFPM_CHECKPOINT
-UploadMode = Literal["evidence", "records", "image"]
-RunStatus = Literal["completed", "failed"]
-_RUN_STORE_OVERRIDE: Any | None = None
 
-
-class WorkflowStep(BaseModel):
-    """One visible step in an uploaded-sample or evidence analysis run."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    step_id: str
-    title: str
-    status: RunStatus
-    summary: str
-    details: dict[str, Any] = Field(default_factory=dict)
-
-
-class RunSummary(BaseModel):
-    """Compact metadata for the run list."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    run_id: str
-    created_at: str
-    mode: UploadMode
-    source_filename: str
-    top_k: int
-    run_dir: str
-    status: RunStatus = "completed"
-    dataset: str | None = None
-    case_count: int = 0
-    evidence_count: int = 0
-    label: str
-    model_preset: str | None = None
-    model_backend: str | None = None
-
-
-class RunDetail(BaseModel):
-    """Persisted detail record for one uploaded sample run."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    run: RunSummary
-    workflow_steps: list[WorkflowStep] = Field(default_factory=list)
-    claim_boundary: str
-    evidence: dict[str, Any] | None = None
-    evidence_summary: dict[str, Any] | None = None
-    evidence_with_analysis: dict[str, Any] | None = None
-    analysis: dict[str, Any] | None = None
-    summary: dict[str, Any] | None = None
-    cases: list[dict[str, Any]] = Field(default_factory=list)
-    linked_entities: list[dict[str, Any]] = Field(default_factory=list)
-    correction_candidates: list[dict[str, Any]] = Field(default_factory=list)
-    top_k_paths: list[dict[str, Any]] = Field(default_factory=list)
-    path_graph: dict[str, Any] = Field(default_factory=dict)
-    source_edge_provenance: list[dict[str, Any]] = Field(default_factory=list)
-    review_targets: list[dict[str, Any]] = Field(default_factory=list)
-    artifacts: dict[str, str] = Field(default_factory=dict)
-    visual_evidence: list[dict[str, Any]] = Field(default_factory=list)
+__all__ = [
+    "RunDetail",
+    "RunSummary",
+    "WorkflowStep",
+    "configure_run_store_for_testing",
+    "create_run_from_upload",
+    "download_model_assets",
+    "get_run_artifact_path",
+    "get_run_detail",
+    "list_runs",
+    "mvtec_model_presets",
+    "parse_dataset_override",
+    "parse_upload_mode",
+    "workflow_steps_for_case",
+]
 
 
 def list_runs(
@@ -112,7 +82,7 @@ def list_runs(
 ) -> list[RunSummary]:
     """Return persisted uploaded-sample runs, newest first."""
     _ = runs_dir
-    store = _run_store()
+    store = run_store()
     if store is None:
         return []
     return [RunSummary.model_validate(item) for item in store.list_runs()]
@@ -125,10 +95,10 @@ def get_run_detail(
 ) -> RunDetail:
     """Load one persisted run detail by ID."""
     _ = runs_dir
-    store = _run_store()
+    store = run_store()
     if store is None:
         raise ValueError("Postgres run store is not configured")
-    return _enrich_run_detail(RunDetail.model_validate(store.get_run_detail(run_id)))
+    return enrich_run_detail(RunDetail.model_validate(store.get_run_detail(run_id)))
 
 
 def get_run_artifact_path(
@@ -141,7 +111,7 @@ def get_run_artifact_path(
     if artifact_name != Path(artifact_name).name:
         raise ValueError("artifact name must not contain path separators")
     _ = runs_dir
-    store = _run_store()
+    store = run_store()
     if store is None:
         raise ValueError("Postgres run store is not configured")
     artifact_path = Path(store.get_artifact_path(run_id, artifact_name))
@@ -168,7 +138,7 @@ def create_run_from_upload(
         raise ValueError("top_k must be >= 1")
 
     base_dir = Path(runs_dir or DEFAULT_RUNS_DIR)
-    run_id = _build_run_id()
+    run_id = build_run_id()
     run_dir = base_dir / run_id
     input_dir = run_dir / "input"
     output_dir = run_dir / "output"
@@ -219,7 +189,7 @@ def create_run_from_upload(
     else:
         raise ValueError("upload mode must be evidence, records, or image")
 
-    store = _run_store()
+    store = run_store()
     if store is None:
         raise ValueError("Postgres run store is not configured")
     return RunDetail.model_validate(store.save_run(detail))
@@ -247,132 +217,9 @@ def parse_dataset_override(value: str | None) -> DatasetName | None:
     return cast(DatasetName, normalized)
 
 
-def workflow_steps_for_case(
-    *,
-    evidence_path: str,
-    evidence: Evidence,
-    analysis: AnalysisResult,
-    top_k: int,
-) -> list[WorkflowStep]:
-    """Build visible step cards for a loaded evidence case."""
-    return [
-        WorkflowStep(
-            step_id="load_case",
-            title="Load evidence case",
-            status="completed",
-            summary=f"Loaded {evidence.case_id} from {evidence_path}",
-            details={
-                "case_id": evidence.case_id,
-                "dataset": evidence.dataset,
-                "source": evidence.source,
-                "observation_count": len(evidence.observations),
-                "evidence_path": evidence_path,
-            },
-        ),
-        WorkflowStep(
-            step_id="validate_case",
-            title="Validate evidence",
-            status="completed",
-            summary="Evidence schema and observed fields are ready for analysis",
-            details={
-                "object": evidence.object,
-                "anomaly_type": evidence.anomaly_type,
-                "location": evidence.location,
-                "morphology": evidence.morphology,
-                "confidence": evidence.confidence,
-                "top_k": top_k,
-            },
-        ),
-        WorkflowStep(
-            step_id="pipeline_analysis",
-            title="Run KGTracePipeline",
-            status="completed",
-            summary=(
-                f"{len(analysis.linked_entities)} linked entities, "
-                f"{len(analysis.top_k_paths)} candidate paths"
-            ),
-            details={
-                "linked_entities": analysis.linked_entities,
-                "consistency_score": analysis.consistency_score,
-                "inconsistent_fields": analysis.inconsistent_fields,
-                "correction_candidates": analysis.correction_candidates,
-                "top_k_paths": analysis.top_k_paths,
-            },
-        ),
-    ]
-
-
-def workflow_steps_for_image_case(
-    *,
-    source_filename: str,
-    image_path: str,
-    object_name: str,
-    defect_type: str | None,
-    model_preset: str,
-    model_backend: str,
-    checkpoint: str,
-    evidence: Evidence,
-    analysis: AnalysisResult,
-    top_k: int,
-) -> list[WorkflowStep]:
-    """Build visible step cards for a single uploaded image run."""
-    return [
-        WorkflowStep(
-            step_id="upload",
-            title="Upload image",
-            status="completed",
-            summary=f"Received {source_filename}",
-            details={
-                "filename": source_filename,
-                "image_path": image_path,
-                "object_name": object_name,
-                "defect_type": defect_type,
-                "model_preset": model_preset,
-            },
-        ),
-        WorkflowStep(
-            step_id="predict",
-            title="Run MVTec predictor",
-            status="completed",
-            summary=f"Generated anomaly prediction and geometry outputs via {model_preset}",
-            details={
-                "model_preset": model_preset,
-                "model_backend": model_backend,
-                "checkpoint": checkpoint,
-                "confidence": evidence.confidence,
-                "anomaly_type": evidence.anomaly_type,
-                "object": evidence.object,
-            },
-        ),
-        WorkflowStep(
-            step_id="adapter",
-            title="Build evidence",
-            status="completed",
-            summary="Converted the image sample into unified evidence JSON",
-            details={
-                "case_id": evidence.case_id,
-                "dataset": evidence.dataset,
-                "observation_count": len(evidence.observations),
-                "top_k": top_k,
-            },
-        ),
-        WorkflowStep(
-            step_id="pipeline_analysis",
-            title="Run KGTracePipeline",
-            status="completed",
-            summary=(
-                f"{len(analysis.linked_entities)} linked entities, "
-                f"{len(analysis.top_k_paths)} candidate paths"
-            ),
-            details={
-                "linked_entities": analysis.linked_entities,
-                "consistency_score": analysis.consistency_score,
-                "inconsistent_fields": analysis.inconsistent_fields,
-                "correction_candidates": analysis.correction_candidates,
-                "top_k_paths": analysis.top_k_paths,
-            },
-        ),
-    ]
+def _run_store() -> Any:
+    """Backward-compatible private run-store accessor."""
+    return run_store()
 
 
 def _run_evidence_upload(
@@ -442,8 +289,8 @@ def _run_evidence_upload(
             "candidate/plausible explanation only; not a verified root-cause label"
         ),
         evidence=evidence.model_dump(mode="json"),
-        **_dashboard_fields_from_analysis(evidence, analysis),
-        evidence_with_analysis=_evidence_with_analysis(evidence, analysis),
+        **dashboard_fields_from_analysis(evidence, analysis),
+        evidence_with_analysis=evidence_with_analysis(evidence, analysis),
         analysis=analysis.model_dump(mode="json"),
         artifacts={
             "input_path": str(input_path),
@@ -478,8 +325,8 @@ def _run_records_upload(
     )
     summary = output.summary
     records = _load_visual_records(input_path)
-    summary_cases = _list_of_dicts(summary.get("cases"))
-    case_rows = _enriched_case_rows(summary_cases)
+    summary_cases = list_of_dicts(summary.get("cases"))
+    case_rows = enriched_case_rows(summary_cases)
     inferred_dataset = None
     if case_rows:
         first_case = case_rows[0]
@@ -547,7 +394,7 @@ def _run_records_upload(
         )),
         summary=summary,
         cases=case_rows,
-        **_dashboard_fields_from_cases(case_rows),
+        **dashboard_fields_from_cases(case_rows),
         artifacts={
             "input_path": str(input_path),
             "output_dir": str(output_dir),
@@ -662,8 +509,8 @@ def _run_mvtec_image_upload(
             "candidate/plausible explanation only; not a verified root-cause label"
         )),
         evidence=evidence.model_dump(mode="json"),
-        **_dashboard_fields_from_analysis(evidence, analysis),
-        evidence_with_analysis=_evidence_with_analysis(evidence, analysis),
+        **dashboard_fields_from_analysis(evidence, analysis),
+        evidence_with_analysis=evidence_with_analysis(evidence, analysis),
         analysis=analysis.model_dump(mode="json"),
         summary=summary,
         cases=list(summary.get("cases", [])) if isinstance(summary.get("cases"), list) else [],
@@ -717,343 +564,11 @@ def download_model_assets(
     return download_selected_model_assets(models=models, force=force)
 
 
-def _evidence_with_analysis(evidence: Evidence, analysis: AnalysisResult) -> dict[str, Any]:
-    payload = evidence.model_dump(mode="json")
-    payload["kg_analysis"] = {
-        "linked_entities": analysis.linked_entities,
-        "consistency_score": analysis.consistency_score,
-        "inconsistent_fields": analysis.inconsistent_fields,
-        "correction_candidates": analysis.correction_candidates,
-        "top_k_paths": analysis.top_k_paths,
-    }
-    return payload
-
-
-def _dashboard_fields_from_analysis(
-    evidence: Evidence,
-    analysis: AnalysisResult,
-) -> dict[str, Any]:
-    top_k_paths = list(analysis.top_k_paths)
-    source_edges = _unique_source_edges(top_k_paths)
-    correction_candidates = list(analysis.correction_candidates)
-    linked_entities = list(analysis.linked_entities)
-    return {
-        "evidence_summary": _compact_evidence_summary(evidence),
-        "linked_entities": linked_entities,
-        "correction_candidates": correction_candidates,
-        "top_k_paths": top_k_paths,
-        "path_graph": _path_graph_from_paths(top_k_paths),
-        "source_edge_provenance": source_edges,
-        "review_targets": _review_targets(
-            linked_entities=linked_entities,
-            correction_candidates=correction_candidates,
-            top_k_paths=top_k_paths,
-            source_edges=source_edges,
-        ),
-    }
-
-
-def _enrich_run_detail(detail: RunDetail) -> RunDetail:
-    """Backfill derived dashboard fields for older persisted run manifests."""
-    changed = False
-    path_graph = detail.path_graph
-    if not path_graph and detail.top_k_paths:
-        path_graph = _path_graph_from_paths(detail.top_k_paths)
-        changed = True
-    review_targets = detail.review_targets
-    if any("target_key" not in target for target in review_targets):
-        review_targets = [
-            {
-                **target,
-                "target_key": _review_target_key(
-                    str(target.get("target_type", "target")),
-                    target.get("target_id", ""),
-                ),
-            }
-            for target in review_targets
-        ]
-        changed = True
-    visual_evidence = normalize_visual_evidence_items(detail.visual_evidence)
-    if visual_evidence != detail.visual_evidence:
-        changed = True
-    cases = []
-    for case in detail.cases:
-        row = dict(case)
-        top_k_paths = _list_of_dicts(row.get("top_k_paths"))
-        linked_entities = _list_of_dicts(row.get("linked_entities"))
-        correction_candidates = _list_of_dicts(row.get("correction_candidates"))
-        source_edges = _list_of_dicts(row.get("source_edge_provenance"))
-        if not row.get("path_graph"):
-            row["path_graph"] = _path_graph_from_paths(top_k_paths)
-            changed = True
-        if not row.get("review_targets"):
-            row["review_targets"] = _review_targets(
-                linked_entities=linked_entities,
-                correction_candidates=correction_candidates,
-                top_k_paths=top_k_paths,
-                source_edges=source_edges,
-            )
-            changed = True
-        cases.append(row)
-    if not changed:
-        return detail
-    return detail.model_copy(
-        update={
-            "path_graph": path_graph,
-            "review_targets": review_targets,
-            "visual_evidence": visual_evidence,
-            "cases": cases,
-        }
-    )
-
-
 def _load_visual_records(input_path: Path) -> list[dict[str, Any]]:
     try:
         return [dict(record) for record in load_adapter_records(input_path)]
     except (OSError, ValueError, json.JSONDecodeError):
         return []
-
-
-def _enriched_case_rows(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    enriched: list[dict[str, Any]] = []
-    for case in cases:
-        row = dict(case)
-        top_k_paths = _list_of_dicts(row.get("top_k_paths"))
-        linked_entities = _list_of_dicts(row.get("linked_entities"))
-        correction_candidates = _list_of_dicts(row.get("correction_candidates"))
-        source_edges = _list_of_dicts(row.get("source_edge_provenance"))
-        row["path_graph"] = _path_graph_from_paths(top_k_paths)
-        row["review_targets"] = _review_targets(
-            linked_entities=linked_entities,
-            correction_candidates=correction_candidates,
-            top_k_paths=top_k_paths,
-            source_edges=source_edges,
-        )
-        enriched.append(row)
-    return enriched
-
-
-def _dashboard_fields_from_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
-    linked_entities: list[dict[str, Any]] = []
-    correction_candidates: list[dict[str, Any]] = []
-    top_k_paths: list[dict[str, Any]] = []
-    source_edges_by_id: dict[str, dict[str, Any]] = {}
-    evidence_summary: dict[str, Any] | None = None
-
-    for case in cases:
-        if evidence_summary is None and isinstance(case.get("generated_evidence"), dict):
-            evidence_summary = dict(case["generated_evidence"])
-        linked_entities.extend(_list_of_dicts(case.get("linked_entities")))
-        correction_candidates.extend(_list_of_dicts(case.get("correction_candidates")))
-        top_k_paths.extend(_list_of_dicts(case.get("top_k_paths")))
-        for edge in _list_of_dicts(case.get("source_edge_provenance")):
-            edge_id = str(edge.get("edge_id", ""))
-            if edge_id:
-                source_edges_by_id.setdefault(edge_id, edge)
-
-    source_edges = [source_edges_by_id[edge_id] for edge_id in sorted(source_edges_by_id)]
-    return {
-        "evidence_summary": evidence_summary,
-        "linked_entities": linked_entities,
-        "correction_candidates": correction_candidates,
-        "top_k_paths": top_k_paths,
-        "path_graph": _path_graph_from_paths(top_k_paths),
-        "source_edge_provenance": source_edges,
-        "review_targets": _review_targets(
-            linked_entities=linked_entities,
-            correction_candidates=correction_candidates,
-            top_k_paths=top_k_paths,
-            source_edges=source_edges,
-        ),
-    }
-
-
-def _compact_evidence_summary(evidence: Evidence) -> dict[str, Any]:
-    return {
-        "case_id": evidence.case_id,
-        "dataset": evidence.dataset,
-        "source": evidence.source,
-        "object": evidence.object,
-        "anomaly_type": evidence.anomaly_type,
-        "location": evidence.location,
-        "morphology": evidence.morphology,
-        "severity": evidence.severity,
-        "confidence": evidence.confidence,
-        "observation_count": len(evidence.observations),
-    }
-
-
-def _unique_source_edges(top_k_paths: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    edges_by_id: dict[str, dict[str, Any]] = {}
-    for path in top_k_paths:
-        for edge in _list_of_dicts(path.get("source_edges")):
-            edge_id = str(edge.get("edge_id", ""))
-            if edge_id:
-                edges_by_id.setdefault(edge_id, edge)
-    return [edges_by_id[edge_id] for edge_id in sorted(edges_by_id)]
-
-
-def _path_graph_from_paths(top_k_paths: list[dict[str, Any]]) -> dict[str, Any]:
-    paths: list[dict[str, Any]] = []
-    edge_ids: set[str] = set()
-    node_ids: set[str] = set()
-    for index, path in enumerate(top_k_paths):
-        path_id = str(path.get("path_id") or f"path_{index}")
-        nodes = [str(node) for node in path.get("nodes", []) if node is not None]
-        node_names = [str(name) for name in path.get("node_names", []) if name is not None]
-        relations = [
-            str(relation)
-            for relation in path.get("relations", [])
-            if relation is not None
-        ]
-        source_edges = _list_of_dicts(path.get("source_edges"))
-        graph_nodes = []
-        for node_index, node_id in enumerate(nodes):
-            node_ids.add(node_id)
-            graph_nodes.append(
-                {
-                    "node_id": node_id,
-                    "label": node_names[node_index] if node_index < len(node_names) else node_id,
-                    "role": _path_node_role(node_index, len(nodes)),
-                }
-            )
-        graph_edges = []
-        for edge_index, relation in enumerate(relations):
-            edge = source_edges[edge_index] if edge_index < len(source_edges) else {}
-            edge_id = str(
-                edge.get("edge_id")
-                or _fallback_edge_id(nodes, edge_index, relation, path_id)
-            )
-            edge_ids.add(edge_id)
-            graph_edges.append(
-                {
-                    "edge_id": edge_id,
-                    "target_key": _review_target_key("edge", edge_id),
-                    "source_node_id": nodes[edge_index] if edge_index < len(nodes) else "",
-                    "target_node_id": nodes[edge_index + 1] if edge_index + 1 < len(nodes) else "",
-                    "relation": relation,
-                    "source": edge.get("source"),
-                    "evidence": edge.get("evidence"),
-                    "confidence": edge.get("confidence"),
-                    "review_status": edge.get("review_status"),
-                }
-            )
-        paths.append(
-            {
-                "path_id": path_id,
-                "target_key": _review_target_key("path", path_id),
-                "source_entity_id": path.get("source_entity_id"),
-                "target_entity_id": path.get("target_entity_id"),
-                "score": path.get("score"),
-                "confidence": path.get("confidence"),
-                "supporting_evidence": path.get("supporting_evidence", []),
-                "nodes": graph_nodes,
-                "edges": graph_edges,
-            }
-        )
-    return {
-        "paths": paths,
-        "path_count": len(paths),
-        "node_count": len(node_ids),
-        "edge_count": len(edge_ids),
-    }
-
-
-def _path_node_role(node_index: int, node_count: int) -> str:
-    if node_index == 0:
-        return "source"
-    if node_index == node_count - 1:
-        return "target"
-    return "intermediate"
-
-
-def _fallback_edge_id(nodes: list[str], edge_index: int, relation: str, path_id: str) -> str:
-    head = nodes[edge_index] if edge_index < len(nodes) else path_id
-    tail = nodes[edge_index + 1] if edge_index + 1 < len(nodes) else f"step_{edge_index}"
-    return f"{head}|{relation}|{tail}|derived"
-
-
-def _review_targets(
-    *,
-    linked_entities: list[dict[str, Any]],
-    correction_candidates: list[dict[str, Any]],
-    top_k_paths: list[dict[str, Any]],
-    source_edges: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    targets: list[dict[str, Any]] = []
-    for path in top_k_paths:
-        path_id = path.get("path_id")
-        if path_id:
-            targets.append(
-                {
-                    "target_type": "path",
-                    "target_id": str(path_id),
-                    "target_key": _review_target_key("path", path_id),
-                    "label": str(path.get("target_entity_id") or path_id),
-                }
-            )
-    for edge in source_edges:
-        edge_id = edge.get("edge_id")
-        if edge_id:
-            targets.append(
-                {
-                    "target_type": "edge",
-                    "target_id": str(edge_id),
-                    "target_key": _review_target_key("edge", edge_id),
-                    "label": str(edge.get("relation") or edge_id),
-                }
-            )
-    for link in linked_entities:
-        link_id = link.get("link_id") or link.get("field")
-        if link_id:
-            targets.append(
-                {
-                    "target_type": "entity_link",
-                    "target_id": str(link_id),
-                    "target_key": _review_target_key("entity_link", link_id),
-                    "label": str(link.get("selected_entity_id") or link_id),
-                }
-            )
-    for candidate in correction_candidates:
-        candidate_id = candidate.get("candidate_id")
-        if candidate_id:
-            targets.append(
-                {
-                    "target_type": "correction",
-                    "target_id": str(candidate_id),
-                    "target_key": _review_target_key("correction", candidate_id),
-                    "label": str(candidate.get("suggested_value") or candidate_id),
-                }
-            )
-    return targets
-
-
-def _review_target_key(target_type: str, target_id: object) -> str:
-    return f"{target_type}:{target_id}"
-
-
-def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        return []
-    return [dict(item) for item in value if isinstance(item, dict)]
-
-
-def configure_run_store_for_testing(store: Any | None) -> None:
-    """Override the runtime run store in tests."""
-    global _RUN_STORE_OVERRIDE
-    _RUN_STORE_OVERRIDE = store
-
-
-def _build_run_id() -> str:
-    return str(uuid.uuid4())
-
-
-def _run_store() -> Any:
-    if _RUN_STORE_OVERRIDE is not None:
-        return _RUN_STORE_OVERRIDE
-    from kgtracevis.service.postgres_run_store import PostgresRunStore
-
-    return PostgresRunStore.from_environment()
 
 
 def _safe_filename(value: str) -> str:

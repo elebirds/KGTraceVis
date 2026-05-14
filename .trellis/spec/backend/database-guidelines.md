@@ -71,6 +71,31 @@ graph = KnowledgeGraph.from_default_paths()
 summary = dry_run_import(graph)
 ```
 
+## Runtime Run Service Boundary
+
+Postgres-backed run history should depend on stable service DTOs and payload
+helpers, not on the monolithic upload orchestration module.
+
+Current split:
+
+```text
+service/run_models.py             # RunSummary, RunDetail, WorkflowStep
+service/run_store.py              # runtime store provider and test override
+service/run_enrichment.py         # path graph, review targets, dashboard fields
+service/postgres_run_payloads.py  # row-to-payload and payload-to-row helpers
+service/postgres_run_store.py     # Postgres SQL coordination
+service/runs.py                   # upload dispatch and public compatibility facade
+```
+
+`PostgresRunStore` must not import from `kgtracevis.service.runs`; that would
+couple runtime persistence to upload orchestration and makes future service
+splits brittle. If the store needs API payload shapes, import from
+`run_models.py`, `run_enrichment.py`, or `postgres_run_payloads.py`.
+
+Backward-compatible re-exports from `service.runs` are allowed for public API
+tests and existing service callers, but new code should import the focused
+module directly.
+
 ## Merge Rules
 
 `KnowledgeGraph.from_paths()` supports multi-file loading:
