@@ -13,7 +13,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
+from kgtracevis.kg.graph import (
+    DEFAULT_EDGE_PATHS,
+    DEFAULT_NODE_PATHS,
+    REQUIRED_EDGE_COLUMNS,
+    KnowledgeGraph,
+)
 from kgtracevis.kg.import_neo4j import (
     DEFAULT_NEO4J_CONFIG_PATH,
     dry_run_import,
@@ -40,6 +45,7 @@ ConstructionSourceType = Literal[
     "manual_table",
     "tep_semantic_lift",
     "tep_variable_mapping",
+    "tep_rca_graph",
 ]
 ConstructionSourceFormat = Literal["csv", "json", "jsonl"]
 SOURCE_UPLOAD_FORMATS: dict[str, ConstructionSourceFormat] = {
@@ -62,6 +68,8 @@ class KGConstructionSourceInput(BaseModel):
     source_format: ConstructionSourceFormat = "jsonl"
     semantic_nodes_path: str | None = None
     semantic_edges_path: str | None = None
+    rca_nodes_path: str | None = None
+    rca_edges_path: str | None = None
     metadata: dict[str, object] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -95,6 +103,19 @@ class KGConstructionSourceInput(BaseModel):
             if self.source_text is not None:
                 raise ValueError("tep_variable_mapping does not accept source_text")
             return self
+        if self.source_type == "tep_rca_graph":
+            has_pair = bool(self.rca_nodes_path and self.rca_edges_path)
+            if not self.path and not has_pair:
+                raise ValueError(
+                    "tep_rca_graph requires path or rca_nodes_path/rca_edges_path"
+                )
+            if bool(self.rca_nodes_path) != bool(self.rca_edges_path):
+                raise ValueError(
+                    "rca_nodes_path and rca_edges_path must be provided together"
+                )
+            if self.source_text is not None:
+                raise ValueError("tep_rca_graph does not accept source_text")
+            return self
         raise ValueError(f"unsupported source_type={self.source_type}")
 
 
@@ -121,6 +142,11 @@ class KGConstructionBuildResponse(BaseModel):
     edges_path: str
     summary_path: str
     manifest_path: str
+    draft_manifest_path: str | None = None
+    semantic_layer_manifest_path: str | None = None
+    rca_view_manifest_path: str | None = None
+    review_queue_path: str | None = None
+    publish_manifest_path: str | None = None
     summary: dict[str, object]
     claim_boundary: str = (
         "source-to-KG outputs are candidate/reviewable KG rows; they are not "
@@ -147,6 +173,11 @@ class KGConstructionSourceUploadRequest(BaseModel):
             raise ValueError(
                 "tep_semantic_lift upload requires a multi-file bundle; "
                 "register explicit semantic nodes/edges paths for now"
+            )
+        if self.source_type == "tep_rca_graph":
+            raise ValueError(
+                "tep_rca_graph upload requires a multi-file bundle; register "
+                "explicit RCA nodes/edges paths for now"
             )
         if not self.scenario.strip():
             raise ValueError("scenario cannot be empty")
@@ -203,6 +234,11 @@ class KGConstructionBuildRecord(BaseModel):
     edges_path: str
     summary_path: str
     manifest_path: str
+    draft_manifest_path: str | None = None
+    semantic_layer_manifest_path: str | None = None
+    rca_view_manifest_path: str | None = None
+    review_queue_path: str | None = None
+    publish_manifest_path: str | None = None
     source_ids: list[str] = Field(default_factory=list)
     source_count: int = 0
     node_count: int = 0
@@ -374,6 +410,13 @@ class KGConstructionReviewQueueEdge(BaseModel):
     feedback_count: int
     accepted_count: int
     rejected_count: int
+    item_type: str = "edge"
+    priority: int | None = None
+    reason: str = ""
+    relation_family: str = ""
+    graph_impact: str = ""
+    recommended_action: str = ""
+    candidate_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class KGConstructionReviewQueueSummary(BaseModel):
@@ -432,6 +475,11 @@ def run_kg_construction_build(
         edges_path=str(result.edges_path),
         summary_path=str(result.summary_path),
         manifest_path=str(result.manifest_path),
+        draft_manifest_path=str(result.draft_manifest_path),
+        semantic_layer_manifest_path=str(result.semantic_layer_manifest_path),
+        rca_view_manifest_path=str(result.rca_view_manifest_path),
+        review_queue_path=str(result.review_queue_path),
+        publish_manifest_path=result.manifest.artifacts.get("publish_manifest"),
         summary=result.summary,
     )
 
@@ -628,6 +676,7 @@ def review_kg_construction_edge(
     summary = _load_json_object(Path(build.summary_path), object_name="construction summary")
     _refresh_review_summary(summary, edge_rows)
     _refresh_manifest_review_summary(manifest, summary)
+    _refresh_review_queue_artifact(build, updated_edge)
     decision = review_decision_for_edge(
         target_id=target_key,
         target_key=target_key,
@@ -664,7 +713,7 @@ def get_kg_construction_review_queue(
     """Return a filtered, paginated review queue for construction edges."""
     build = _find_build_record(run_id, build_root=build_root)
     _require_build_artifacts(build)
-    rows = [_queue_edge_from_row(row) for row in _read_edge_rows(Path(build.edges_path))]
+    rows = _read_review_queue_edges(build)
     filtered_rows = [
         edge
         for edge in rows
@@ -692,6 +741,10 @@ def _source_from_input(source: KGConstructionSourceInput) -> KGConstructionSourc
         if source.semantic_nodes_path and source.semantic_edges_path:
             metadata["nodes_path"] = Path(source.semantic_nodes_path)
             metadata["edges_path"] = Path(source.semantic_edges_path)
+    if source.source_type == "tep_rca_graph":
+        if source.rca_nodes_path and source.rca_edges_path:
+            metadata["nodes_path"] = Path(source.rca_nodes_path)
+            metadata["edges_path"] = Path(source.rca_edges_path)
     return KGConstructionSource(
         source_id=source.source_id,
         source_type=source.source_type,
@@ -760,6 +813,31 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
             artifacts.get("summary") or manifest_path.parent / "kg_construction_summary.json"
         ),
         manifest_path=str(artifacts.get("manifest") or manifest_path),
+        draft_manifest_path=_artifact_path(
+            artifacts,
+            "draft_manifest",
+            fallback=manifest_path.parent / "draft_manifest.json",
+        ),
+        semantic_layer_manifest_path=_artifact_path(
+            artifacts,
+            "semantic_layer_manifest",
+            fallback=manifest_path.parent / "semantic_layer_manifest.json",
+        ),
+        rca_view_manifest_path=_artifact_path(
+            artifacts,
+            "rca_view_manifest",
+            fallback=manifest_path.parent / "rca_view_manifest.json",
+        ),
+        review_queue_path=_artifact_path(
+            artifacts,
+            "review_queue",
+            fallback=manifest_path.parent / "review_queue.json",
+        ),
+        publish_manifest_path=_artifact_path(
+            artifacts,
+            "publish_manifest",
+            fallback=manifest_path.parent / "publish_manifest.json",
+        ),
         source_ids=[str(item) for item in summary.get("source_ids", [])],
         source_count=_int_value(summary.get("source_count")),
         node_count=_int_value(summary.get("node_count")),
@@ -767,6 +845,21 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
         scenarios=_int_dict(summary.get("scenarios")),
         review_status_counts=_int_dict(summary.get("review_status_counts")),
     )
+
+
+def _artifact_path(
+    artifacts: dict[str, Any],
+    key: str,
+    *,
+    fallback: Path | None = None,
+) -> str | None:
+    value = artifacts.get(key)
+    if value is not None:
+        text = str(value)
+        return text or None
+    if fallback is not None and fallback.is_file():
+        return str(fallback)
+    return None
 
 
 def _publish_paths(
@@ -798,7 +891,7 @@ def _read_edge_rows(path: Path) -> list[dict[str, str]]:
         raise ValueError(f"construction build edges not found: {path}")
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        missing = set(EDGE_COLUMNS).difference(reader.fieldnames or [])
+        missing = REQUIRED_EDGE_COLUMNS.difference(reader.fieldnames or [])
         if missing:
             raise ValueError(f"edge CSV missing required columns: {sorted(missing)}")
         return [{key: row.get(key, "") for key in EDGE_COLUMNS} for row in reader]
@@ -851,6 +944,31 @@ def _safe_edge_key(value: str) -> str:
     return "|".join(parts)
 
 
+def _read_review_queue_edges(
+    build: KGConstructionBuildRecord,
+) -> list[KGConstructionReviewQueueEdge]:
+    queue_path = _review_queue_artifact_path(build)
+    if queue_path is None:
+        return [_queue_edge_from_row(row) for row in _read_edge_rows(Path(build.edges_path))]
+    payload = _load_json_list(queue_path, object_name="construction review queue")
+    return [
+        _queue_edge_from_review_item(item)
+        for item in payload
+        if isinstance(item, dict)
+    ]
+
+
+def _review_queue_artifact_path(build: KGConstructionBuildRecord) -> Path | None:
+    candidates: list[Path] = []
+    if build.review_queue_path:
+        candidates.append(Path(build.review_queue_path))
+    candidates.append(Path(build.output_dir) / "review_queue.json")
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
 def _queue_edge_from_row(row: dict[str, str]) -> KGConstructionReviewQueueEdge:
     return KGConstructionReviewQueueEdge(
         target_key=_edge_key_from_row(row),
@@ -866,6 +984,58 @@ def _queue_edge_from_row(row: dict[str, str]) -> KGConstructionReviewQueueEdge:
         feedback_count=_int_value(row.get("feedback_count")),
         accepted_count=_int_value(row.get("accepted_count")),
         rejected_count=_int_value(row.get("rejected_count")),
+        relation_family=row.get("relation_family", ""),
+        candidate_payload=dict(row),
+    )
+
+
+def _queue_edge_from_review_item(
+    item: dict[str, Any],
+) -> KGConstructionReviewQueueEdge:
+    candidate = item.get("candidate_payload")
+    if not isinstance(candidate, dict):
+        candidate = {}
+    target_key = str(
+        item.get("target_key")
+        or candidate.get("edge_id")
+        or "|".join(
+            (
+                str(candidate.get("head") or ""),
+                str(candidate.get("relation") or ""),
+                str(candidate.get("tail") or ""),
+                str(item.get("scenario") or candidate.get("scenario") or ""),
+            )
+        )
+    )
+    return KGConstructionReviewQueueEdge(
+        target_key=target_key,
+        head=str(candidate.get("head") or ""),
+        relation=str(candidate.get("relation") or ""),
+        tail=str(candidate.get("tail") or ""),
+        scenario=str(item.get("scenario") or candidate.get("scenario") or ""),
+        source=str(item.get("source") or candidate.get("source") or ""),
+        evidence=str(item.get("evidence") or candidate.get("evidence") or ""),
+        confidence=_float_value(item.get("confidence", candidate.get("confidence"))),
+        weight=_float_value(candidate.get("weight")),
+        review_status=str(item.get("review_status") or candidate.get("review_status") or ""),
+        feedback_count=_int_value(
+            item.get("feedback_count", candidate.get("feedback_count"))
+        ),
+        accepted_count=_int_value(
+            item.get("accepted_count", candidate.get("accepted_count"))
+        ),
+        rejected_count=_int_value(
+            item.get("rejected_count", candidate.get("rejected_count"))
+        ),
+        item_type=str(item.get("item_type") or "edge"),
+        priority=_optional_int(item.get("priority")),
+        reason=str(item.get("reason") or ""),
+        relation_family=str(
+            item.get("relation_family") or candidate.get("relation_family") or ""
+        ),
+        graph_impact=str(item.get("graph_impact") or ""),
+        recommended_action=str(item.get("recommended_action") or ""),
+        candidate_payload=dict(candidate),
     )
 
 
@@ -890,6 +1060,10 @@ def _matches_review_queue_filters(
                 edge.tail,
                 edge.source,
                 edge.evidence,
+                edge.reason,
+                edge.relation_family,
+                edge.graph_impact,
+                edge.recommended_action,
             )
         )
     ):
@@ -926,11 +1100,68 @@ def _load_json_object(path: Path, *, object_name: str) -> dict[str, Any]:
     return payload
 
 
+def _load_json_list(path: Path, *, object_name: str) -> list[Any]:
+    if not path.is_file():
+        raise ValueError(f"{object_name} not found: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError(f"{object_name} must be a JSON array: {path}")
+    return payload
+
+
 def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(
         json.dumps(payload, indent=2, sort_keys=True),
         encoding="utf-8",
     )
+
+
+def _write_json_list(path: Path, payload: list[Any]) -> None:
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def _refresh_review_queue_artifact(
+    build: KGConstructionBuildRecord,
+    updated_edge: dict[str, Any],
+) -> None:
+    queue_path = _review_queue_artifact_path(build)
+    if queue_path is None:
+        return
+    payload = _load_json_list(queue_path, object_name="construction review queue")
+    target_key = _edge_key_from_row(
+        {key: str(updated_edge.get(key, "")) for key in EDGE_COLUMNS}
+    )
+    updated = False
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        candidate = item.get("candidate_payload")
+        if not isinstance(candidate, dict):
+            candidate = {}
+        item_key = str(item.get("target_key") or candidate.get("edge_id") or "")
+        if item_key != target_key:
+            continue
+        candidate.update(updated_edge)
+        candidate["edge_id"] = target_key
+        item["candidate_payload"] = candidate
+        item["review_status"] = updated_edge.get("review_status", "")
+        item["feedback_count"] = _int_value(updated_edge.get("feedback_count"))
+        item["accepted_count"] = _int_value(updated_edge.get("accepted_count"))
+        item["rejected_count"] = _int_value(updated_edge.get("rejected_count"))
+        item["source"] = updated_edge.get("source", item.get("source", ""))
+        item["evidence"] = updated_edge.get("evidence", item.get("evidence", ""))
+        item["confidence"] = _float_value(updated_edge.get("confidence"))
+        item["scenario"] = updated_edge.get("scenario", item.get("scenario", ""))
+        item["relation_family"] = updated_edge.get(
+            "relation_family",
+            item.get("relation_family", ""),
+        )
+        updated = True
+    if updated:
+        _write_json_list(queue_path, payload)
 
 
 def _refresh_review_summary(
@@ -976,6 +1207,12 @@ def _int_value(value: object) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+    return _int_value(value)
 
 
 def _float_value(value: object) -> float:

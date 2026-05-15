@@ -249,6 +249,11 @@ def test_kg_construction_build_route_writes_runtime_artifacts(
     assert Path(payload["edges_path"]).is_file()
     assert Path(payload["summary_path"]).is_file()
     assert Path(payload["manifest_path"]).is_file()
+    assert Path(payload["draft_manifest_path"]).is_file()
+    assert Path(payload["semantic_layer_manifest_path"]).is_file()
+    assert Path(payload["rca_view_manifest_path"]).is_file()
+    assert Path(payload["review_queue_path"]).is_file()
+    assert Path(payload["publish_manifest_path"]).is_file()
 
 
 def test_kg_construction_build_registry_lists_details_and_validates(
@@ -288,11 +293,19 @@ def test_kg_construction_build_registry_lists_details_and_validates(
     assert [build["run_id"] for build in builds] == ["kgbuild_registry_unit"]
     assert builds[0]["node_count"] == 2
     assert builds[0]["edge_count"] == 1
+    assert builds[0]["draft_manifest_path"].endswith("draft_manifest.json")
+    assert builds[0]["semantic_layer_manifest_path"].endswith(
+        "semantic_layer_manifest.json"
+    )
+    assert builds[0]["rca_view_manifest_path"].endswith("rca_view_manifest.json")
+    assert builds[0]["review_queue_path"].endswith("review_queue.json")
+    assert builds[0]["publish_manifest_path"].endswith("publish_manifest.json")
 
     detail_response = client.get("/api/kg/construction/builds/kgbuild_registry_unit")
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert detail["build"]["summary_path"].endswith("kg_construction_summary.json")
+    assert detail["build"]["review_queue_path"].endswith("review_queue.json")
     assert detail["summary"]["node_count"] == 2
     assert detail["manifest"]["run"]["run_id"] == "kgbuild_registry_unit"
 
@@ -302,6 +315,75 @@ def test_kg_construction_build_registry_lists_details_and_validates(
     assert validation["build"]["run_id"] == "kgbuild_registry_unit"
     assert validation["qa_report"]["summary"]["passed"] is True
     assert validation["qa_report"]["summary"]["edge_count"] == 1
+
+
+def test_kg_construction_build_registry_supports_legacy_manifests_and_edges(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Old build manifests and required-only edge CSVs should remain readable."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "legacy_registry_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_legacy_registry_unit",
+            "sources": [
+                {
+                    "source_id": "api_manual_unit",
+                    "source_type": "manual_table",
+                    "scenario": "tep",
+                    "source_format": "csv",
+                    "source_text": _manual_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+    payload = build_response.json()
+
+    manifest_path = Path(payload["manifest_path"])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for key in (
+        "draft_manifest",
+        "semantic_layer_manifest",
+        "rca_view_manifest",
+        "review_queue",
+        "publish_manifest",
+    ):
+        manifest["artifacts"].pop(key)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    list_response = client.get("/api/kg/construction/builds")
+    assert list_response.status_code == 200
+    build = list_response.json()["builds"][0]
+    assert build["draft_manifest_path"].endswith("draft_manifest.json")
+    assert build["semantic_layer_manifest_path"].endswith(
+        "semantic_layer_manifest.json"
+    )
+    assert build["rca_view_manifest_path"].endswith("rca_view_manifest.json")
+    assert build["review_queue_path"].endswith("review_queue.json")
+    assert build["publish_manifest_path"].endswith("publish_manifest.json")
+
+    Path(payload["review_queue_path"]).unlink()
+    _rewrite_edges_as_required_columns(Path(payload["edges_path"]))
+    queue_response = client.get(
+        "/api/kg/construction/builds/kgbuild_legacy_registry_unit/review-queue",
+        params={"relation": "BELONGS_TO"},
+    )
+    assert queue_response.status_code == 200
+    queue = queue_response.json()
+    assert queue["total_count"] == 1
+    assert queue["edges"][0]["target_key"] == (
+        "ApiManualSource|BELONGS_TO|ApiManualTarget|tep"
+    )
 
 
 def test_kg_construction_publish_route_dry_runs_merged_build(
@@ -538,7 +620,7 @@ def test_kg_construction_review_queue_filters_edges(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Review queue should expose filterable read-only candidate edge rows."""
+    """Review queue should prefer the prioritized JSON artifact when present."""
     monkeypatch.setattr(
         service_kg_construction,
         "DEFAULT_SOURCE_KG_BUILD_DIR",
@@ -558,7 +640,7 @@ def test_kg_construction_review_queue_filters_edges(
                     "source_type": "manual_table",
                     "scenario": "tep",
                     "source_format": "csv",
-                    "source_text": _manual_source_csv(),
+                    "source_text": _manual_rca_source_csv(),
                 }
             ],
         },
@@ -571,8 +653,8 @@ def test_kg_construction_review_queue_filters_edges(
             "review_status": "auto",
             "source": "api_manual_unit",
             "scenario": "tep",
-            "relation": "BELONGS_TO",
-            "query": "explicit api",
+            "relation": "SUGGESTS_ROOT_CAUSE",
+            "query": "root cause",
             "limit": "10",
         },
     )
@@ -581,14 +663,24 @@ def test_kg_construction_review_queue_filters_edges(
     assert initial["total_count"] == 1
     assert initial["returned_count"] == 1
     assert initial["summary"]["review_status_counts"] == {"auto": 1}
-    assert initial["summary"]["relation_counts"] == {"BELONGS_TO": 1}
-    assert initial["edges"][0]["target_key"] == ("ApiManualSource|BELONGS_TO|ApiManualTarget|tep")
+    assert initial["summary"]["relation_counts"] == {"SUGGESTS_ROOT_CAUSE": 1}
+    assert initial["edges"][0]["target_key"] == (
+        "ApiManualFault|SUGGESTS_ROOT_CAUSE|ApiManualCause|tep"
+    )
     assert initial["edges"][0]["confidence"] == 0.71
+    assert initial["edges"][0]["priority"] == 100
+    assert initial["edges"][0]["reason"] == (
+        "causal/root-cause relation needs human confirmation"
+    )
+    assert initial["edges"][0]["graph_impact"] == (
+        "can change Top-K RCA propagation paths"
+    )
+    assert initial["edges"][0]["recommended_action"] == "accept_or_reject"
 
     review_response = client.post(
         "/api/kg/construction/builds/kgbuild_review_queue_unit/review",
         json={
-            "target_key": "ApiManualSource|BELONGS_TO|ApiManualTarget|tep",
+            "target_key": "ApiManualFault|SUGGESTS_ROOT_CAUSE|ApiManualCause|tep",
             "action": "reject",
         },
     )
@@ -610,12 +702,76 @@ def test_kg_construction_review_queue_filters_edges(
     assert rejected["edges"][0]["review_status"] == "rejected"
     assert rejected["edges"][0]["rejected_count"] == 1
     assert rejected["summary"]["review_status_counts"] == {"rejected": 1}
+    assert rejected["edges"][0]["candidate_payload"]["review_status"] == "rejected"
+    assert rejected["edges"][0]["candidate_payload"]["rejected_count"] == "1"
 
     assert empty_page_response.status_code == 200
     empty_page = empty_page_response.json()
     assert empty_page["total_count"] == 1
     assert empty_page["returned_count"] == 0
     assert empty_page["edges"] == []
+
+
+def test_kg_construction_build_route_accepts_tep_rca_graph_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TEP RCA graph sources should accept directory or explicit node/edge paths."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    rca_dir, rca_nodes_path, rca_edges_path = _write_tep_rca_graph_artifacts(tmp_path)
+    client = TestClient(app)
+
+    explicit_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "tep_rca_explicit_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_tep_rca_explicit",
+            "sources": [
+                {
+                    "source_id": "tep_rca_explicit",
+                    "source_type": "tep_rca_graph",
+                    "scenario": "tep",
+                    "rca_nodes_path": str(rca_nodes_path),
+                    "rca_edges_path": str(rca_edges_path),
+                }
+            ],
+        },
+    )
+    directory_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "tep_rca_dir_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_tep_rca_dir",
+            "sources": [
+                {
+                    "source_id": "tep_rca_dir",
+                    "source_type": "tep_rca_graph",
+                    "scenario": "tep",
+                    "path": str(rca_dir),
+                }
+            ],
+        },
+    )
+
+    assert explicit_response.status_code == 200
+    explicit_payload = explicit_response.json()
+    assert explicit_payload["summary"]["edge_count"] == 1
+    assert Path(explicit_payload["review_queue_path"]).is_file()
+    manifest = json.loads(
+        Path(explicit_payload["manifest_path"]).read_text(encoding="utf-8")
+    )
+    assert manifest["sources"][0]["metadata"]["nodes_path"] == str(rca_nodes_path)
+    assert manifest["sources"][0]["metadata"]["edges_path"] == str(rca_edges_path)
+
+    assert directory_response.status_code == 200
+    directory_payload = directory_response.json()
+    assert directory_payload["summary"]["edge_count"] == 1
 
 
 def test_kg_construction_build_registry_rejects_unknown_run(
@@ -1474,6 +1630,97 @@ def _manual_source_csv() -> str:
             "",
         ]
     )
+
+
+def _manual_rca_source_csv() -> str:
+    return "\n".join(
+        [
+            "id,name,label,head,relation,tail,scenario,evidence,confidence",
+            "ApiManualFault,API manual fault,FaultEvent,,,,tep,manual fault row,0.71",
+            "ApiManualCause,API manual cause,RootCause,,,,tep,manual cause row,0.71",
+            (
+                ",,,ApiManualFault,SUGGESTS_ROOT_CAUSE,ApiManualCause,tep,"
+                "root cause API row,0.71"
+            ),
+            "",
+        ]
+    )
+
+
+def _rewrite_edges_as_required_columns(path: Path) -> None:
+    required_columns = [
+        "head",
+        "relation",
+        "tail",
+        "scenario",
+        "source",
+        "evidence",
+        "confidence",
+        "weight",
+        "review_status",
+        "feedback_count",
+        "accepted_count",
+        "rejected_count",
+    ]
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=required_columns)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: row.get(key, "") for key in required_columns})
+
+
+def _write_tep_rca_graph_artifacts(tmp_path: Path) -> tuple[Path, Path, Path]:
+    rca_dir = tmp_path / "tep_rca_graph"
+    rca_dir.mkdir()
+    nodes_path = rca_dir / "nodes.jsonl"
+    edges_path = rca_dir / "edges.jsonl"
+    nodes_path.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "node_id": "component:component_a",
+                        "entity_type": "Component",
+                        "name": "Component A",
+                        "candidate_role": "composition_anchor",
+                        "root_cause_candidate": True,
+                        "provenance_ids": ["ev_component"],
+                    }
+                ),
+                json.dumps(
+                    {
+                        "node_id": "fault_anchor:fault_06",
+                        "entity_type": "FaultAnchor",
+                        "name": "Fault 06 anchor",
+                        "candidate_role": "fault_anchor",
+                        "provenance_ids": ["ev_fault"],
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    edges_path.write_text(
+        json.dumps(
+            {
+                "edge_id": "rca_edge_api_unit",
+                "head_id": "component:component_a",
+                "relation": "CAUSES",
+                "tail_id": "fault_anchor:fault_06",
+                "confidence": 0.71,
+                "relation_family": "FAULT_SOURCE",
+                "propagation_enabled": True,
+                "edge_origin": "curated_bridge",
+                "provenance_ids": ["ev_edge"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return rca_dir, nodes_path, edges_path
 
 
 def _tep_record_jsonl_bytes() -> bytes:
