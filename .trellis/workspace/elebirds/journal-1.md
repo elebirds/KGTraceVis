@@ -1175,3 +1175,36 @@ Added JSON RCA profile loading, profile_manifest artifacts, profile_path workflo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 36: M19 RCA reasoning scoring schema
+
+**Date**: 2026-05-15
+**Task**: M19 RCA reasoning scoring schema
+**Branch**: `main`
+
+### Summary
+
+Added profile-driven RCA score components, optional edge score columns, source trust scoring, RCA score summaries in manifests, docs/spec updates, and focused tests. Gates: ruff, mypy, pytest 337, run_examples, RCA-KG smoke with toy/material/TEP passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `17123d5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
