@@ -104,6 +104,11 @@ reasoning view exports these as per-edge score components and summarizes them
 in `rca_view_manifest.json`; this makes path ranking and visual explanations
 inspectable without turning candidate edges into reviewed facts.
 
+At runtime, generic graph path ranking uses these RCA scores as path strength
+when present and falls back to edge confidence for legacy KG rows. The path
+payload keeps both `confidence` and `path_strength` so reviewers can distinguish
+source confidence from RCA scoring impact.
+
 ## LLM Boundary
 
 LLMs may extract source-grounded candidate entities and relations from documents, propose aliases, summarize review items, explain conflicts, or generate RCA path explanation text.

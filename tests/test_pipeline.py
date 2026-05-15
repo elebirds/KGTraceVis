@@ -118,6 +118,8 @@ def test_pipeline_path_contract_for_known_example() -> None:
     assert path["target_entity_id"] == "MechanicalContact"
     assert path["nodes"] == ["ScratchDefect", "MechanicalContact"]
     assert path["relations"] == ["HAS_PLAUSIBLE_CAUSE"]
+    assert path["path_strength"] == path["confidence"]
+    assert path["rca_score"] == 0.0
     assert path["supporting_evidence"]
     assert path["source_edge_ids"] == [
         "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec"

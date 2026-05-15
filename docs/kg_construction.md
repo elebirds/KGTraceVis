@@ -295,6 +295,11 @@ propagation edges and semantic-derived edges are surfaced with explicit graph
 impact text and recommended actions, but they remain candidates until a review
 decision accepts or rejects them.
 
+Runtime path ranking also consumes RCA view score metadata when a candidate KG
+overlay includes it. Path payloads expose `path_strength` and `rca_score`; when
+those fields are absent on legacy seed KG edges, ranking falls back to the
+existing confidence-based behavior.
+
 The reusable orchestration entry point for this material-driven path is
 `kgtracevis.workflows.material_kg_construction.run_material_kg_construction_workflow`.
 It accepts selected material IDs, optionally extracts missing/selected materials
