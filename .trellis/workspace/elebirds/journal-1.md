@@ -1644,3 +1644,36 @@ Added KG Studio construction review UI/API contracts for listing construction bu
 ### Next Steps
 
 - None - task complete
+
+
+## Session 43: M32 document IE no-key product boundary
+
+**Date**: 2026-05-15
+**Task**: M32 document IE no-key product boundary
+**Branch**: `main`
+
+### Summary
+
+Productized provider selection for material document IE: provider=openai uses OpenAI-compatible clients; provider=offline_fixture replays request/material fixtures without an LLM key through the same parser, chunking, schema, and grounding path. KG Studio now exposes provider and fixture-path controls. Updated docs/spec and verified ruff, mypy, pytest 350 passed, web build, run_examples, and construction smoke.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2382de5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
