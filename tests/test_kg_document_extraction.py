@@ -13,6 +13,7 @@ from kgtracevis.kg_construction.document_extraction import (
     OpenAICompatibleKGExtractionClient,
     SourceTextChunk,
     chunk_source_document,
+    extract_draft_kg_from_chunks,
     extract_draft_kg_from_source_material,
     extraction_response_schema,
     parse_source_material,
@@ -148,6 +149,56 @@ def test_fake_ie_client_converts_source_grounded_candidates_to_draft_kg() -> Non
     assert candidate.review_status == "auto"
     assert candidate.source == "maintenance_note"
     assert client.calls[0]["schema"]["title"] == "ExtractedKGPayload"
+
+
+def test_extract_draft_kg_from_chunks_reuses_parser_output() -> None:
+    """Document IE can run from already parsed chunks without reparsing sources."""
+    chunk = SourceTextChunk(
+        chunk_id="maintenance_note:chunk:0001:abc",
+        source_id="maintenance_note",
+        source_type="txt",
+        scenario="shared",
+        text="Cooling alert can suggest pump seal wear.",
+        start_char=0,
+        end_char=len("Cooling alert can suggest pump seal wear."),
+        index=1,
+    )
+    client = FakeIEClient(
+        {
+            "entities": [
+                {
+                    "id": "CoolingAlert",
+                    "name": "Cooling alert",
+                    "label": "Event",
+                    "evidence": "Cooling alert can suggest pump seal wear.",
+                },
+                {
+                    "id": "PumpSealWear",
+                    "name": "Pump seal wear",
+                    "label": "RootCause",
+                    "evidence": "pump seal wear",
+                },
+            ],
+            "relations": [
+                {
+                    "head": "CoolingAlert",
+                    "relation": "SUGGESTS_ROOT_CAUSE",
+                    "tail": "PumpSealWear",
+                    "evidence": "Cooling alert can suggest pump seal wear.",
+                }
+            ],
+        }
+    )
+
+    draft = extract_draft_kg_from_chunks((chunk,), client)
+
+    assert len(draft.entities) == 2
+    assert len(draft.relations) == 1
+    assert client.calls[0]["chunk_id"] == "maintenance_note:chunk:0001:abc"
+    assert "Source text:" in client.calls[0]["prompt"]
+    assert draft.relations[0].evidence_span == (
+        f"maintenance_note:chunk:0001:abc:0-{len(chunk.text)}"
+    )
 
 
 def test_strict_grounding_rejects_relation_without_source_evidence() -> None:

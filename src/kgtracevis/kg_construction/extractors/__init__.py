@@ -3,8 +3,13 @@
 from kgtracevis.kg_construction.extractors.base import (
     ExtractorRegistry,
     KGSourceExtractor,
+    ParsedKGSourceExtractor,
+    extract_source_draft,
 )
-from kgtracevis.kg_construction.extractors.document_llm import LLMDocumentIEExtractor
+from kgtracevis.kg_construction.extractors.document_llm import (
+    LLMDocumentIEExtractor,
+    OfflineDocumentIEExtractor,
+)
 from kgtracevis.kg_construction.extractors.structured import (
     StructuredRecordExtractor,
     default_extractor_registry,
@@ -19,9 +24,12 @@ __all__ = [
     "ExtractorRegistry",
     "KGSourceExtractor",
     "LLMDocumentIEExtractor",
+    "OfflineDocumentIEExtractor",
+    "ParsedKGSourceExtractor",
     "StructuredRecordExtractor",
     "TepRcaGraphExtractor",
     "TepSemanticLiftExtractor",
     "TepVariableMappingExtractor",
     "default_extractor_registry",
+    "extract_source_draft",
 ]

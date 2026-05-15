@@ -267,7 +267,7 @@ and RCA reasoning all consume these build artifacts.
 ### 2. Signatures
 
 - CLI:
-  `uv run python scripts/build_source_kg.py [--toy-generic-structured-source] [--tep-semantic-lift-dir DIR] [--tep-variable-mapping PATH] [--tep-rca-graph-dir DIR] [--run-id ID] --output-dir DIR`
+  `uv run python scripts/build_source_kg.py [--toy-generic-structured-source] [--toy-generic-document-source] [--tep-semantic-lift-dir DIR] [--tep-variable-mapping PATH] [--tep-rca-graph-dir DIR] [--run-id ID] --output-dir DIR`
 - Service build source types:
   `structured_records`, `manual_table`, `tep_semantic_lift`,
   `tep_variable_mapping`, `tep_rca_graph`
@@ -286,6 +286,13 @@ and RCA reasoning all consume these build artifacts.
   Source Library -> Parser / Chunk -> Extractor Registry -> Draft KG ->
   Entity Alignment -> Source Audit Graph -> Semantic Layer ->
   RCA Reasoning View -> Review Queue -> Versioned Publish manifest.
+- `ParsedSourceContent` is the current ParserOutput contract. The pipeline
+  resolves extractors first, parses sources once, and prefers
+  `extract_from_parsed(parsed, source=...)` when an extractor supports it.
+  Legacy `extract(source)` remains allowed for source-reference importers.
+- Offline document IE may replay source-grounded fixtures for tests and local
+  demos, but fixture/LLM output is still DraftKG candidate output with
+  `review_status=auto`, not reviewed KG truth.
 - `kg_construction_summary.json` and `kg_construction_manifest.json` must share
   the same stable artifact keys for all required outputs.
 - The summary must include `kg_build_id`, `source_ids`,

@@ -33,6 +33,7 @@ from kgtracevis.kg_construction import (
     run_kg_construction,
     tep_external_id_to_kg_id,
 )
+from kgtracevis.kg_construction.extractors.structured import StructuredRecordExtractor
 
 
 class UnitExtractor:
@@ -128,6 +129,24 @@ class FakeDocumentIEClient:
         }
 
 
+class ParserAwareUnitExtractor:
+    """Extractor that proves parsed source content is the primary input."""
+
+    name = "parser_aware_unit"
+    version = "v1"
+    supported_source_types = ("unit",)
+
+    def extract(self, source: KGConstructionSource) -> DraftKG:
+        """Legacy extraction path should not be used when parsed input is supported."""
+        raise AssertionError(f"legacy extract should not run for {source.source_id}")
+
+    def extract_from_parsed(self, parsed: Any, *, source: KGConstructionSource) -> DraftKG:
+        """Return a small DraftKG from parser output."""
+        assert parsed.source_id == source.source_id
+        assert parsed.kind == "source_reference"
+        return UnitExtractor().extract(source)
+
+
 def test_run_kg_construction_uses_registered_extractors() -> None:
     """The construction runner should build validated KG rows from drafts."""
     result = run_kg_construction(
@@ -146,6 +165,21 @@ def test_run_kg_construction_uses_registered_extractors() -> None:
     assert result.edges[0].source == "unit_source"
     assert result.edges[0].review_status == "reviewed"
     assert result.edges[0].weight == 0.27
+
+
+def test_run_kg_construction_prefers_parser_output_extractors() -> None:
+    """Parser-aware extractors should consume ParsedSourceContent before legacy source IO."""
+    result = run_kg_construction(
+        [KGConstructionSource(source_id="parser_unit", source_type="unit", scenario="tep")],
+        registry=ExtractorRegistry([ParserAwareUnitExtractor()]),
+        run_id="kgbuild_parser_aware",
+    )
+
+    assert result.run_id == "kgbuild_parser_aware"
+    assert result.parsed_sources[0].kind == "source_reference"
+    assert result.summary["extractor_versions"] == {"parser_aware_unit": "v1"}
+    assert len(result.nodes) == 2
+    assert len(result.edges) == 1
 
 
 def test_run_kg_construction_validates_extractor_before_parse() -> None:
@@ -210,6 +244,66 @@ def test_run_kg_construction_records_structured_parse_audit(tmp_path: Path) -> N
     assert parsed_source["safe_source"]["path"] == str(source_path)
     assert parsed_source["safe_source"]["path_kind"] == "file"
     assert "evidence" in parsed_source["parser_metadata"]["columns"]
+
+
+def test_structured_extractor_consumes_parser_rows_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Structured pipeline extraction should use parser rows instead of reloading files."""
+    source_path = tmp_path / "toy_source.jsonl"
+    _write_jsonl(
+        source_path,
+        [
+            {
+                "id": "SingleParseEvent",
+                "name": "Single parse event",
+                "label": "Event",
+                "scenario": "shared",
+                "evidence": "single parse row",
+            },
+            {
+                "id": "SingleParseRoot",
+                "name": "Single parse root",
+                "label": "RootCause",
+                "scenario": "shared",
+                "evidence": "single parse root row",
+            },
+            {
+                "head": "SingleParseEvent",
+                "relation": "SUGGESTS_ROOT_CAUSE",
+                "tail": "SingleParseRoot",
+                "scenario": "shared",
+                "evidence": "single parse event suggests single parse root",
+                "confidence": 0.7,
+            },
+        ],
+    )
+
+    def fail_if_extractor_reloads(path: Path) -> list[dict[str, object]]:
+        raise AssertionError(f"extractor reloaded structured rows from {path}")
+
+    monkeypatch.setattr(
+        "kgtracevis.kg_construction.extractors.structured.load_structured_records",
+        fail_if_extractor_reloads,
+    )
+
+    result = run_kg_construction(
+        [
+            KGConstructionSource(
+                source_id="single_parse_structured",
+                source_type="manual_table",
+                scenario="shared",
+                path=source_path,
+            )
+        ],
+        registry=ExtractorRegistry([StructuredRecordExtractor()]),
+        run_id="kgbuild_single_parse_structured",
+    )
+
+    assert result.summary["draft_entity_count"] == 2
+    assert result.summary["draft_relation_count"] == 1
+    assert result.edges[0].source == "single_parse_structured"
 
 
 def test_run_kg_construction_records_document_parse_audit_without_text() -> None:
@@ -986,6 +1080,50 @@ def test_build_source_kg_script_supports_toy_generic_structured_source(
     assert set(_required_artifact_keys()) <= set(manifest["artifacts"])
     assert publish_manifest["kg_build_id"] == "kgbuild_cli_toy_generic"
     assert publish_manifest["source_ids"] == ["toy_generic_source"]
+
+
+def test_build_source_kg_script_supports_offline_document_source(
+    tmp_path: Path,
+) -> None:
+    """The CLI should build a document-source DraftKG without an LLM key."""
+    output_dir = tmp_path / "toy_document_candidate"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_source_kg.py",
+            "--toy-generic-document-source",
+            "--run-id",
+            "kgbuild_cli_toy_document",
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    assert "source_to_kg_construction_result_v1" in completed.stdout
+    summary = json.loads((output_dir / "kg_construction_summary.json").read_text())
+    audit_manifest = json.loads(
+        (output_dir / "source_audit_graph_manifest.json").read_text()
+    )
+    review_queue = json.loads((output_dir / "review_queue.json").read_text())
+
+    assert summary["kg_build_id"] == "kgbuild_cli_toy_document"
+    assert summary["source_ids"] == ["toy_generic_document"]
+    assert summary["extractor_versions"] == {"offline_document_ie": "v1"}
+    assert summary["draft_entity_count"] == 4
+    assert summary["draft_relation_count"] == 1
+    assert summary["edge_count"] == 1
+    parsed_source = audit_manifest["parsed_sources"][0]
+    parsed_payload = json.dumps(parsed_source, sort_keys=True)
+    assert parsed_source["kind"] == "text_chunks"
+    assert parsed_source["chunk_count"] == 1
+    assert "Cooling alert can suggest pump seal wear" not in parsed_payload
+    assert review_queue[0]["relation_family"] == "CAUSES"
+    assert review_queue[0]["review_status"] == "auto"
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:

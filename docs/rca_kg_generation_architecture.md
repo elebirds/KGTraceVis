@@ -160,6 +160,29 @@ with `kind`, `parser_kind`, `row_count`, `chunk_count`, `source_reference`,
 `safe_source`, and `parser_metadata`. These entries are summaries only; row
 values and document text stay out of the manifest.
 
+## ParserOutput And Offline Document IE
+
+`ParsedSourceContent` is the current `ParserOutput` contract. The pipeline
+resolves extractors first, parses each source once, and then prefers extractor
+implementations with `extract_from_parsed(parsed, source=...)`. Older
+`extract(source)` implementations remain supported for source-reference
+importers such as TEP semantic lift and TEP RCA graph.
+
+This makes the boundary explicit:
+
+- parsers produce rows, text chunks, or source references;
+- extractors produce only DraftKG candidates;
+- audit manifests expose parser summaries, not full source text or raw row
+  values;
+- LLM and offline document IE outputs remain `auto` candidates and must pass
+  evidence grounding before entering DraftKG.
+
+For no-key development and regression tests, `OfflineDocumentIEExtractor`
+replays a source-grounded fixture from `source.metadata["document_ie_payload"]`
+or `source.metadata["document_ie_fixture_path"]`. It uses the same chunk-to-DraftKG
+conversion and grounding checks as the LLM-backed extractor, but it never calls
+an external model.
+
 ## Example Commands
 
 Toy/manual structured sources can use the existing source construction workflow or API. TEP artifacts can be built from local TEP_KG outputs:
@@ -175,6 +198,17 @@ uv run python scripts/build_source_kg.py \
 The toy command writes a minimal generic structured source under `_sources/`
 and emits the same CSV, layer manifest, publish manifest, summary, and
 construction manifest files as larger builds.
+
+An offline document-source smoke path is also available and does not require an
+LLM key:
+
+```bash
+uv run python scripts/build_source_kg.py \
+  --toy-generic-document-source \
+  --run-id kgbuild_toy_document_demo \
+  --output-dir runs/source_kg_build/toy_document_candidate \
+  --overwrite
+```
 
 ```bash
 uv run python scripts/build_source_kg.py \

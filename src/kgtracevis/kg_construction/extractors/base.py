@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from typing import Protocol
 
 from kgtracevis.kg_construction.draft import DraftKG, KGConstructionSource
+from kgtracevis.kg_construction.parsers import ParsedSourceContent
 
 
 class KGSourceExtractor(Protocol):
@@ -17,6 +18,31 @@ class KGSourceExtractor(Protocol):
 
     def extract(self, source: KGConstructionSource) -> DraftKG:
         """Extract draft KG rows from one source."""
+
+
+class ParsedKGSourceExtractor(KGSourceExtractor, Protocol):
+    """Protocol for extractors that consume parsed source content directly."""
+
+    def extract_from_parsed(
+        self,
+        parsed: ParsedSourceContent,
+        *,
+        source: KGConstructionSource,
+    ) -> DraftKG:
+        """Extract draft KG rows from parser output."""
+
+
+def extract_source_draft(
+    extractor: KGSourceExtractor,
+    source: KGConstructionSource,
+    parsed: ParsedSourceContent,
+) -> DraftKG:
+    """Extract a DraftKG, preferring parser-output-aware extractors."""
+    parsed_extractor = getattr(extractor, "extract_from_parsed", None)
+    if callable(parsed_extractor):
+        extract_from_parsed = parsed_extractor
+        return extract_from_parsed(parsed, source=source)
+    return extractor.extract(source)
 
 
 class ExtractorRegistry:

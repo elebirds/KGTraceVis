@@ -12,7 +12,11 @@ from kgtracevis.kg_construction.alignment import AlignmentResult, run_entity_ali
 from kgtracevis.kg_construction.audit_graph import SourceAuditGraph
 from kgtracevis.kg_construction.draft import DraftKG, KGConstructionSource
 from kgtracevis.kg_construction.export_kg_csv import export_kg_csv, validate_kg_csv_contract
-from kgtracevis.kg_construction.extractors import ExtractorRegistry, default_extractor_registry
+from kgtracevis.kg_construction.extractors import (
+    ExtractorRegistry,
+    default_extractor_registry,
+    extract_source_draft,
+)
 from kgtracevis.kg_construction.models import (
     KG_CONSTRUCTION_LAYER_ARTIFACT_KEYS,
     KGConstructionBuildSummary,
@@ -157,8 +161,13 @@ def run_kg_construction(
         for source in source_rows
     ]
     drafts = [
-        extractor.extract(source)
-        for extractor, source in zip(extractors, source_rows, strict=True)
+        extract_source_draft(extractor, source, parsed)
+        for extractor, source, parsed in zip(
+            extractors,
+            source_rows,
+            parsed_sources,
+            strict=True,
+        )
     ]
     draft = DraftKG.combine(drafts)
     resolved_run_id = run_id or build_kg_construction_run_id()

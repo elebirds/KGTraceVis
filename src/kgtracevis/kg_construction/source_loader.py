@@ -6,6 +6,7 @@ import csv
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -102,6 +103,27 @@ def load_structured_records(path: str | Path) -> list[dict[str, Any]]:
             return [dict(item) for item in data["records"] if isinstance(item, Mapping)]
         raise ValueError(f"{record_path} must contain a list or a records list")
     raise ValueError(f"unsupported structured source type: {record_path}")
+
+
+def load_structured_record_text(
+    text: str,
+    *,
+    source_format: str,
+) -> list[dict[str, Any]]:
+    """Load structured CSV, JSON, or JSONL records from inline source text."""
+    normalized_format = source_format.lower().lstrip(".")
+    if normalized_format == "csv":
+        return [dict(row) for row in csv.DictReader(StringIO(text))]
+    if normalized_format == "jsonl":
+        return [json.loads(line) for line in text.splitlines() if line.strip()]
+    if normalized_format == "json":
+        data = json.loads(text)
+        if isinstance(data, list):
+            return [dict(item) for item in data if isinstance(item, Mapping)]
+        if isinstance(data, Mapping) and isinstance(data.get("records"), list):
+            return [dict(item) for item in data["records"] if isinstance(item, Mapping)]
+        raise ValueError("structured JSON source text must contain a list or records list")
+    raise ValueError(f"unsupported structured source text format: {source_format}")
 
 
 def _resolve_local_path(path_or_url: str, *, base_dir: str | Path) -> Path:

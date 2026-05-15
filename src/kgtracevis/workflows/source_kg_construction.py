@@ -12,6 +12,7 @@ from kgtracevis.kg_construction import (
     ExtractorRegistry,
     KGConstructionManifest,
     KGConstructionSource,
+    OfflineDocumentIEExtractor,
     StructuredRecordExtractor,
     TepRcaGraphExtractor,
     TepSemanticLiftExtractor,
@@ -24,8 +25,9 @@ from kgtracevis.kg_construction.models import (
 )
 
 DEFAULT_SOURCE_KG_BUILD_DIR = Path("runs/source_kg_build")
-SOURCE_TEXT_FORMATS = ("csv", "json", "jsonl")
-SourceTextFormat = Literal["csv", "json", "jsonl"]
+SOURCE_TEXT_FORMATS = ("csv", "json", "jsonl", "txt", "md", "html")
+SourceTextFormat = Literal["csv", "json", "jsonl", "txt", "md", "html"]
+DOCUMENT_TEXT_SOURCE_TYPES = {"document", "markdown", "txt", "html", "web_snapshot"}
 
 
 @dataclass(frozen=True)
@@ -145,6 +147,7 @@ def _runtime_extractor_registry() -> ExtractorRegistry:
     return ExtractorRegistry(
         [
             StructuredRecordExtractor(),
+            OfflineDocumentIEExtractor(),
             TepSemanticLiftExtractor(),
             TepVariableMappingExtractor(),
             TepRcaGraphExtractor(),
@@ -169,12 +172,20 @@ def _materialize_text_source(
         return source
     if source.path is not None:
         raise ValueError(f"{source.source_id} cannot set both path and source text")
-    if source.source_type not in {"structured_records", "manual_table"}:
+    source_types_with_inline_text = {
+        "structured_records",
+        "manual_table",
+        *DOCUMENT_TEXT_SOURCE_TYPES,
+    }
+    if source.source_type not in source_types_with_inline_text:
         raise ValueError(
-            f"source text is only supported for structured_records/manual_table: "
+            f"source text is only supported for structured_records/manual_table/document: "
             f"{source.source_id}"
         )
-    source_format = str(source.metadata.get("source_format") or "jsonl").lower()
+    default_format = "jsonl"
+    if source.source_type in DOCUMENT_TEXT_SOURCE_TYPES:
+        default_format = "html" if source.source_type == "html" else "txt"
+    source_format = str(source.metadata.get("source_format") or default_format).lower()
     if source_format not in SOURCE_TEXT_FORMATS:
         supported = ", ".join(SOURCE_TEXT_FORMATS)
         raise ValueError(f"unsupported source_format={source_format!r}; expected {supported}")

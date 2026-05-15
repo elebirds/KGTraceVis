@@ -9,6 +9,7 @@ from kgtracevis.kg_construction.draft import (
     KGConstructionSource,
 )
 from kgtracevis.kg_construction.extractors.base import ExtractorRegistry
+from kgtracevis.kg_construction.parsers import ParsedSourceContent
 from kgtracevis.kg_construction.source_loader import load_structured_records
 
 
@@ -23,13 +24,43 @@ class StructuredRecordExtractor:
         """Extract draft KG rows from CSV, JSON, or JSONL records."""
         if source.path is None:
             raise ValueError("structured record extraction requires source.path")
-        records = load_structured_records(source.path)
+        return self._extract_records(
+            load_structured_records(source.path),
+            source=source,
+            evidence_reference=str(source.path),
+        )
+
+    def extract_from_parsed(
+        self,
+        parsed: ParsedSourceContent,
+        *,
+        source: KGConstructionSource,
+    ) -> DraftKG:
+        """Extract draft KG rows from parser output rows."""
+        if parsed.kind != "rows":
+            raise ValueError(
+                f"structured extraction requires row parser output: {parsed.source_id}"
+            )
+        return self._extract_records(
+            parsed.rows,
+            source=source,
+            evidence_reference=parsed.source_reference or source.source_id,
+        )
+
+    def _extract_records(
+        self,
+        records: list[dict[str, object]] | tuple[dict[str, object], ...],
+        *,
+        source: KGConstructionSource,
+        evidence_reference: str,
+    ) -> DraftKG:
+        """Convert structured source records to DraftKG rows."""
         entities: list[DraftEntity] = []
         relations: list[DraftRelation] = []
         for index, record in enumerate(records, start=1):
             source_id = str(record.get("source") or record.get("source_id") or source.source_id)
             scenario = str(record.get("scenario") or source.scenario)
-            evidence = str(record.get("evidence") or f"{source.path}:{index}")
+            evidence = str(record.get("evidence") or f"{evidence_reference}:{index}")
             entity_id = str(
                 record.get("id") or record.get("entity_id") or record.get("node_id") or ""
             )

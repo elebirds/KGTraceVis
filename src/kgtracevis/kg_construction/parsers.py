@@ -12,7 +12,10 @@ from kgtracevis.kg_construction.document_extraction import (
     parse_source_material,
 )
 from kgtracevis.kg_construction.draft import KGConstructionSource
-from kgtracevis.kg_construction.source_loader import load_structured_records
+from kgtracevis.kg_construction.source_loader import (
+    load_structured_record_text,
+    load_structured_records,
+)
 
 ParsedContentKind = Literal["rows", "text_chunks", "source_reference"]
 
@@ -31,6 +34,9 @@ class ParsedSourceContent:
     metadata: dict[str, Any] = field(default_factory=dict)
     parser_metadata: dict[str, Any] = field(default_factory=dict)
     source_reference: str = ""
+
+
+ParserOutput = ParsedSourceContent
 
 
 def parsed_source_content_summary(
@@ -56,9 +62,19 @@ def parsed_source_content_summary(
 def parse_source_for_extraction(source: KGConstructionSource) -> ParsedSourceContent:
     """Parse a source into rows or chunks without emitting KG facts."""
     if source.source_type in {"structured_records", "manual_table", "tep_variable_mapping"}:
-        if source.path is None:
-            raise ValueError(f"{source.source_type} source requires path: {source.source_id}")
-        rows = tuple(load_structured_records(source.path))
+        if source.path is not None:
+            rows = tuple(load_structured_records(source.path))
+            path = str(source.path)
+        elif source.text is not None:
+            source_format = str(source.metadata.get("source_format") or "jsonl")
+            rows = tuple(
+                load_structured_record_text(source.text, source_format=source_format)
+            )
+            path = ""
+        else:
+            raise ValueError(
+                f"{source.source_type} source requires path or text: {source.source_id}"
+            )
         return ParsedSourceContent(
             source_id=source.source_id,
             source_type=source.source_type,
@@ -69,7 +85,8 @@ def parse_source_for_extraction(source: KGConstructionSource) -> ParsedSourceCon
             metadata=dict(source.metadata),
             parser_metadata={
                 "columns": _record_columns(rows),
-                "path": str(source.path),
+                "path": path,
+                "source_format": str(source.metadata.get("source_format") or ""),
             },
             source_reference=_source_reference(source),
         )

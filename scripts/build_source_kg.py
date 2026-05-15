@@ -68,6 +68,14 @@ def parse_args() -> argparse.Namespace:
         help="Build a tiny generic manual-table source for smoke tests and demos.",
     )
     parser.add_argument(
+        "--toy-generic-document-source",
+        action="store_true",
+        help=(
+            "Build a tiny generic text source with an offline document IE fixture; "
+            "does not require an LLM key."
+        ),
+    )
+    parser.add_argument(
         "--run-id",
         help="Optional deterministic KG build ID to record in manifests.",
     )
@@ -83,7 +91,8 @@ def main() -> None:
         raise SystemExit(
             "No source inputs provided. Pass --tep-semantic-lift-dir, "
             "--tep-semantic-nodes/--tep-semantic-edges, --tep-variable-mapping, "
-            "--tep-rca-graph-dir, or --toy-generic-structured-source."
+            "--tep-rca-graph-dir, --toy-generic-structured-source, or "
+            "--toy-generic-document-source."
         )
 
     try:
@@ -169,6 +178,19 @@ def _build_sources(args: argparse.Namespace) -> list[KGConstructionSource]:
                 metadata={"source_format": "csv"},
             )
         )
+    if args.toy_generic_document_source:
+        sources.append(
+            KGConstructionSource(
+                source_id="toy_generic_document",
+                source_type="txt",
+                scenario="shared",
+                text=_toy_generic_document_text(),
+                metadata={
+                    "source_format": "txt",
+                    "document_ie_payload": _toy_generic_document_ie_payload(),
+                },
+            )
+        )
     return sources
 
 
@@ -182,6 +204,57 @@ def _toy_generic_source_csv() -> str:
             "",
         ]
     )
+
+
+def _toy_generic_document_text() -> str:
+    return (
+        "Cooling alert can suggest pump seal wear. "
+        "The pressure signal is observed by Pump A."
+    )
+
+
+def _toy_generic_document_ie_payload() -> dict[str, object]:
+    return {
+        "entities": [
+            {
+                "id": "CoolingAlert",
+                "name": "Cooling alert",
+                "label": "Event",
+                "evidence": "Cooling alert can suggest pump seal wear.",
+                "confidence": 0.56,
+            },
+            {
+                "id": "PumpSealWear",
+                "name": "Pump seal wear",
+                "label": "RootCause",
+                "evidence": "pump seal wear",
+                "confidence": 0.52,
+            },
+            {
+                "id": "PressureSignal",
+                "name": "Pressure signal",
+                "label": "Variable",
+                "evidence": "pressure signal",
+                "confidence": 0.58,
+            },
+            {
+                "id": "PumpA",
+                "name": "Pump A",
+                "label": "Equipment",
+                "evidence": "Pump A",
+                "confidence": 0.58,
+            },
+        ],
+        "relations": [
+            {
+                "head": "CoolingAlert",
+                "relation": "SUGGESTS_ROOT_CAUSE",
+                "tail": "PumpSealWear",
+                "evidence": "Cooling alert can suggest pump seal wear.",
+                "confidence": 0.5,
+            },
+        ],
+    }
 
 
 if __name__ == "__main__":
