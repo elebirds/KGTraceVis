@@ -50,7 +50,7 @@ pending.
   pending, and skipped candidates.
 * [x] Offline document causal edge is not published before acceptance.
 * [x] Accepted offline document causal edge is published as `reviewed`.
-* [ ] TEP imported RCA graph edges remain candidates unless reviewed/policy
+* [x] TEP imported RCA graph edges remain candidates unless reviewed/policy
   allowed; external TEP status is preserved only as metadata.
 * [x] Existing build artifacts and tests continue passing.
 
@@ -70,6 +70,9 @@ pending.
   pipeline/workflow/service tests `65 passed`; ruff and mypy focused checks
   passed. Offline document smoke emitted one pending candidate and zero
   published edges before review.
+* Added focused TEP RCA graph assertion: imported external
+  `review_status=accept` stays in draft metadata, while the propagated
+  FAULT_SOURCE edge remains pending in publish policy until KGTraceVis review.
 
 ## Definition of Done
 

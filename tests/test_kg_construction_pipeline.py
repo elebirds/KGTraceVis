@@ -23,6 +23,7 @@ from kgtracevis.kg_construction import (
     TepRcaGraphExtractor,
     TepSemanticLiftExtractor,
     TepVariableMappingExtractor,
+    build_publish_snapshot,
     build_review_queue,
     clean_candidate_nodes,
     clean_candidate_triples,
@@ -963,7 +964,18 @@ def test_tep_rca_graph_extractor_preserves_rca_metadata(tmp_path: Path) -> None:
     assert edge.review_status == "auto"
     assert edge.external_edge_id == "rca_edge_1"
     assert edge.kg_build_id == "kgbuild_tep_rca_unit"
+    assert result.draft.relations[0].metadata["tep_review_status"] == "accept"
     assert result.review_queue[0].priority >= 80
+    snapshot = build_publish_snapshot(
+        kg_build_id="kgbuild_tep_rca_unit",
+        nodes=result.nodes,
+        edges=result.edges,
+    )
+    assert snapshot.edges == ()
+    assert snapshot.report_payload()["disposition_counts"] == {"pending_review": 1}
+    assert snapshot.report_items[0].reason == (
+        "high-risk causal/propagation/document edge requires review"
+    )
 
 
 def test_build_source_kg_script_writes_candidate_artifacts(tmp_path: Path) -> None:
