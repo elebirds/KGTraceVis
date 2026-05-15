@@ -977,3 +977,36 @@ Review accept/reject workflows now refresh kg_construction_diff with direct-revi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 30: M14 RCA KG construction acceptance smoke expansion
+
+**Date**: 2026-05-15
+**Task**: M14 RCA KG construction acceptance smoke expansion
+**Branch**: `main`
+
+### Summary
+
+Acceptance smoke now covers toy Source Library, pre-extracted material direct build, and optional TEP_KG import paths with required artifact validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6c8e623` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
