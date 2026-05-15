@@ -713,3 +713,36 @@ Added --source-library to build_source_kg.py, resolved relative Source Library p
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: Source Library build artifact for RCA KG
+
+**Date**: 2026-05-15
+**Task**: Source Library build artifact for RCA KG
+**Branch**: `main`
+
+### Summary
+
+Added source_library_manifest.json as a required KG construction artifact, exposed it through workflow and service DTOs, documented the contract, and verified full pytest/run_examples/ruff/mypy.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0aff118` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
