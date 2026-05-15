@@ -22,6 +22,7 @@ class KGOverlayValidationConfig:
     kg_edge_paths: tuple[Path, ...] = ()
     example_dir: Path = Path("data/examples")
     output_path: Path | None = None
+    include_defaults_for_runtime: bool = True
     include_defaults_for_import: bool = True
     top_k: int = 5
 
@@ -43,9 +44,14 @@ def run_kg_overlay_validation(
         kg_node_paths=config.kg_node_paths,
         kg_edge_paths=config.kg_edge_paths,
     )
+    runtime_node_paths = [*DEFAULT_NODE_PATHS, *node_paths]
+    runtime_edge_paths = [*DEFAULT_EDGE_PATHS, *edge_paths]
+    if not config.include_defaults_for_runtime:
+        runtime_node_paths = list(node_paths)
+        runtime_edge_paths = list(edge_paths)
     runtime_graph = KnowledgeGraph.from_paths(
-        [*DEFAULT_NODE_PATHS, *node_paths],
-        [*DEFAULT_EDGE_PATHS, *edge_paths],
+        runtime_node_paths,
+        runtime_edge_paths,
         skip_missing=True,
     )
     overlay_graph = KnowledgeGraph.from_paths(node_paths, edge_paths, skip_missing=True)
@@ -102,6 +108,11 @@ def run_kg_overlay_validation(
         "build_dir": str(config.build_dir) if config.build_dir is not None else None,
         "kg_node_paths": [str(path) for path in node_paths],
         "kg_edge_paths": [str(path) for path in edge_paths],
+        "runtime_graph": {
+            "node_count": len(runtime_graph.nodes),
+            "edge_count": len(runtime_graph.edges),
+            "include_defaults": config.include_defaults_for_runtime,
+        },
         "overlay_edge_count": len(overlay_graph.edges),
         "overlay_edge_ids": sorted(overlay_edge_ids),
         "overlay_kg_build_ids": sorted(overlay_kg_build_ids),

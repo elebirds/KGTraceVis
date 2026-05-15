@@ -319,6 +319,7 @@ class KGConstructionOverlayValidationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     example_dir: str = "data/examples"
+    overlay_only_runtime: bool = False
     overlay_only_import: bool = False
     top_k: int = Field(default=5, ge=1)
 
@@ -727,6 +728,7 @@ def validate_kg_construction_overlay(
         KGOverlayValidationConfig(
             build_dir=Path(build.output_dir),
             example_dir=Path(request.example_dir),
+            include_defaults_for_runtime=not request.overlay_only_runtime,
             include_defaults_for_import=not request.overlay_only_import,
             top_k=request.top_k,
         )

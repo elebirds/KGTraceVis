@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "TEP Root-KGD runtime reasoner contract and workflow boundaries"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "KG edge provenance, overlay metadata, and runtime graph loading rules"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "explicit validation and no silent fallback"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "quality gates for backend changes"}

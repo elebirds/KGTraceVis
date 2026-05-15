@@ -44,6 +44,7 @@ def test_kg_overlay_validation_writes_runtime_and_import_report(
     assert report["missing_overlay_contribution_warning"] == ""
     assert report["validated"] is True
     assert report["example_count"] == 1
+    assert report["runtime_graph"]["include_defaults"] is True
     assert report["import_dry_run"]["dry_run"] is True
     assert report["import_dry_run"]["include_defaults"] is True
     assert report["import_dry_run"]["node_count"] >= 2
@@ -96,7 +97,37 @@ def test_validate_kg_overlay_cli_accepts_build_dir(tmp_path: Path) -> None:
     assert payload["contract_validated"] is True
     assert payload["runtime_validated"] is True
     assert payload["overlay_contributed"] is True
+    assert payload["runtime_graph"]["include_defaults"] is True
     assert payload["examples"][0]["kg_build_ids"] == ["kgbuild_overlay_validation"]
+
+
+def test_validate_kg_overlay_cli_supports_overlay_only_runtime(
+    tmp_path: Path,
+) -> None:
+    """TEP-style overlays can be runtime validated without merging default seeds."""
+    build_dir = _write_build_dir(tmp_path)
+    example_dir = _write_example_dir(tmp_path)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/validate_kg_overlay.py",
+            "--build-dir",
+            str(build_dir),
+            "--example-dir",
+            str(example_dir),
+            "--overlay-only-runtime",
+            "--overlay-only-import",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(completed.stdout)
+    assert payload["runtime_graph"]["include_defaults"] is False
+    assert payload["import_dry_run"]["include_defaults"] is False
+    assert payload["overlay_contributed"] is True
 
 
 def test_kg_overlay_validation_distinguishes_loading_from_contribution(

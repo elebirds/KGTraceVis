@@ -516,6 +516,7 @@ def test_kg_construction_overlay_validation_route_runs_runtime_report(
     assert payload["report"]["contract_validated"] is True
     assert payload["report"]["runtime_validated"] is True
     assert payload["report"]["overlay_contributed"] is True
+    assert payload["report"]["runtime_graph"]["include_defaults"] is True
     assert payload["report"]["overlay_contribution_case_count"] == 1
     assert payload["report"]["validated"] is True
     assert payload["report"]["import_dry_run"]["dry_run"] is True

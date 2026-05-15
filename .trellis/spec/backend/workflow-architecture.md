@@ -180,6 +180,11 @@ Runtime contracts:
   but must not be used as scoring inputs.
 - `ranked_root_causes[*].explanation_paths` must be a subset of returned
   `top_k_paths`, so visual review and feedback IDs stay aligned.
+- The provider must use the passed runtime `KnowledgeGraph` for read-only
+  provenance enrichment when candidate overlay edges carry `external_edge_id`
+  values matching Root-KGD static edge IDs. This enrichment may add
+  `source_edge_ids`, `source_edges[*].kg_build_id`, and path-level
+  `kg_build_ids`, but must not alter Root-KGD scoring or publish/review facts.
 
 Validation:
 

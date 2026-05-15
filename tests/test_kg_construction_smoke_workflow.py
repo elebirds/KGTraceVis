@@ -32,7 +32,7 @@ def test_kg_construction_smoke_builds_toy_material_and_tep_paths(
     payload = result.payload()
     paths = {path["name"]: path for path in payload["paths"]}
 
-    assert payload["passed"] == 4
+    assert payload["passed"] == 5
     assert payload["skipped"] == 0
     assert paths["toy_generic"]["status"] == "passed"
     assert paths["toy_generic"]["metadata"]["source_ids"] == ["toy_generic_source"]
@@ -66,6 +66,11 @@ def test_kg_construction_smoke_builds_toy_material_and_tep_paths(
     ]
     assert paths["tep"]["metadata"]["fault_anchor_count"] == 1
     assert paths["tep"]["metadata"]["propagation_edge_count"] >= 1
+    assert paths["tep_runtime_overlay"]["status"] == "passed"
+    assert paths["tep_runtime_overlay"]["metadata"]["overlay_contributed"] is True
+    assert paths["tep_runtime_overlay"]["metadata"][
+        "overlay_contribution_kg_build_ids"
+    ] == ["kgbuild_smoke_tep"]
     assert result.summary_path.is_file()
 
 
@@ -106,11 +111,12 @@ def test_smoke_rca_kg_construction_cli_builds_fixture_paths(tmp_path: Path) -> N
     payload = json.loads(completed.stdout)
     paths = {path["name"]: path for path in payload["paths"]}
     assert payload["artifact_type"] == "rca_kg_construction_smoke_result_v1"
-    assert payload["passed"] == 4
+    assert payload["passed"] == 5
     assert paths["toy_generic"]["status"] == "passed"
     assert paths["material_direct"]["status"] == "passed"
     assert paths["runtime_overlay"]["status"] == "passed"
     assert paths["tep"]["status"] == "passed"
+    assert paths["tep_runtime_overlay"]["status"] == "passed"
     assert Path(payload["summary_path"]).is_file()
     assert Path(paths["material_direct"]["artifacts"]["review_queue"]).is_file()
     assert Path(paths["tep"]["artifacts"]["review_queue"]).is_file()
@@ -170,18 +176,18 @@ def _write_tep_fixture(tep_root: Path) -> None:
         rca_dir / "nodes.jsonl",
         [
             {
-                "node_id": "component:steam_valve",
-                "entity_id": "component:steam_valve",
-                "entity_type": "Component",
-                "name": "Steam valve",
+                "node_id": "variable:manipulated_variable_3_a_feed",
+                "entity_id": "variable:manipulated_variable_3_a_feed",
+                "entity_type": "Variable",
+                "name": "Manipulated Variable 3: A Feed",
                 "root_cause_candidate": True,
-                "provenance_ids": ["ev_valve"],
+                "provenance_ids": ["ev_xmv3"],
             },
             {
-                "node_id": "fault_anchor:fault_06",
-                "entity_id": "fault_anchor:fault_06",
+                "node_id": "faultanchor:stream_1_a_feed_loss",
+                "entity_id": "faultanchor:stream_1_a_feed_loss",
                 "entity_type": "FaultAnchor",
-                "name": "Fault 06 anchor",
+                "name": "Stream 1 A-feed loss disturbance",
                 "provenance_ids": ["ev_fault"],
             },
         ],
@@ -190,10 +196,10 @@ def _write_tep_fixture(tep_root: Path) -> None:
         rca_dir / "edges.jsonl",
         [
             {
-                "edge_id": "rca_edge_steam_valve",
-                "head_id": "component:steam_valve",
+                "edge_id": "fault_anchor_edge_cbc328c82a449d70",
+                "head_id": "faultanchor:stream_1_a_feed_loss",
                 "relation": "CAUSES",
-                "tail_id": "fault_anchor:fault_06",
+                "tail_id": "variable:manipulated_variable_3_a_feed",
                 "confidence": 0.74,
                 "relation_family": "FAULT_SOURCE",
                 "propagation_enabled": True,

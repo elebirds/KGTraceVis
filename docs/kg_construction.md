@@ -84,19 +84,26 @@ Neo4j import dry-run readiness, run:
 
 ```bash
 uv run python scripts/validate_kg_overlay.py \
-  --build-dir runs/source_kg_build/tep_candidate
+  --build-dir runs/source_kg_build/tep_candidate \
+  --overlay-only-runtime \
+  --overlay-only-import
 ```
 
 This writes `kg_overlay_validation_report.json` beside the build. The report
 records example-level linking/path counts, RCA path metadata such as
 `path_strength`, `rca_score`, `source_edge_ids`, and `kg_build_ids`, plus the
-merged import dry-run counts. It separates `contract_validated`,
+runtime graph and import dry-run counts. It separates `contract_validated`,
 `runtime_validated`, and `overlay_contributed`, so loading a candidate overlay
 successfully is not confused with the overlay actually appearing in RCA paths.
 If no top-k RCA path references the overlay `kg_build_id` or candidate edge ID,
 the report sets `validated=false` and includes a
 `missing_overlay_contribution_warning`. It does not rebuild KG artifacts,
 review candidates, or publish anything.
+
+Use `--overlay-only-runtime` / `--overlay-only-import` for TEP candidate builds
+that intentionally supersede checked-in seed TEP nodes during validation. This
+keeps default seed conflicts from hiding whether Root-KGD runtime paths preserve
+candidate overlay provenance.
 
 Before publishing to Neo4j, validate the merged default KG plus candidate layer:
 

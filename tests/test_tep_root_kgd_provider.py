@@ -11,7 +11,7 @@ import pytest
 
 from kgtracevis.adapters.tep_adapter import evidence_from_tep_record
 from kgtracevis.core import KGTracePipeline
-from kgtracevis.kg.graph import KnowledgeGraph
+from kgtracevis.kg.graph import KGEdge, KGNode, KnowledgeGraph
 from kgtracevis.workflows.tep_root_kgd import (
     TepRootKgdRcaProvider,
     extract_root_kgd_dynamic_features,
@@ -160,6 +160,68 @@ def test_root_kgd_candidate_paths_are_subset_of_returned_top_k_paths(
     assert candidate_path_ids <= returned_path_ids
 
 
+def test_root_kgd_paths_preserve_runtime_overlay_provenance(tmp_path: Path) -> None:
+    """Root-KGD paths should surface candidate KG provenance when edge IDs align."""
+    provider = TepRootKgdRcaProvider(_write_root_kgd_assets(tmp_path / "assets"))
+    evidence = evidence_from_tep_record(
+        {
+            "case_id": "tep_root_kgd_overlay",
+            "variables": ["XMEAS_1"],
+            "variable_contributions": {"XMEAS_1": 0.9},
+        }
+    )
+    graph = _runtime_overlay_graph()
+
+    result = provider.reason_root_causes(
+        evidence,
+        graph=graph,
+        linked_entities=[],
+        top_k=1,
+    )
+
+    assert result.metadata["runtime_overlay_provenance_edges"] == 1
+    assert result.metadata["runtime_overlay_kg_build_ids"] == ["kgbuild_tep_candidate"]
+    path = result.top_k_paths[0]
+    assert path["source_edge_ids"] == [
+        "CoolingFaultAnchor|CAUSES|Xmeas1Variable|tep"
+    ]
+    assert path["kg_build_ids"] == ["kgbuild_tep_candidate"]
+    assert path["source_edges"][0]["edge_id"] == (
+        "CoolingFaultAnchor|CAUSES|Xmeas1Variable|tep"
+    )
+    assert path["source_edges"][0]["external_edge_id"] == "edge_cooling_xmeas_1"
+    assert path["source_edges"][0]["kg_build_id"] == "kgbuild_tep_candidate"
+    assert result.ranked_root_causes[0].supporting_edges[0]["kg_build_id"] == (
+        "kgbuild_tep_candidate"
+    )
+
+
+def test_root_kgd_paths_keep_static_edge_ids_without_overlay_match(
+    tmp_path: Path,
+) -> None:
+    """Root-KGD remains usable when no candidate overlay edge can be matched."""
+    provider = TepRootKgdRcaProvider(_write_root_kgd_assets(tmp_path / "assets"))
+    evidence = evidence_from_tep_record(
+        {
+            "case_id": "tep_root_kgd_no_overlay",
+            "variables": ["XMEAS_1"],
+            "variable_contributions": {"XMEAS_1": 0.9},
+        }
+    )
+
+    result = provider.reason_root_causes(
+        evidence,
+        graph=KnowledgeGraph([], []),
+        linked_entities=[],
+        top_k=1,
+    )
+
+    assert result.metadata["runtime_overlay_provenance_edges"] == 0
+    assert result.metadata["runtime_overlay_kg_build_ids"] == []
+    assert result.top_k_paths[0]["source_edge_ids"] == ["edge_cooling_xmeas_1"]
+    assert result.top_k_paths[0]["kg_build_ids"] == []
+
+
 def test_real_tepkg_root_kgd_parity_smoke() -> None:
     """Guarded smoke check: local TEP_KG rank_scenario matches the ported function."""
     tepkg_root = Path("/Users/hhm/code/TEP_KG")
@@ -242,6 +304,47 @@ def _write_root_kgd_assets(asset_dir: Path) -> Path:
     )
     _write_json(asset_dir / "anchor_memory_profiles.json", {"anchor_count": 0, "anchors": []})
     return asset_dir
+
+
+def _runtime_overlay_graph() -> KnowledgeGraph:
+    return KnowledgeGraph(
+        nodes=[
+            KGNode(
+                "CoolingFaultAnchor",
+                "Cooling fault",
+                "FaultAnchor",
+                "tep",
+                ("faultanchor:cooling_fault",),
+            ),
+            KGNode(
+                "Xmeas1Variable",
+                "XMEAS_1",
+                "Variable",
+                "tep",
+                ("variable:xmeas_1", "xmeas_1"),
+            ),
+        ],
+        edges=[
+            KGEdge(
+                head="CoolingFaultAnchor",
+                relation="CAUSES",
+                tail="Xmeas1Variable",
+                scenario="tep",
+                source="tep_rca_graph",
+                evidence="TEP semantic-lift edge edge_cooling_xmeas_1",
+                confidence=0.9,
+                weight=0.1,
+                review_status="auto",
+                feedback_count=0,
+                accepted_count=0,
+                rejected_count=0,
+                relation_family="FAULT_SOURCE",
+                propagation_enabled=True,
+                external_edge_id="edge_cooling_xmeas_1",
+                kg_build_id="kgbuild_tep_candidate",
+            )
+        ],
+    )
 
 
 def _node(

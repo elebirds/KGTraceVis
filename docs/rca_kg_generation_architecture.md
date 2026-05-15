@@ -127,6 +127,11 @@ contribution: `overlay_contributed` is true only when a top-k path references a
 candidate overlay `kg_build_id` or candidate edge ID. Otherwise the report keeps
 `contract_validated=true` and `runtime_validated=true`, but sets
 `validated=false` with a `missing_overlay_contribution_warning`.
+For TEP candidate builds that replace seed TEP nodes, pass
+`--overlay-only-runtime --overlay-only-import`. Root-KGD still scores from its
+checked-in model assets, but runtime paths now enrich `source_edges`,
+`source_edge_ids`, and `kg_build_ids` by matching Root-KGD edge IDs to candidate
+KG `external_edge_id` values.
 The service exposes the same check at:
 
 ```http

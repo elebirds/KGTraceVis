@@ -19,6 +19,10 @@ from kgtracevis.service.kg_materials import (
     KGMaterialRegisterRequest,
     register_kg_material,
 )
+from kgtracevis.workflows.kg_overlay_validation import (
+    KGOverlayValidationConfig,
+    run_kg_overlay_validation,
+)
 from kgtracevis.workflows.material_kg_construction import (
     MaterialKGConstructionWorkflowConfig,
     MaterialKGConstructionWorkflowResult,
@@ -103,7 +107,9 @@ def run_kg_construction_acceptance_smoke(
     material_path, material_result = _run_material_direct_smoke(config)
     paths.append(material_path)
     paths.append(_run_runtime_overlay_smoke(material_result))
-    paths.append(_run_tep_smoke(config))
+    tep_path, tep_result = _run_tep_smoke(config)
+    paths.append(tep_path)
+    paths.append(_run_tep_runtime_overlay_smoke(tep_result))
     summary_path = config.output_dir / "kg_construction_smoke_summary.json"
     result = KGConstructionSmokeResult(
         output_dir=config.output_dir,
@@ -157,14 +163,19 @@ def _run_toy_source_library_smoke(
     return _passed_path("toy_generic", result, metadata=metadata)
 
 
-def _run_tep_smoke(config: KGConstructionSmokeConfig) -> KGConstructionSmokePath:
+def _run_tep_smoke(
+    config: KGConstructionSmokeConfig,
+) -> tuple[KGConstructionSmokePath, SourceKGConstructionWorkflowResult | None]:
     if config.tep_kg_root is None:
         if config.require_tep:
             raise ValueError("TEP smoke requires --tep-kg-root when --require-tep is set")
-        return KGConstructionSmokePath(
-            name="tep",
-            status="skipped",
-            reason="no TEP_KG root provided",
+        return (
+            KGConstructionSmokePath(
+                name="tep",
+                status="skipped",
+                reason="no TEP_KG root provided",
+            ),
+            None,
         )
     sources = _tep_sources(config.tep_kg_root)
     missing = _missing_tep_artifacts(config.tep_kg_root)
@@ -172,7 +183,7 @@ def _run_tep_smoke(config: KGConstructionSmokeConfig) -> KGConstructionSmokePath
         message = "missing TEP_KG smoke artifacts: " + ", ".join(str(path) for path in missing)
         if config.require_tep:
             raise ValueError(message)
-        return KGConstructionSmokePath(name="tep", status="skipped", reason=message)
+        return KGConstructionSmokePath(name="tep", status="skipped", reason=message), None
     result = run_source_kg_construction_workflow(
         SourceKGConstructionWorkflowConfig(
             output_dir=config.output_dir / "tep",
@@ -183,7 +194,7 @@ def _run_tep_smoke(config: KGConstructionSmokeConfig) -> KGConstructionSmokePath
     )
     metadata = _validate_required_artifacts(result)
     metadata.update(_validate_tep_rca_metadata(result.output_dir))
-    return _passed_path("tep", result, metadata=metadata)
+    return _passed_path("tep", result, metadata=metadata), result
 
 
 def _run_material_direct_smoke(
@@ -270,6 +281,62 @@ def _run_runtime_overlay_smoke(
             "path_strength": path.get("path_strength", 0.0),
             "rca_score": path.get("rca_score", 0.0),
             "source_edge_ids": list(path.get("source_edge_ids") or []),
+        },
+    )
+
+
+def _run_tep_runtime_overlay_smoke(
+    result: SourceKGConstructionWorkflowResult | None,
+) -> KGConstructionSmokePath:
+    if result is None:
+        return KGConstructionSmokePath(
+            name="tep_runtime_overlay",
+            status="skipped",
+            reason="TEP construction smoke was skipped",
+        )
+    validation = run_kg_overlay_validation(
+        KGOverlayValidationConfig(
+            build_dir=result.output_dir,
+            example_dir=Path("data/examples"),
+            include_defaults_for_runtime=False,
+            include_defaults_for_import=False,
+            top_k=5,
+        )
+    )
+    report = validation.report
+    if not report.get("overlay_contributed"):
+        raise ValueError(
+            "TEP runtime overlay smoke did not find Root-KGD paths referencing "
+            "candidate overlay kg_build_ids or source_edge_ids"
+        )
+    return KGConstructionSmokePath(
+        name="tep_runtime_overlay",
+        status="passed",
+        output_dir=result.output_dir,
+        summary_path=result.summary_path,
+        manifest_path=result.manifest_path,
+        artifacts={
+            **{
+                str(key): str(value)
+                for key, value in dict(result.summary.get("output") or {}).items()
+                if key != "output_dir"
+            },
+            "kg_overlay_validation_report": (
+                str(validation.output_path) if validation.output_path is not None else ""
+            ),
+        },
+        metadata={
+            "kg_build_id": result.run_id,
+            "overlay_contributed": bool(report["overlay_contributed"]),
+            "overlay_contribution_case_count": report[
+                "overlay_contribution_case_count"
+            ],
+            "overlay_contribution_kg_build_ids": list(
+                report["overlay_contribution_kg_build_ids"]
+            ),
+            "overlay_contribution_source_edge_ids": list(
+                report["overlay_contribution_source_edge_ids"]
+            ),
         },
     )
 

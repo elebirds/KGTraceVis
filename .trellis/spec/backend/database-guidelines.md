@@ -542,6 +542,10 @@ prepared for Neo4j publication.
   `missing_overlay_contribution_warning`.
   It must not rebuild construction artifacts, mutate review decisions, or
   publish to Neo4j.
+- Runtime validation and import validation may independently run with overlay
+  CSVs only. Use the overlay-only runtime/import mode for candidate builds, such
+  as TEP semantic/RCA imports, that intentionally replace seed nodes and would
+  otherwise conflict with checked-in defaults during validation.
 - TEP semantic-lift `full_kg_entity_ids` are entity-resolution cluster members,
   not KGTraceVis node aliases. Do not import them into `aliases` unless the
   alias-review and endpoint-rewrite logic explicitly supports that behavior.

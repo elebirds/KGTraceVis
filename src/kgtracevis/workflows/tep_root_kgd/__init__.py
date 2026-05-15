@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from kgtracevis.core.result import RankedRootCause, RcaReasoningResult
-from kgtracevis.kg.graph import KnowledgeGraph
+from kgtracevis.kg.graph import KGEdge, KnowledgeGraph
 from kgtracevis.schema.evidence_schema import Evidence
 from kgtracevis.workflows.tep_root_kgd.assets import read_jsonl
 from kgtracevis.workflows.tep_root_kgd.propagation import (
@@ -76,9 +76,8 @@ class TepRootKgdRcaProvider:
         top_k: int = 5,
     ) -> RcaReasoningResult:
         """Return Root-KGD rankings and explanation paths for one Evidence item."""
-        del graph
         del linked_entities
-        ranked, paths, metadata = self._rank_with_paths(evidence, top_k=top_k)
+        ranked, paths, metadata = self._rank_with_paths(evidence, graph=graph, top_k=top_k)
         return RcaReasoningResult(
             case_id=evidence.case_id,
             top_k_paths=paths,
@@ -96,15 +95,19 @@ class TepRootKgdRcaProvider:
         top_k_paths: list[dict[str, Any]] | None = None,
     ) -> list[RankedRootCause]:
         """Return Root-KGD root-cause candidates for one TEP Evidence item."""
-        del graph
         del top_k_paths
-        ranked, _paths, _metadata = self._rank_with_paths(evidence, top_k=top_k)
+        ranked, _paths, _metadata = self._rank_with_paths(
+            evidence,
+            graph=graph,
+            top_k=top_k,
+        )
         return ranked
 
     def _rank_with_paths(
         self,
         evidence: Evidence,
         *,
+        graph: KnowledgeGraph | None = None,
         top_k: int,
     ) -> tuple[list[RankedRootCause], list[dict[str, Any]], dict[str, Any]]:
         if evidence.dataset != "tep":
@@ -138,8 +141,14 @@ class TepRootKgdRcaProvider:
             anchor_memory_profiles=self.assets.anchor_memory_profiles,
         )
         rows = rows[:top_k]
+        overlay_index = _runtime_overlay_index(graph)
         paths = _select_top_k_paths(
-            _top_k_paths_from_rows(evidence.case_id, rows, self.assets.graph),
+            _top_k_paths_from_rows(
+                evidence.case_id,
+                rows,
+                self.assets.graph,
+                runtime_overlay_index=overlay_index,
+            ),
             rows,
             top_k=top_k,
         )
@@ -157,6 +166,12 @@ class TepRootKgdRcaProvider:
             **_metadata(self.assets, uses_fault_number=False),
             "graph_contribution_count": len(graph_contributions),
             "dynamic_feature_count": len(dynamic_features),
+            "runtime_overlay_provenance_edges": sum(len(edges) for edges in overlay_index.values()),
+            "runtime_overlay_kg_build_ids": _unique_values(
+                edge.kg_build_id
+                for edges in overlay_index.values()
+                for edge in edges
+            ),
         }
 
 
@@ -456,6 +471,8 @@ def _top_k_paths_from_rows(
     case_id: str,
     rows: list[dict[str, object]],
     graph: dict[str, object],
+    *,
+    runtime_overlay_index: dict[str, list[KGEdge]],
 ) -> list[dict[str, Any]]:
     paths: list[dict[str, Any]] = []
     for row in rows:
@@ -463,6 +480,11 @@ def _top_k_paths_from_rows(
             if not isinstance(node_path, list) or len(node_path) < 2:
                 continue
             edge_rows = _edge_rows_for_node_path(node_path, graph)
+            source_edges = [
+                payload
+                for edge in edge_rows
+                for payload in _source_edge_payloads(edge, runtime_overlay_index)
+            ]
             candidate_id = str(row["candidate_id"])
             paths.append(
                 {
@@ -476,7 +498,13 @@ def _top_k_paths_from_rows(
                     "score": float(row.get("ranking_score", 0.0)),
                     "confidence": float(row.get("root_score", 0.0)),
                     "evidence_match": float(row.get("discriminator_alignment", 0.0)),
-                    "source_edges": [_source_edge_payload(edge) for edge in edge_rows],
+                    "source_edges": source_edges,
+                    "source_edge_ids": _unique_values(
+                        edge.get("edge_id") for edge in source_edges
+                    ),
+                    "kg_build_ids": _unique_values(
+                        edge.get("kg_build_id") for edge in source_edges
+                    ),
                     "supporting_evidence": [
                         (
                             f"{row.get('candidate_name', candidate_id)} propagated to "
@@ -584,9 +612,21 @@ def _best_edge(
     )[0]
 
 
-def _source_edge_payload(edge: dict[str, object]) -> dict[str, Any]:
+def _source_edge_payloads(
+    edge: dict[str, object],
+    runtime_overlay_index: dict[str, list[KGEdge]],
+) -> list[dict[str, Any]]:
+    static_edge_id = str(edge.get("edge_id", ""))
+    overlay_edges = runtime_overlay_index.get(static_edge_id, [])
+    if not overlay_edges:
+        return [_static_source_edge_payload(edge)]
+    return [_overlay_source_edge_payload(edge, overlay_edge) for overlay_edge in overlay_edges]
+
+
+def _static_source_edge_payload(edge: dict[str, object]) -> dict[str, Any]:
+    edge_id = str(edge.get("edge_id", ""))
     return {
-        "edge_id": str(edge.get("edge_id", "")),
+        "edge_id": edge_id,
         "head": str(edge.get("head_id", "")),
         "relation": str(edge.get("relation_family") or edge.get("relation") or ""),
         "tail": str(edge.get("tail_id", "")),
@@ -595,7 +635,43 @@ def _source_edge_payload(edge: dict[str, object]) -> dict[str, Any]:
         "source": ",".join(str(item) for item in edge.get("source_types", []) or []),
         "evidence": ",".join(str(item) for item in edge.get("provenance_ids", []) or []),
         "review_status": str(edge.get("review_status", "auto")),
+        "external_edge_id": edge_id,
+        "root_kgd_edge_id": edge_id,
     }
+
+
+def _overlay_source_edge_payload(
+    root_kgd_edge: dict[str, object],
+    overlay_edge: KGEdge,
+) -> dict[str, Any]:
+    payload = overlay_edge.model_dump()
+    root_edge_id = str(root_kgd_edge.get("edge_id", ""))
+    payload.update(
+        {
+            "external_edge_id": overlay_edge.external_edge_id or root_edge_id,
+            "root_kgd_edge_id": root_edge_id,
+            "root_kgd_head": str(root_kgd_edge.get("head_id", "")),
+            "root_kgd_relation": str(
+                root_kgd_edge.get("relation_family") or root_kgd_edge.get("relation") or ""
+            ),
+            "root_kgd_tail": str(root_kgd_edge.get("tail_id", "")),
+        }
+    )
+    return payload
+
+
+def _runtime_overlay_index(graph: KnowledgeGraph | None) -> dict[str, list[KGEdge]]:
+    if graph is None:
+        return {}
+    by_external_id: dict[str, list[KGEdge]] = {}
+    for edge in graph.edges:
+        external_edge_id = edge.external_edge_id.strip()
+        if not external_edge_id:
+            continue
+        by_external_id.setdefault(external_edge_id, []).append(edge)
+    for edges in by_external_id.values():
+        edges.sort(key=lambda edge: (edge.edge_id, edge.kg_build_id))
+    return by_external_id
 
 
 def _dedupe_source_edges(edges: Any) -> list[dict[str, Any]]:
@@ -605,6 +681,17 @@ def _dedupe_source_edges(edges: Any) -> list[dict[str, Any]]:
         if edge_id:
             by_id.setdefault(edge_id, dict(edge))
     return [by_id[edge_id] for edge_id in sorted(by_id)]
+
+
+def _unique_values(values: Any) -> list[str]:
+    unique = set()
+    for value in values:
+        if value is None:
+            continue
+        text = str(value)
+        if text:
+            unique.add(text)
+    return sorted(unique)
 
 
 def _node_name(graph: dict[str, object], node_id: str) -> str:

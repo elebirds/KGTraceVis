@@ -71,6 +71,7 @@ top-k RCA path is contract/runtime valid, but not overlay-contribution accepted.
 | Material direct construction | Accepted | smoke path `material_direct` |
 | TEP construction import | Accepted | smoke path `tep`; preserves `relation_family`, propagation flags, and fault anchors |
 | Runtime overlay RCA path | Accepted | smoke path `runtime_overlay`; checks `path_strength`, `rca_score`, `source_edge_ids`, `kg_build_ids` |
+| TEP runtime overlay RCA path | Accepted | smoke path `tep_runtime_overlay`; Root-KGD paths preserve candidate overlay `kg_build_id` and source edge IDs via `external_edge_id` matching |
 | Overlay validation CLI | Accepted | `scripts/validate_kg_overlay.py --build-dir <build_dir>`; contribution accepted only when `overlay_contributed=true` |
 | Overlay validation API | Accepted | `POST /api/kg/construction/builds/{run_id}/validate-overlay`; same contribution semantics |
 | Review queue | Accepted | `review_queue.json`, review API, and replay workflow |
@@ -97,6 +98,18 @@ uv run python scripts/validate_kg_overlay.py \
   --build-dir runs/source_kg_smoke/material_direct \
   --example-dir data/examples \
   --output-path runs/source_kg_smoke/material_direct/kg_overlay_validation_report.json
+```
+
+Validate a TEP build against runtime Root-KGD overlay provenance without merging
+checked-in seed nodes:
+
+```bash
+uv run python scripts/validate_kg_overlay.py \
+  --build-dir runs/source_kg_smoke/tep \
+  --example-dir data/examples \
+  --overlay-only-runtime \
+  --overlay-only-import \
+  --output-path runs/source_kg_smoke/tep/kg_overlay_validation_report.json
 ```
 
 Run examples with explicit candidate CSV overlays:
@@ -143,11 +156,12 @@ uv run --extra dev pytest -q
 uv run python scripts/run_examples.py
 uv run python scripts/smoke_rca_kg_construction.py --tep-kg-root /Users/hhm/code/TEP_KG --require-tep --overwrite
 uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_smoke/material_direct --example-dir data/examples --output-path runs/source_kg_smoke/material_direct/kg_overlay_validation_report.json
+uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_smoke/tep --example-dir data/examples --overlay-only-runtime --overlay-only-import --output-path runs/source_kg_smoke/tep/kg_overlay_validation_report.json
 ```
 
-At that pass, the test suite reported `344 passed`, and the RCA-KG construction
-smoke reported four passing paths: `toy_generic`, `material_direct`,
-`runtime_overlay`, and `tep`.
+At that pass, the test suite reported `348 passed`, and the RCA-KG construction
+smoke reported five passing paths: `toy_generic`, `material_direct`,
+`runtime_overlay`, `tep`, and `tep_runtime_overlay`.
 
 ## Remaining Non-Goals
 

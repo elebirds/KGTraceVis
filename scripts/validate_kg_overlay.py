@@ -48,6 +48,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Dry-run Neo4j import with only overlay CSVs instead of defaults plus overlay.",
     )
+    parser.add_argument(
+        "--overlay-only-runtime",
+        action="store_true",
+        help=(
+            "Run runtime RCA validation with only overlay CSVs instead of defaults plus "
+            "overlay. Useful for candidate builds that intentionally replace seed nodes."
+        ),
+    )
     parser.add_argument("--top-k", default=5, type=int)
     return parser.parse_args()
 
@@ -62,6 +70,7 @@ def main() -> None:
             kg_edge_paths=tuple(args.kg_edge_path),
             example_dir=args.example_dir,
             output_path=args.output_path,
+            include_defaults_for_runtime=not args.overlay_only_runtime,
             include_defaults_for_import=not args.overlay_only_import,
             top_k=args.top_k,
         )
