@@ -576,3 +576,39 @@ Refactored KG construction into an RCA-oriented Source Library -> Parser -> Extr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: Offline source to DraftKG extraction
+
+**Date**: 2026-05-15
+**Task**: Offline source to DraftKG extraction
+**Branch**: `main`
+
+### Summary
+
+Advanced the RCA-KG construction pipeline from audit-only parsing to parser-output-driven extraction. Added parser-aware extractor dispatch, ParserOutput-compatible structured/document/TEP variable mapping extractors, no-key offline document IE fixture replay, toy document CLI smoke, Source Library loading and safe manifests, docs, tests, and final validation with full pytest, examples, ruff, mypy, import dry-run, structured/document/TEP smoke builds.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a03fe95` | (see git log) |
+| `1f0370a` | (see git log) |
+| `2f939ee` | (see git log) |
+| `087da17` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
