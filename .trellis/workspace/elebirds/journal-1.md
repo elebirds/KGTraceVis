@@ -199,6 +199,47 @@ Added a dedicated acceptance matrix documenting the implemented RCA-KG construct
 - None for this acceptance-matrix slice.
 
 
+## Session 45: M28 overlay contribution validation semantics
+
+**Date**: 2026-05-15
+**Task**: M28 overlay contribution validation semantics
+**Branch**: `main`
+
+### Summary
+
+Made `kg_overlay_validation_report.json` contribution-aware. Reports now separate `contract_validated`, `runtime_validated`, and `overlay_contributed`; aggregate `validated` is only true when at least one top-k RCA path references an overlay `kg_build_id` or candidate edge ID. Default examples that merely load the overlay now produce a missing-contribution warning instead of a misleading success.
+
+### Main Changes
+
+- Added overlay edge/build-id inventories and contribution summaries to the validation report.
+- Added per-example `overlay_contributed`, contribution edge IDs, and contribution build IDs.
+- Updated CLI/API tests for both contributing and non-contributing validation cases.
+- Updated docs/spec to define contribution-aware validation semantics.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e508534` | Make overlay validation contribution-aware |
+
+### Testing
+
+- [OK] `uv run --extra dev ruff check .`
+- [OK] `uv run --extra dev mypy src tests scripts`
+- [OK] `uv run --extra dev pytest -q`
+- [OK] `uv run python scripts/run_examples.py`
+- [OK] `uv run python scripts/smoke_rca_kg_construction.py --tep-kg-root /Users/hhm/code/TEP_KG --require-tep --overwrite`
+- [OK] `uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_smoke/material_direct --example-dir data/examples --output-path runs/source_kg_smoke/material_direct/kg_overlay_validation_report.json`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- TEP still needs a runtime-level contribution acceptance path rather than build-only smoke.
+
+
 ## Session 2: PatchCore and model asset cleanup
 
 **Date**: 2026-05-12
