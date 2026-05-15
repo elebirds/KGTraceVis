@@ -152,6 +152,7 @@ class KGConstructionManifest(BaseModel):
     artifacts: dict[str, str] = Field(default_factory=dict)
     draft_rows: list[KGConstructionDraftRow] = Field(default_factory=list)
     review_decisions: list[KGConstructionReviewDecision] = Field(default_factory=list)
+    material_library: dict[str, Any] = Field(default_factory=dict)
 
 
 def build_kg_construction_run_id() -> str:

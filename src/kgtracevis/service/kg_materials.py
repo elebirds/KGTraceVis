@@ -246,6 +246,13 @@ class KGMaterialExtractionRunRequest(BaseModel):
         return self
 
 
+class KGMaterialDirectBuildRequest(KGMaterialSelectedBuildRequest):
+    """Request to directly run a material-library KG construction build."""
+
+    extraction_mode: Literal["never", "missing", "always"] = "never"
+    extraction_request: KGMaterialExtractionRunRequest | None = None
+
+
 class KGMaterialExtractionRunResponse(BaseModel):
     """Response for one material extraction run."""
 
@@ -949,6 +956,7 @@ __all__ = [
     "KGMaterialStore",
     "KGMaterialBuildSourcesResponse",
     "KGMaterialDetailResponse",
+    "KGMaterialDirectBuildRequest",
     "KGMaterialExtractionRunRequest",
     "KGMaterialExtractionRunResponse",
     "KGMaterialExtractionState",

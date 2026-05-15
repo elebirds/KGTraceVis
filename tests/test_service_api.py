@@ -1197,6 +1197,111 @@ def test_kg_material_build_sources_feed_existing_construction_pipeline(
     assert build_payload["summary"]["edge_count"] == 1
 
 
+def test_kg_material_direct_build_runs_material_workflow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Direct material build route should emit artifact-complete build payloads."""
+    material_root = tmp_path / "materials"
+    build_root = tmp_path / "builds"
+    records_path = tmp_path / "records.jsonl"
+    records_path.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "id": "PumpFault",
+                        "name": "Pump fault",
+                        "label": "FaultEvent",
+                        "scenario": "tep",
+                        "evidence": "Pump fault can indicate seal wear.",
+                        "confidence": 0.62,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "id": "SealWear",
+                        "name": "Seal wear",
+                        "label": "RootCause",
+                        "scenario": "tep",
+                        "evidence": "Pump fault can indicate seal wear.",
+                        "confidence": 0.62,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "head": "PumpFault",
+                        "relation": "SUGGESTS_ROOT_CAUSE",
+                        "tail": "SealWear",
+                        "scenario": "tep",
+                        "source": "pump_manual",
+                        "evidence": "Pump fault can indicate seal wear.",
+                        "confidence": 0.55,
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        service_kg_materials,
+        "DEFAULT_SOURCE_KG_MATERIAL_DIR",
+        material_root,
+    )
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        build_root,
+    )
+    service_kg_materials.register_kg_material(
+        service_kg_materials.KGMaterialRegisterRequest(
+            material_id="pump_manual",
+            title="Pump manual",
+            source_uri=str(tmp_path / "pump_manual.txt"),
+            source_kind="local_path",
+            scenario="tep",
+            material_type="text",
+            extraction=service_kg_materials.KGMaterialExtractionState(
+                status="extracted",
+                structured_records_path=str(records_path),
+                source_id="pump_manual",
+                record_count=3,
+            ),
+        )
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/kg/materials/build",
+        json={
+            "material_ids": ["pump_manual"],
+            "output_name": "pump_manual_direct",
+            "overwrite": True,
+            "run_id": "kgbuild_pump_manual_direct",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run_id"] == "kgbuild_pump_manual_direct"
+    assert Path(payload["nodes_path"]).is_file()
+    assert Path(payload["edges_path"]).is_file()
+    assert Path(payload["review_queue_path"]).is_file()
+    assert Path(payload["publish_report_path"]).is_file()
+    assert Path(payload["diff_path"]).is_file()
+    assert payload["summary"]["edge_count"] == 1
+    assert payload["summary"]["material_library"]["material_ids"] == ["pump_manual"]
+    assert payload["material_ids"] == ["pump_manual"]
+    assert Path(payload["source_library_manifest_path"]).is_file()
+    assert Path(payload["published_nodes_path"]).is_file()
+    assert Path(payload["published_edges_path"]).is_file()
+    assert Path(payload["publish_manifest_path"]).is_file()
+    assert payload["artifacts"]["kg_construction_diff"] == payload["diff_path"]
+    manifest = json.loads(Path(payload["manifest_path"]).read_text(encoding="utf-8"))
+    assert manifest["material_library"]["extraction_mode"] == "never"
+
+
 def test_upload_run_prepares_visual_evidence_artifacts(
     tmp_path: Path,
     monkeypatch,

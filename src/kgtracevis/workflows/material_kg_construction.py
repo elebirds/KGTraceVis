@@ -11,7 +11,6 @@ from kgtracevis.kg_construction import KGConstructionManifest, KGConstructionSou
 from kgtracevis.kg_construction.document_extraction import DocumentIEClient
 from kgtracevis.service.kg_construction import KGConstructionSourceInput
 from kgtracevis.service.kg_materials import (
-    DEFAULT_SOURCE_KG_MATERIAL_DIR,
     KGMaterialExtractionRunRequest,
     KGMaterialExtractionRunResponse,
     KGMaterialRecord,
@@ -51,10 +50,23 @@ class MaterialKGConstructionWorkflowResult:
     output_dir: Path
     nodes_path: Path
     edges_path: Path
+    published_nodes_path: Path
+    published_edges_path: Path
     summary_path: Path
     manifest_path: Path
+    source_library_manifest_path: Path
+    draft_manifest_path: Path
+    source_audit_graph_manifest_path: Path
+    semantic_layer_manifest_path: Path
+    rca_view_manifest_path: Path
+    review_queue_path: Path
+    review_decisions_path: Path
+    publish_manifest_path: Path
+    publish_report_path: Path
+    diff_path: Path
     summary: dict[str, object]
     manifest: KGConstructionManifest
+    artifacts: dict[str, str]
     material_root: Path
     material_ids: tuple[str, ...]
     materials: tuple[KGMaterialRecord, ...]
@@ -69,7 +81,6 @@ def run_material_kg_construction_workflow(
 ) -> MaterialKGConstructionWorkflowResult:
     """Build candidate KG artifacts from selected material-library records."""
     _validate_material_selection(config.material_ids)
-    material_root = config.material_root or DEFAULT_SOURCE_KG_MATERIAL_DIR
     extraction_results = _extract_selected_materials(config, client=client)
     build_sources = prepare_kg_material_construction_build(
         KGMaterialSelectedBuildRequest(
@@ -79,8 +90,9 @@ def run_material_kg_construction_workflow(
             run_id=config.run_id,
             source_type=config.source_type,
         ),
-        material_root=material_root,
+        material_root=config.material_root,
     )
+    material_root = Path(build_sources.material_root)
     sources = tuple(_source_from_material_input(source) for source in build_sources.sources)
     build_result = run_source_kg_construction_workflow(
         SourceKGConstructionWorkflowConfig(
@@ -91,27 +103,51 @@ def run_material_kg_construction_workflow(
             allow_reviewed_overwrite=config.allow_reviewed_overwrite,
         )
     )
-    summary = _material_summary(
-        build_result.summary,
+    material_library = _material_library_metadata(
         materials=tuple(build_sources.materials),
         sources=sources,
         extraction_mode=config.extraction_mode,
         extraction_results=extraction_results,
         material_root=material_root,
     )
+    summary = _material_summary(
+        build_result.summary,
+        material_library=material_library,
+    )
     build_result.summary_path.write_text(
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    manifest = build_result.manifest.model_copy(
+        update={"material_library": material_library}
+    )
+    build_result.manifest_path.write_text(
+        json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    artifacts = _summary_artifacts(summary, output_dir=build_result.output_dir)
     return MaterialKGConstructionWorkflowResult(
         run_id=build_result.run_id,
         output_dir=build_result.output_dir,
         nodes_path=build_result.nodes_path,
         edges_path=build_result.edges_path,
+        published_nodes_path=build_result.published_nodes_path,
+        published_edges_path=build_result.published_edges_path,
         summary_path=build_result.summary_path,
         manifest_path=build_result.manifest_path,
+        source_library_manifest_path=build_result.source_library_manifest_path,
+        draft_manifest_path=build_result.draft_manifest_path,
+        source_audit_graph_manifest_path=build_result.source_audit_graph_manifest_path,
+        semantic_layer_manifest_path=build_result.semantic_layer_manifest_path,
+        rca_view_manifest_path=build_result.rca_view_manifest_path,
+        review_queue_path=build_result.review_queue_path,
+        review_decisions_path=Path(artifacts["review_decisions"]),
+        publish_manifest_path=build_result.publish_manifest_path,
+        publish_report_path=build_result.publish_report_path,
+        diff_path=build_result.diff_path,
         summary=summary,
-        manifest=build_result.manifest,
+        manifest=manifest,
+        artifacts=artifacts,
         material_root=material_root,
         material_ids=config.material_ids,
         materials=tuple(build_sources.materials),
@@ -167,14 +203,22 @@ def _source_from_material_input(source: KGConstructionSourceInput) -> KGConstruc
 def _material_summary(
     base_summary: dict[str, object],
     *,
+    material_library: dict[str, object],
+) -> dict[str, object]:
+    summary = dict(base_summary)
+    summary["material_library"] = material_library
+    return summary
+
+
+def _material_library_metadata(
+    *,
     materials: tuple[KGMaterialRecord, ...],
     sources: tuple[KGConstructionSource, ...],
     extraction_mode: MaterialExtractionMode,
     extraction_results: tuple[KGMaterialExtractionRunResponse, ...],
     material_root: Path,
 ) -> dict[str, object]:
-    summary = dict(base_summary)
-    summary["material_library"] = {
+    return {
         "material_root": str(material_root),
         "material_count": len(materials),
         "material_ids": [material.material_id for material in materials],
@@ -188,7 +232,23 @@ def _material_summary(
             "selection or extraction does not verify industrial facts or publish to Neo4j"
         ),
     }
-    return summary
+
+
+def _summary_artifacts(
+    summary: dict[str, object],
+    *,
+    output_dir: Path,
+) -> dict[str, str]:
+    output = summary.get("output")
+    if not isinstance(output, dict):
+        raise ValueError("material KG construction summary missing output artifact map")
+    artifacts = {
+        str(key): str(value)
+        for key, value in output.items()
+        if isinstance(key, str) and value is not None
+    }
+    artifacts.setdefault("output_dir", str(output_dir))
+    return artifacts
 
 
 def _validate_material_selection(material_ids: tuple[str, ...]) -> None:

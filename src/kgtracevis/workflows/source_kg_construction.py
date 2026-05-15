@@ -62,6 +62,8 @@ class SourceKGConstructionWorkflowResult:
     output_dir: Path
     nodes_path: Path
     edges_path: Path
+    published_nodes_path: Path
+    published_edges_path: Path
     summary_path: Path
     manifest_path: Path
     source_library_manifest_path: Path
@@ -71,6 +73,7 @@ class SourceKGConstructionWorkflowResult:
     rca_view_manifest_path: Path
     review_queue_path: Path
     publish_manifest_path: Path
+    publish_report_path: Path
     diff_path: Path
     summary: dict[str, object]
     manifest: KGConstructionManifest
@@ -180,6 +183,8 @@ def run_source_kg_construction_workflow(
         output_dir=config.output_dir,
         nodes_path=nodes_path,
         edges_path=edges_path,
+        published_nodes_path=published_nodes_path,
+        published_edges_path=published_edges_path,
         summary_path=summary_path,
         manifest_path=manifest_path,
         source_library_manifest_path=source_library_manifest_path,
@@ -189,6 +194,7 @@ def run_source_kg_construction_workflow(
         rca_view_manifest_path=layer_artifacts["rca_view_manifest"],
         review_queue_path=layer_artifacts["review_queue"],
         publish_manifest_path=layer_artifacts["publish_manifest"],
+        publish_report_path=publish_report_path,
         diff_path=diff_path,
         summary=summary,
         manifest=manifest,

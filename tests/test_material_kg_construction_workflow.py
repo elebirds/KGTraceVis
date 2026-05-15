@@ -54,6 +54,9 @@ def test_material_workflow_extracts_selected_material_and_builds_artifacts(
     assert result.run_id == "kgbuild_material_unit"
     assert result.nodes_path == output_dir / "nodes.csv"
     assert result.edges_path == output_dir / "edges.csv"
+    assert result.diff_path == output_dir / "kg_construction_diff.json"
+    assert result.review_queue_path == output_dir / "review_queue.json"
+    assert result.publish_report_path == output_dir / "publish_report.json"
     assert len(result.extraction_results) == 1
     assert result.materials[0].is_build_ready is True
     assert result.sources[0].source_id == "pump_note"
@@ -70,7 +73,10 @@ def test_material_workflow_extracts_selected_material_and_builds_artifacts(
         ),
     }
     persisted_summary = json.loads(result.summary_path.read_text(encoding="utf-8"))
+    persisted_manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert persisted_summary["material_library"]["material_ids"] == ["pump_note"]
+    assert persisted_manifest["material_library"]["material_ids"] == ["pump_note"]
+    assert result.manifest.material_library["source_ids"] == ["pump_note"]
 
     edge_rows = _read_csv_rows(result.edges_path)
     assert edge_rows[0]["head"] == "PumpCavitation"
@@ -162,6 +168,7 @@ def test_material_workflow_builds_pre_extracted_material_without_ie_client(
     assert result.summary["node_count"] == 2
     assert result.summary["edge_count"] == 1
     assert result.summary["material_library"]["extraction_mode"] == "never"
+    assert result.manifest.material_library["extraction_mode"] == "never"
     assert _read_csv_rows(result.edges_path)[0]["source"] == "tep_manual_records"
 
 

@@ -146,6 +146,8 @@ class KGConstructionBuildResponse(BaseModel):
     output_dir: str
     nodes_path: str
     edges_path: str
+    published_nodes_path: str | None = None
+    published_edges_path: str | None = None
     summary_path: str
     manifest_path: str
     source_library_manifest_path: str | None = None
@@ -155,6 +157,7 @@ class KGConstructionBuildResponse(BaseModel):
     rca_view_manifest_path: str | None = None
     review_queue_path: str | None = None
     publish_manifest_path: str | None = None
+    publish_report_path: str | None = None
     diff_path: str | None = None
     summary: dict[str, object]
     claim_boundary: str = (
@@ -241,6 +244,8 @@ class KGConstructionBuildRecord(BaseModel):
     output_dir: str
     nodes_path: str
     edges_path: str
+    published_nodes_path: str | None = None
+    published_edges_path: str | None = None
     summary_path: str
     manifest_path: str
     source_library_manifest_path: str | None = None
@@ -250,6 +255,7 @@ class KGConstructionBuildRecord(BaseModel):
     rca_view_manifest_path: str | None = None
     review_queue_path: str | None = None
     publish_manifest_path: str | None = None
+    publish_report_path: str | None = None
     diff_path: str | None = None
     source_ids: list[str] = Field(default_factory=list)
     source_count: int = 0
@@ -478,7 +484,7 @@ def run_kg_construction_build(
 ) -> KGConstructionBuildResponse:
     """Run a construction build from a narrow API-safe request."""
     sources = tuple(_source_from_input(source) for source in request.sources)
-    output_dir = (output_root or DEFAULT_SOURCE_KG_BUILD_DIR) / _safe_output_name(
+    output_dir = (output_root or DEFAULT_SOURCE_KG_BUILD_DIR) / safe_output_name(
         request.output_name
     )
     result = run_source_kg_construction_workflow(
@@ -495,6 +501,8 @@ def run_kg_construction_build(
         output_dir=str(result.output_dir),
         nodes_path=str(result.nodes_path),
         edges_path=str(result.edges_path),
+        published_nodes_path=str(result.published_nodes_path),
+        published_edges_path=str(result.published_edges_path),
         summary_path=str(result.summary_path),
         manifest_path=str(result.manifest_path),
         source_library_manifest_path=str(result.source_library_manifest_path),
@@ -504,9 +512,15 @@ def run_kg_construction_build(
         rca_view_manifest_path=str(result.rca_view_manifest_path),
         review_queue_path=str(result.review_queue_path),
         publish_manifest_path=str(result.publish_manifest_path),
+        publish_report_path=str(result.publish_report_path),
         diff_path=str(result.diff_path),
         summary=result.summary,
     )
+
+
+def safe_output_name(value: str) -> str:
+    """Return a validated relative output directory name for construction builds."""
+    return _safe_output_name(value)
 
 
 def save_kg_construction_source_upload(
@@ -848,6 +862,16 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
         output_dir=str(output_dir),
         nodes_path=str(artifacts.get("nodes") or default_artifacts["nodes"]),
         edges_path=str(artifacts.get("edges") or default_artifacts["edges"]),
+        published_nodes_path=_artifact_path(
+            artifacts,
+            "published_nodes",
+            fallback=default_artifacts["published_nodes"],
+        ),
+        published_edges_path=_artifact_path(
+            artifacts,
+            "published_edges",
+            fallback=default_artifacts["published_edges"],
+        ),
         summary_path=str(
             artifacts.get("summary") or default_artifacts["summary"]
         ),
@@ -886,6 +910,11 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
             artifacts,
             "publish_manifest",
             fallback=default_artifacts["publish_manifest"],
+        ),
+        publish_report_path=_artifact_path(
+            artifacts,
+            "publish_report",
+            fallback=default_artifacts["publish_report"],
         ),
         diff_path=_artifact_path(
             artifacts,

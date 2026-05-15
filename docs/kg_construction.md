@@ -207,6 +207,7 @@ POST /api/kg/materials/upload
 POST /api/kg/materials/register-url
 POST /api/kg/materials/{material_id}/extract
 POST /api/kg/materials/build-sources
+POST /api/kg/materials/build
 ```
 
 Uploads and URL registrations are stored under `runs/source_kg_materials/`.
@@ -219,6 +220,14 @@ chunks, calls an OpenAI-compatible IE client, writes
 These records can then be converted into an ordinary
 `KGConstructionBuildRequest` through `POST /api/kg/materials/build-sources` and
 passed to the existing source-to-KG build endpoint.
+For pre-extracted materials, `POST /api/kg/materials/build` runs the reusable
+material construction workflow directly and returns the artifact-complete build
+payload, including `nodes.csv`, `edges.csv`, published snapshot paths,
+`source_library_manifest.json`, layer manifests, `review_queue.json`,
+`publish_manifest.json`, `publish_report.json`, and
+`kg_construction_diff.json`. The direct route defaults to
+`extraction_mode=never`, so it does not require an LLM key unless extraction is
+explicitly requested.
 
 The extractor is intentionally candidate-only. Each extracted relation keeps
 source evidence, confidence, and `review_status=auto` after it enters the KG
@@ -232,7 +241,10 @@ The reusable orchestration entry point for this material-driven path is
 `kgtracevis.workflows.material_kg_construction.run_material_kg_construction_workflow`.
 It accepts selected material IDs, optionally extracts missing/selected materials
 with an injected IE client, prepares build-ready construction sources, and then
-calls the existing source-to-KG construction workflow.
+calls the existing source-to-KG construction workflow. Material-driven builds
+persist a `material_library` section in both `kg_construction_summary.json` and
+`kg_construction_manifest.json`; that section records material IDs, source IDs,
+extraction mode, extracted material IDs, material root, and the claim boundary.
 
 ### Storage Boundary
 

@@ -309,6 +309,11 @@ and RCA reasoning all consume these build artifacts.
   values.
 - `kg_construction_summary.json` and `kg_construction_manifest.json` must share
   the same stable artifact keys for all required outputs.
+- Material-library driven builds must call
+  `run_material_kg_construction_workflow(...)` and persist a
+  top-level `material_library` section in the summary and construction
+  manifest. The direct material build API defaults to pre-extracted materials
+  so it does not require an LLM key unless extraction is explicitly requested.
 - `review_decisions.jsonl` is the append-only review decision log.
 - `published_nodes.csv`, `published_edges.csv`, and `publish_report.json` are
   derived from candidate rows plus review decisions and publish policy.

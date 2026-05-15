@@ -44,7 +44,9 @@ from kgtracevis.service.kg_construction import (
     validate_kg_construction_build,
 )
 from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
+from kgtracevis.service.kg_material_build import run_kg_material_build
 from kgtracevis.service.kg_materials import (
+    KGMaterialDirectBuildRequest,
     KGMaterialExtractionRunRequest,
     KGMaterialRegisterRequest,
     KGMaterialSelectedBuildRequest,
@@ -317,6 +319,16 @@ def create_app() -> FastAPI:
         try:
             response = prepare_kg_material_construction_build(request)
             return response.model_dump(mode="json")
+        except ValueError as exc:
+            status_code = 404 if "unknown material_id" in str(exc) else 400
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    @app.post("/api/kg/materials/build")
+    def kg_material_build(request: KGMaterialDirectBuildRequest) -> dict[str, object]:
+        try:
+            return run_kg_material_build(request).model_dump(mode="json")
+        except ImportError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ValueError as exc:
             status_code = 404 if "unknown material_id" in str(exc) else 400
             raise HTTPException(status_code=status_code, detail=str(exc)) from exc
