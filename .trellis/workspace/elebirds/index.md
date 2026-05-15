@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 20
+- **Total Sessions**: 21
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~682 | Active |
+| `journal-1.md` | ~715 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 21 | 2026-05-15 | Source Library input for RCA KG construction CLI | `0fb1d29` | `main` |
 | 20 | 2026-05-15 | Artifact review workflow for RCA KG | `870ac62` | `main` |
 | 19 | 2026-05-15 | Review-controlled RCA KG publish loop | `3fdd19c`, `ac09809`, `f20d11f` | `main` |
 | 18 | 2026-05-15 | Offline source to DraftKG extraction | `a03fe95`, `1f0370a`, `2f939ee`, `087da17` | `main` |

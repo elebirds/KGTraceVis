@@ -680,3 +680,36 @@ Added reusable artifact review workflow and CLI for RCA KG construction, delegat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Source Library input for RCA KG construction CLI
+
+**Date**: 2026-05-15
+**Task**: Source Library input for RCA KG construction CLI
+**Branch**: `main`
+
+### Summary
+
+Added --source-library to build_source_kg.py, resolved relative Source Library paths from the manifest directory, documented the CLI contract, and verified full pytest/run_examples/ruff/mypy.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0fb1d29` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
