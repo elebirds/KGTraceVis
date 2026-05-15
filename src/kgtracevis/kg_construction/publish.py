@@ -142,6 +142,11 @@ def build_publish_snapshot(
         disposition, reason, publish_edge = _publish_decision_for_edge(edge, decision)
         if publish_edge is not None:
             published_edges.append(replace(publish_edge, kg_build_id=kg_build_id))
+        report_review_status = _report_review_status(
+            edge,
+            decision=decision,
+            publish_edge=publish_edge,
+        )
         report_items.append(
             PublishReportItem(
                 target_key=edge.edge_id,
@@ -150,7 +155,7 @@ def build_publish_snapshot(
                 source=edge.source,
                 relation=edge.relation,
                 relation_family=edge.relation_family,
-                review_status=edge.review_status,
+                review_status=report_review_status,
                 confidence=edge.confidence,
             )
         )
@@ -234,6 +239,19 @@ def _publish_decision_for_edge(
             edge,
         )
     return "pending_review", _pending_reason(edge), None
+
+
+def _report_review_status(
+    edge: KGEdge,
+    *,
+    decision: KGConstructionReviewDecision | None,
+    publish_edge: KGEdge | None,
+) -> str:
+    if publish_edge is not None:
+        return publish_edge.review_status
+    if decision is not None and decision.action == "reject":
+        return "rejected"
+    return edge.review_status
 
 
 def _is_policy_allowed(edge: KGEdge) -> bool:

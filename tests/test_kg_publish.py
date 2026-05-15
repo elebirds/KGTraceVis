@@ -62,6 +62,8 @@ def test_publish_snapshot_keeps_offline_document_causal_edge_pending_until_accep
     assert accepted.edges[0].accepted_count == 1
     assert accepted.edges[0].kg_build_id == "kgbuild_publish_policy"
     assert accepted.report_payload()["disposition_counts"] == {"accepted": 1}
+    assert accepted.report_items[0].disposition == "accepted"
+    assert accepted.report_items[0].review_status == "reviewed"
 
 
 def test_publish_snapshot_excludes_rejected_and_allows_low_risk_edges() -> None:
@@ -100,6 +102,9 @@ def test_publish_snapshot_excludes_rejected_and_allows_low_risk_edges() -> None:
         "policy_allowed": 1,
         "rejected": 1,
     }
+    report_by_key = {item.target_key: item for item in snapshot.report_items}
+    assert report_by_key[rejected_edge.edge_id].review_status == "rejected"
+    assert report_by_key[low_risk_edge.edge_id].review_status == "auto"
 
 
 def test_write_publish_snapshot_exports_csv_and_report(tmp_path: Path) -> None:
