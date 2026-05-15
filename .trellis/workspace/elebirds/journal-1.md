@@ -79,6 +79,47 @@ Added an acceptance smoke path that loads a freshly constructed material KG arti
 - Continue productizing source-to-runtime RCA overlay behavior and acceptance coverage.
 
 
+## Session 42: M25 candidate KG overlay validation workflow
+
+**Date**: 2026-05-15
+**Task**: M25 candidate KG overlay validation workflow
+**Branch**: `main`
+
+### Summary
+
+Added a reusable candidate KG overlay validation workflow and CLI. A source-to-KG build directory or explicit candidate CSV overlay can now be validated against the runtime `KGTracePipeline` and Neo4j dry-run import contract, producing a structured `kg_overlay_validation_report.json` with RCA path metadata and `kg_build_ids`.
+
+### Main Changes
+
+- Added `kgtracevis.workflows.kg_overlay_validation`.
+- Added `scripts/validate_kg_overlay.py`.
+- Added workflow and CLI regression tests with a constructed overlay path that preserves `path_strength`, `rca_score`, source edge IDs, and `kg_build_id`.
+- Updated KG construction docs, RCA architecture docs, and Trellis backend overlay validation contract.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bd03de1` | Add candidate KG overlay validation workflow |
+
+### Testing
+
+- [OK] `uv run --extra dev ruff check .`
+- [OK] `uv run --extra dev mypy src tests scripts`
+- [OK] `uv run --extra dev pytest -q`
+- [OK] `uv run python scripts/run_examples.py`
+- [OK] `uv run python scripts/smoke_rca_kg_construction.py --tep-kg-root /Users/hhm/code/TEP_KG --require-tep --overwrite`
+- [OK] `uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_smoke/material_direct --example-dir data/examples --output-path runs/source_kg_smoke/material_direct/kg_overlay_validation_report.json`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Continue tightening product-facing construction validation and runtime publication readiness.
+
+
 ## Session 2: PatchCore and model asset cleanup
 
 **Date**: 2026-05-12
