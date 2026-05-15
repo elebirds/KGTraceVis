@@ -255,6 +255,138 @@ rule source unless the private source explicitly mentions `Loc`.
 Tests for private-source KG extensions should assert both the positive edge and
 the absence of leakage onto nearby/shared classes.
 
+## Scenario: RCA-Oriented KG Construction Build Contract
+
+### 1. Scope / Trigger
+
+Use this when changing source-to-KG construction stages, artifact manifests,
+construction service DTOs, review queue behavior, or CLI/API build signatures.
+This contract is cross-layer: scripts, service handlers, KG Studio, CSV import,
+and RCA reasoning all consume these build artifacts.
+
+### 2. Signatures
+
+- CLI:
+  `uv run python scripts/build_source_kg.py [--toy-generic-structured-source] [--tep-semantic-lift-dir DIR] [--tep-variable-mapping PATH] [--tep-rca-graph-dir DIR] [--run-id ID] --output-dir DIR`
+- Service build source types:
+  `structured_records`, `manual_table`, `tep_semantic_lift`,
+  `tep_variable_mapping`, `tep_rca_graph`
+- Service review queue:
+  `GET /api/kg/construction/builds/{run_id}/review-queue`
+- Service review action:
+  `POST /api/kg/construction/builds/{run_id}/review`
+- Required artifact keys:
+  `nodes`, `edges`, `draft_manifest`, `source_audit_graph_manifest`,
+  `semantic_layer_manifest`, `rca_view_manifest`, `review_queue`,
+  `publish_manifest`, `summary`, `manifest`
+
+### 3. Contracts
+
+- Construction stages are:
+  Source Library -> Parser / Chunk -> Extractor Registry -> Draft KG ->
+  Entity Alignment -> Source Audit Graph -> Semantic Layer ->
+  RCA Reasoning View -> Review Queue -> Versioned Publish manifest.
+- `kg_construction_summary.json` and `kg_construction_manifest.json` must share
+  the same stable artifact keys for all required outputs.
+- The summary must include `kg_build_id`, `source_ids`,
+  `extractor_versions`, `profile_version`, and `review_policy`.
+- `source_audit_graph_manifest.json` must include `parsed_sources` summaries
+  with parser kind, row count, chunk count, safe source metadata, and parser
+  metadata. It must not include row values or full document text.
+- `review_queue.json` items must include `target_key`, `item_type`,
+  `priority`, `reason`, `review_status`, `candidate_payload`, `source`,
+  `evidence`, `confidence`, `scenario`, `relation_family`, `graph_impact`,
+  and `recommended_action`.
+- Service review queues prefer `review_queue.json` when present and fall back
+  to `edges.csv` for legacy builds.
+- `POST /review` updates `edges.csv` review status/counters and refreshes the
+  matching `review_queue.json` candidate payload when that artifact exists.
+- TEP RCA graph imports are source-backed candidates. TEP_KG `accept` does not
+  become KGTraceVis `reviewed` automatically.
+- External IDs belong in the alignment manifest canonical table by default.
+  Only source-backed mapping rows should materialize explicit `ALIGNS_TO`
+  draft relations, such as TEP variable mapping aliases.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|---|---|
+| Unsupported source type | fail before parser execution with missing extractor error |
+| Structured/manual source has path | parser summary records row count and columns only |
+| Document/text source has text | parser summary records chunk IDs/ranges only, not text |
+| TEP semantic/RCA source has metadata paths | parser summary records source-reference path metadata |
+| Required artifact exists beside legacy manifest but key is absent | service registry discovers the conventional filename |
+| Legacy `edges.csv` lacks optional RCA columns | service review code fills optional columns as blanks |
+| `review_queue.json` contains alignment items | service DTO parses them and keeps `review_status=auto` filters working |
+| Candidate edge is accepted/rejected | edge CSV and queue payload counters stay synchronized |
+
+### 5. Good/Base/Bad Cases
+
+- Good: toy generic CLI build writes every required artifact and records
+  `kg_build_id`, extractor versions, profile version, and review policy.
+- Good: TEP build imports semantic lift, variable mapping, and RCA graph
+  artifacts while preserving `relation_family`, propagation flags, and
+  FaultAnchor/root-candidate metadata.
+- Base: old build directories with only `nodes.csv`, `edges.csv`, and
+  `kg_construction_manifest.json` remain readable through fallback paths.
+- Bad: parser audit stores a source document chunk's full text in the manifest.
+- Bad: automatic external ID alignment creates hundreds of `ALIGNS_TO` edges
+  that are later skipped by semantic projection.
+
+### 6. Tests Required
+
+- Construction workflow tests assert all required artifacts exist and share
+  artifact keys in summary and manifest.
+- CLI tests cover toy generic builds, TEP semantic/RCA graph builds, and
+  deterministic `--run-id` metadata.
+- Alignment tests assert canonical table, merge candidates, unresolved
+  entities, and conflicts survive JSON round trip.
+- Review queue tests assert high-risk causal edges, merge candidates,
+  unresolved entities, and alignment conflicts are prioritized.
+- Service tests assert build response/registry/detail expose all artifact paths
+  and queue filtering works for both edge and alignment items.
+- Parser audit tests assert row values and full document text are not written
+  into `source_audit_graph_manifest.json`.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+artifact_paths = {"nodes": output_dir / "nodes.csv"}
+```
+
+#### Correct
+
+```python
+artifact_paths = kg_construction_artifact_paths(output_dir)
+```
+
+#### Wrong
+
+```text
+TEP_KG review_status=accept -> KGTraceVis review_status=reviewed
+```
+
+#### Correct
+
+```text
+TEP_KG review_status=accept -> DraftRelation(status="auto")
+human/API review -> KGTraceVis review_status=reviewed
+```
+
+#### Wrong
+
+```text
+source_audit_graph_manifest.parsed_sources[*].chunks[*].text
+```
+
+#### Correct
+
+```text
+source_audit_graph_manifest.parsed_sources[*].parser_metadata.chunk_char_ranges
+```
+
 ## Scenario: Candidate KG Overlay Validation
 
 ### 1. Scope / Trigger
