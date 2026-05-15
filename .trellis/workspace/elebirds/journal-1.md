@@ -845,3 +845,36 @@ Added review decision replay through source-library reconstruction, alignment ov
 ### Next Steps
 
 - None - task complete
+
+
+## Session 26: M10 KG construction artifact diff
+
+**Date**: 2026-05-15
+**Task**: M10 KG construction artifact diff
+**Branch**: `main`
+
+### Summary
+
+Added deterministic kg_construction_diff artifacts for fresh builds and review replay, including CLI/API exposure and tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d9e10a3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
