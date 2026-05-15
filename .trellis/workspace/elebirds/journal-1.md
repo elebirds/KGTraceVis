@@ -612,3 +612,38 @@ Advanced the RCA-KG construction pipeline from audit-only parsing to parser-outp
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: Review-controlled RCA KG publish loop
+
+**Date**: 2026-05-15
+**Task**: Review-controlled RCA KG publish loop
+**Branch**: `main`
+
+### Summary
+
+Implemented the M3 review-to-publish loop for RCA-KG construction. Added append-only review_decisions.jsonl, conservative publish policy, published_nodes/published_edges snapshots, publish_report disposition counts, service review snapshot refresh, service publish from published snapshots, TEP external accept review-gating tests, docs/spec updates, and final validation with 310 pytest tests plus examples, ruff, mypy, import dry-run, and real TEP smoke.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3fdd19c` | (see git log) |
+| `ac09809` | (see git log) |
+| `f20d11f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

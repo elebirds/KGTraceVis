@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 18
+- **Total Sessions**: 19
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~614 | Active |
+| `journal-1.md` | ~649 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 19 | 2026-05-15 | Review-controlled RCA KG publish loop | `3fdd19c`, `ac09809`, `f20d11f` | `main` |
 | 18 | 2026-05-15 | Offline source to DraftKG extraction | `a03fe95`, `1f0370a`, `2f939ee`, `087da17` | `main` |
 | 17 | 2026-05-15 | RCA KG generation architecture refactor | `5606489`, `d6348c9`, `2043b7e`, `13692d6`, `e916338`, `87e50ba`, `7b3563b` | `main` |
 | 16 | 2026-05-14 | KG construction review queue API | `04b2932` | `codex/rebuild-web-arco-echarts` |
