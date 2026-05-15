@@ -240,6 +240,44 @@ Made `kg_overlay_validation_report.json` contribution-aware. Reports now separat
 - TEP still needs a runtime-level contribution acceptance path rather than build-only smoke.
 
 
+## Session 46: M29 publish report decision status consistency
+
+**Date**: 2026-05-15
+**Task**: M29 publish report decision status consistency
+**Branch**: `main`
+
+### Summary
+
+Fixed publish report item status semantics for decision-only publish snapshots. When `review_decisions.jsonl` accepts an `auto` edge, the report now shows `disposition=accepted` and `review_status=reviewed`; when a decision rejects an `auto` edge, the report shows `review_status=rejected`.
+
+### Main Changes
+
+- Added decision-aware report review-status calculation in publish snapshots.
+- Extended publish tests for accepted and rejected decision-only paths.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3d086df` | Align publish report status with review decisions |
+
+### Testing
+
+- [OK] `uv run --extra dev ruff check .`
+- [OK] `uv run --extra dev mypy src tests scripts`
+- [OK] `uv run --extra dev pytest -q`
+- [OK] `uv run python scripts/run_examples.py`
+- [OK] `uv run python scripts/smoke_rca_kg_construction.py --tep-kg-root /Users/hhm/code/TEP_KG --require-tep --overwrite`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- TEP runtime-level acceptance remains the major open audit item.
+
+
 ## Session 2: PatchCore and model asset cleanup
 
 **Date**: 2026-05-12
