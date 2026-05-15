@@ -47,6 +47,10 @@ service.
   refreshing the published snapshot.
 * Verification: focused review workflow, service, and construction workflow
   tests `46 passed`; focused ruff and mypy checks passed.
+* Final verification: full pytest `312 passed`; `run_examples.py`, ruff, mypy,
+  and import dry-run passed. CLI review smoke accepted the offline document
+  edge and refreshed `published_edges.csv` to one `reviewed` edge with
+  `publish_report.disposition_counts={"accepted": 1}`.
 
 ## Definition of Done
 
