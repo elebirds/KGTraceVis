@@ -67,6 +67,10 @@ LLM-as-adapter boundary.
 * Verification: focused tests `30 passed`; full pytest `305 passed`;
   `run_examples.py`, ruff, and mypy passed.
 * Additional focused verification: source library + pipeline tests `40 passed`.
+* Final verification: full pytest `307 passed`; `run_examples.py`, ruff, mypy,
+  and `scripts/import_kg.py --dry-run` passed. Structured toy, offline document
+  toy, and real `/Users/hhm/code/TEP_KG` smoke builds all emitted the complete
+  construction artifact set.
 
 ## Definition of Done (team quality bar)
 
