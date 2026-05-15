@@ -1,0 +1,2 @@
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"review CLI/API should delegate artifact mutation to reusable workflow"}
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"construction artifact and review decision contracts"}

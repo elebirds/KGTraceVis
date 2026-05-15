@@ -20,7 +20,8 @@
   "subtasks": [],
   "children": [
     "05-15-05-15-material-kg-construction-direct-api",
-    "05-15-05-15-kg-construction-artifact-retrieval-api"
+    "05-15-05-15-kg-construction-artifact-retrieval-api",
+    "05-15-05-15-review-action-artifact-diff-refresh"
   ],
   "parent": null,
   "relatedFiles": [],
