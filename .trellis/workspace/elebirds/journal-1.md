@@ -1076,3 +1076,36 @@ Added document IE prompt/version audit reports, material extraction manifests, c
 ### Next Steps
 
 - None - task complete
+
+
+## Session 33: M16 profile-driven RCA projection policies
+
+**Date**: 2026-05-15
+**Task**: M16 profile-driven RCA projection policies
+**Branch**: `main`
+
+### Summary
+
+Added profile semantic projection rules, relation-family RCA policies, profile-driven RCA metadata defaults, tests for endpoint swap and override semantics, docs/spec updates, and validated full tests plus TEP smoke.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c53be25` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
