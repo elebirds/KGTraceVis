@@ -911,3 +911,36 @@ Added a direct material-library KG build route and artifact-complete material wo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 28: M12 KG construction artifact retrieval API
+
+**Date**: 2026-05-15
+**Task**: M12 KG construction artifact retrieval API
+**Branch**: `main`
+
+### Summary
+
+Added safe stable-key artifact retrieval for construction builds, including diff, review queue, CSV, JSONL, and material-build coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a3c992f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

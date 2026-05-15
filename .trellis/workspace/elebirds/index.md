@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 27
+- **Total Sessions**: 28
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~913 | Active |
+| `journal-1.md` | ~946 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 28 | 2026-05-15 | M12 KG construction artifact retrieval API | `a3c992f` | `main` |
 | 27 | 2026-05-15 | M11 direct material KG construction API | `3ba5feb` | `main` |
 | 26 | 2026-05-15 | M10 KG construction artifact diff | `d9e10a3` | `main` |
 | 25 | 2026-05-15 | Review decision replay for RCA KG construction | `1c9395b` | `main` |
