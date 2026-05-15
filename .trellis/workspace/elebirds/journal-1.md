@@ -1578,3 +1578,36 @@ Carried kg_build_ids from supporting construction edges into top-k paths, ranked
 ### Next Steps
 
 - None - task complete
+
+
+## Session 41: M30 TEP runtime overlay provenance acceptance
+
+**Date**: 2026-05-15
+**Task**: M30 TEP runtime overlay provenance acceptance
+**Branch**: `main`
+
+### Summary
+
+Added TEP Root-KGD runtime overlay provenance enrichment via external_edge_id matching, overlay-only runtime/import validation controls, tep_runtime_overlay smoke acceptance, tests, docs, and spec updates. Gates: ruff, mypy, pytest 348 passed, run_examples, real TEP smoke 5 paths, TEP overlay validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2fc0baa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
