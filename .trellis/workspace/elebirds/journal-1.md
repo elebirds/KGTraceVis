@@ -1010,3 +1010,36 @@ Acceptance smoke now covers toy Source Library, pre-extracted material direct bu
 ### Next Steps
 
 - None - task complete
+
+
+## Session 31: RCA KG construction final acceptance
+
+**Date**: 2026-05-15
+**Task**: RCA KG construction final acceptance
+**Branch**: `main`
+
+### Summary
+
+Ran final acceptance smoke against toy Source Library, pre-extracted material direct build, and real /Users/hhm/code/TEP_KG artifacts; all paths passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6c8e623` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
