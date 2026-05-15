@@ -36,7 +36,14 @@ extractor inputs unchanged.
 
 `Draft KG` is the unified intermediate layer for `DraftEntity`, `DraftRelation`, optional alignments, signal mappings, and RCA hints. Auto-generated rows default to `draft` or `auto`, not reviewed.
 
-`Entity Alignment` performs deterministic ID, alias, external ID, and mapping-table alignment. Its manifest is the stable handoff for canonical entity table rows, merge candidates, unresolved entities, and conflicts. High-risk merges should remain candidates or conflicts for review.
+`Entity Alignment` performs deterministic ID, alias, external ID, and
+mapping-table alignment. Its standalone `entity_alignment_manifest.json` is the
+stable handoff for canonical entity table rows, source-backed audit-layer
+`ALIGNS_TO` candidates, merge candidates, unresolved entities, and conflicts.
+High-risk merges should remain candidates or conflicts for review. Alignment
+relations are audit/provenance artifacts by default; they do not become RCA
+runtime propagation edges unless a source extractor explicitly emits such a
+semantic relation.
 
 `Source Audit Graph` preserves the full provenance-rich extraction state for debug and drill-down. It is not the default RCA runtime graph.
 
@@ -153,6 +160,7 @@ published_nodes.csv
 published_edges.csv
 source_library_manifest.json
 draft_manifest.json
+entity_alignment_manifest.json
 source_audit_graph_manifest.json
 semantic_layer_manifest.json
 rca_view_manifest.json
@@ -175,6 +183,7 @@ published_nodes
 published_edges
 source_library_manifest
 draft_manifest
+alignment_manifest
 source_audit_graph_manifest
 semantic_layer_manifest
 rca_view_manifest

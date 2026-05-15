@@ -56,6 +56,7 @@ class MaterialKGConstructionWorkflowResult:
     manifest_path: Path
     source_library_manifest_path: Path
     draft_manifest_path: Path
+    alignment_manifest_path: Path
     source_audit_graph_manifest_path: Path
     semantic_layer_manifest_path: Path
     rca_view_manifest_path: Path
@@ -137,6 +138,7 @@ def run_material_kg_construction_workflow(
         manifest_path=build_result.manifest_path,
         source_library_manifest_path=build_result.source_library_manifest_path,
         draft_manifest_path=build_result.draft_manifest_path,
+        alignment_manifest_path=build_result.alignment_manifest_path,
         source_audit_graph_manifest_path=build_result.source_audit_graph_manifest_path,
         semantic_layer_manifest_path=build_result.semantic_layer_manifest_path,
         rca_view_manifest_path=build_result.rca_view_manifest_path,

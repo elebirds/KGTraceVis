@@ -6,7 +6,13 @@ from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from kgtracevis.kg.graph import normalize_text
-from kgtracevis.kg_construction.draft import DraftEntity, DraftKG, DraftRelation
+from kgtracevis.kg_construction.confidence_assigner import edge_weight
+from kgtracevis.kg_construction.draft import (
+    DraftEntity,
+    DraftKG,
+    DraftRelation,
+    draft_status_to_review_status,
+)
 from kgtracevis.kg_construction.models import KGConstructionReviewDecision
 from kgtracevis.kg_construction.profiles import RcaProfile
 
@@ -81,6 +87,10 @@ class AlignmentResult:
             "canonical_entities": [
                 _jsonable(asdict(entry)) for entry in self.canonical_entities
             ],
+            "alignment_relations": [
+                _jsonable(_alignment_relation_payload(relation))
+                for relation in self.alignment_relations
+            ],
             "merge_candidates": [
                 _jsonable(asdict(candidate)) for candidate in self.merge_candidates
             ],
@@ -104,6 +114,7 @@ def run_entity_alignment(
     candidates: list[AlignmentCandidate] = []
     conflicts: list[dict[str, object]] = []
     aligned_entities: list[DraftEntity] = []
+    alignment_relations: list[DraftRelation] = []
     endpoint_map: dict[str, str] = {}
     unresolved_records: list[AlignmentIssueRecord] = []
     conflict_records: list[AlignmentIssueRecord] = []
@@ -158,6 +169,14 @@ def run_entity_alignment(
         if not canonical_id:
             unresolved_records.append(_unresolved_record(aligned))
             continue
+        alignment_relation = _alignment_relation_for_entity(
+            entity,
+            canonical_id=canonical_id,
+            match_type=match_type,
+            profile=profile,
+        )
+        if alignment_relation is not None:
+            alignment_relations.append(alignment_relation)
         if entity.entity_id_suggestion:
             endpoint_map[entity.entity_id_suggestion] = canonical_id
         if entity.canonical_id:
@@ -204,7 +223,7 @@ def run_entity_alignment(
             entities=tuple(aligned_entities),
             relations=aligned_relations,
         ),
-        alignment_relations=(),
+        alignment_relations=tuple(alignment_relations),
         canonical_entities=_canonical_entity_table(aligned_entities),
         merge_candidates=tuple(candidates),
         unresolved_entities=tuple(
@@ -371,6 +390,74 @@ def _canonical_entity_table(
             )
         )
     return tuple(rows)
+
+
+def _alignment_relation_for_entity(
+    entity: DraftEntity,
+    *,
+    canonical_id: str,
+    match_type: str,
+    profile: RcaProfile,
+) -> DraftRelation | None:
+    source_entity_id = entity.entity_id_suggestion.strip()
+    if not source_entity_id or source_entity_id == canonical_id:
+        return None
+    evidence = entity.evidence or entity.evidence_span or entity.draft_id
+    confidence = _alignment_relation_confidence(entity, match_type=match_type)
+    return DraftRelation(
+        draft_id=f"alignment:{entity.draft_id}:{source_entity_id}->{canonical_id}",
+        source_id=entity.source_id,
+        extractor_name="entity_alignment",
+        extractor_version="v1",
+        scenario=entity.scenario,
+        head=source_entity_id,
+        relation="ALIGNS_TO",
+        tail=canonical_id,
+        evidence=evidence,
+        confidence=confidence,
+        status="accepted" if match_type == "reviewed_override" else "draft",
+        metadata={
+            "relation_family": "ALIGNMENT",
+            "propagation_enabled": False,
+            "alignment_match_type": match_type,
+            "alignment_reason": f"deterministic {match_type} match in {profile.domain_id}",
+            "source_entity_id": source_entity_id,
+            "canonical_id": canonical_id,
+            "source_draft_id": entity.draft_id,
+            "source_label": entity.label,
+            "source_name": entity.name,
+            "edge_weight": edge_weight(confidence),
+        },
+    )
+
+
+def _alignment_relation_confidence(entity: DraftEntity, *, match_type: str) -> float:
+    if match_type == "reviewed_override":
+        return 1.0
+    if match_type == "alias":
+        return min(0.95, max(0.0, entity.confidence))
+    if match_type == "reviewed_split":
+        return 0.9
+    return min(0.99, max(0.0, entity.confidence))
+
+
+def _alignment_relation_payload(relation: DraftRelation) -> dict[str, object]:
+    return {
+        "draft_id": relation.draft_id,
+        "source_id": relation.source_id,
+        "source": relation.source_id,
+        "extractor_name": relation.extractor_name,
+        "extractor_version": relation.extractor_version,
+        "scenario": relation.scenario,
+        "head": relation.head,
+        "relation": relation.relation,
+        "tail": relation.tail,
+        "evidence": relation.evidence or relation.evidence_span,
+        "confidence": relation.confidence,
+        "weight": edge_weight(relation.confidence),
+        "review_status": draft_status_to_review_status(relation.status),
+        "metadata": dict(relation.metadata),
+    }
 
 
 def _unresolved_record(entity: DraftEntity) -> AlignmentIssueRecord:

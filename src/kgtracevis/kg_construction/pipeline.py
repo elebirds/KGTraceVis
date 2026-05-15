@@ -119,6 +119,7 @@ class KGConstructionResult:
         artifact_paths = kg_construction_artifact_paths(output_dir)
         artifact_paths["draft_manifest"].parent.mkdir(parents=True, exist_ok=True)
         _write_json(artifact_paths["draft_manifest"], self.draft_manifest())
+        _write_json(artifact_paths["alignment_manifest"], self.alignment.manifest())
         _write_json(artifact_paths["source_audit_graph_manifest"], self.audit_graph.manifest())
         _write_json(artifact_paths["semantic_layer_manifest"], self.semantic_layer.manifest)
         _write_json(artifact_paths["rca_view_manifest"], self.rca_view.manifest)

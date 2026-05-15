@@ -43,6 +43,9 @@ def build_kg_construction_artifact_snapshot(output_dir: str | Path) -> dict[str,
             artifact_paths["review_queue"],
             key_fields=("item_type", "target_key"),
         ),
+        "alignment_manifest": _json_object_snapshot(
+            artifact_paths["alignment_manifest"],
+        ),
         "semantic_layer_manifest": _json_object_snapshot(
             artifact_paths["semantic_layer_manifest"],
         ),
@@ -74,6 +77,10 @@ def build_kg_construction_diff(
         "review_queue": _diff_records(
             before.get("review_queue"),
             after.get("review_queue"),
+        ),
+        "alignment_manifest": _diff_objects(
+            before.get("alignment_manifest"),
+            after.get("alignment_manifest"),
         ),
         "semantic_layer_manifest": _diff_objects(
             before.get("semantic_layer_manifest"),

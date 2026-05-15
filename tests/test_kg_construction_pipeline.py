@@ -469,6 +469,7 @@ def test_alignment_manifest_and_review_queue_cover_entity_decisions() -> None:
 
     assert manifest["artifact_type"] == "entity_alignment_manifest_v1"
     assert manifest["canonical_entity_count"] == 2
+    assert manifest["alignment_relation_count"] == 2
     assert manifest["merge_candidate_count"] == 2
     assert manifest["unresolved_entity_count"] == 1
     assert manifest["conflict_count"] == 1
@@ -479,6 +480,15 @@ def test_alignment_manifest_and_review_queue_cover_entity_decisions() -> None:
     )
     assert pump_entry["source_entity_ids"] == ["ConflictC", "PumpA", "PumpB"]
     assert "pump A source row" in pump_entry["evidence_refs"]
+    alignment_relation = manifest["alignment_relations"][0]
+    assert alignment_relation["relation"] == "ALIGNS_TO"
+    assert alignment_relation["tail"] == "PumpA"
+    assert alignment_relation["source"] == "alignment_unit"
+    assert alignment_relation["evidence"] == "duplicate pump source row"
+    assert alignment_relation["confidence"] == 0.87
+    assert alignment_relation["review_status"] == "auto"
+    assert alignment_relation["metadata"]["relation_family"] == "ALIGNMENT"
+    assert alignment.alignment_relations[0].metadata["propagation_enabled"] is False
     assert queue_by_type["entity_alignment_conflict"].recommended_action == (
         "resolve_conflict"
     )
@@ -693,6 +703,58 @@ def test_tep_semantic_lift_extractor_imports_runtime_graph(tmp_path: Path) -> No
         "stream:stream_1_a_feed",
     ]
     assert result.semantic_layer.manifest["skipped_relation_count"] == 0
+
+
+def test_alignment_layer_materializes_nontrivial_alias_relations_in_audit_manifest() -> None:
+    """Nontrivial deterministic alignment should be exported as audit-layer edges."""
+    draft = DraftKG(
+        entities=(
+            DraftEntity(
+                draft_id="entity:pump-a",
+                source_id="alignment_unit",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="PumpA",
+                name="Feed pump",
+                label="Equipment",
+                aliases=("feed pump",),
+                evidence="pump A source row",
+                confidence=0.92,
+            ),
+            DraftEntity(
+                draft_id="entity:pump-b",
+                source_id="alignment_unit",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="PumpB",
+                name="Feed pump",
+                label="Equipment",
+                evidence="pump B source row",
+                confidence=0.87,
+            ),
+        )
+    )
+
+    alignment = run_entity_alignment(draft, GENERIC_PROFILE)
+
+    assert len(alignment.alignment_relations) == 1
+    relation = alignment.alignment_relations[0]
+    assert relation.head == "PumpB"
+    assert relation.relation == "ALIGNS_TO"
+    assert relation.tail == "PumpA"
+    assert relation.evidence == "pump B source row"
+    assert relation.confidence == 0.87
+    assert relation.metadata["alignment_match_type"] == "alias"
+    assert alignment.draft.relations == ()
+    manifest = alignment.manifest()
+    assert manifest["alignment_relation_count"] == 1
+    assert manifest["alignment_relations"][0]["head"] == "PumpB"
+    assert manifest["alignment_relations"][0]["source"] == "alignment_unit"
+    assert manifest["alignment_relations"][0]["evidence"] == "pump B source row"
+    assert manifest["alignment_relations"][0]["confidence"] == 0.87
+    assert manifest["alignment_relations"][0]["review_status"] == "auto"
 
 
 def test_tep_source_reference_parse_audit_reports_paths(tmp_path: Path) -> None:
@@ -1078,6 +1140,7 @@ def test_build_source_kg_script_writes_candidate_artifacts(tmp_path: Path) -> No
     assert (output_dir / "edges.csv").exists()
     assert (output_dir / "source_library_manifest.json").exists()
     assert (output_dir / "draft_manifest.json").exists()
+    assert (output_dir / "entity_alignment_manifest.json").exists()
     assert (output_dir / "source_audit_graph_manifest.json").exists()
     assert (output_dir / "semantic_layer_manifest.json").exists()
     assert (output_dir / "rca_view_manifest.json").exists()
@@ -1310,6 +1373,7 @@ def _required_artifact_keys() -> set[str]:
         "kg_construction_diff",
         "source_library_manifest",
         "draft_manifest",
+        "alignment_manifest",
         "source_audit_graph_manifest",
         "semantic_layer_manifest",
         "rca_view_manifest",

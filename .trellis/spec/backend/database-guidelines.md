@@ -285,9 +285,10 @@ and RCA reasoning all consume these build artifacts.
   `POST /api/kg/construction/builds/{run_id}/review`
 - Required artifact keys:
   `nodes`, `edges`, `published_nodes`, `published_edges`,
-  `source_library_manifest`, `draft_manifest`, `source_audit_graph_manifest`,
-  `semantic_layer_manifest`, `rca_view_manifest`, `review_queue`,
-  `review_decisions`, `publish_manifest`, `publish_report`,
+  `source_library_manifest`, `draft_manifest`, `alignment_manifest`,
+  `source_audit_graph_manifest`, `semantic_layer_manifest`,
+  `rca_view_manifest`, `review_queue`, `review_decisions`, `publish_manifest`,
+  `publish_report`,
   `kg_construction_diff`, `summary`, `manifest`
 
 ### 3. Contracts
@@ -378,9 +379,12 @@ and RCA reasoning all consume these build artifacts.
 - Acceptance smoke must build the toy generic path from a Source Library
   manifest and must only run the TEP path when explicit TEP_KG artifact paths
   are supplied or required.
-- External IDs belong in the alignment manifest canonical table by default.
-  Only source-backed mapping rows should materialize explicit `ALIGNS_TO`
-  draft relations, such as TEP variable mapping aliases.
+- Entity alignment writes a standalone `entity_alignment_manifest.json`.
+  Nontrivial deterministic canonicalization should materialize audit-layer
+  `ALIGNS_TO` candidate rows in that manifest; external IDs still belong in the
+  canonical table by default to avoid noisy ID-only edges. Source-backed mapping
+  extractors may emit explicit semantic `ALIGNS_TO` draft relations, such as
+  TEP variable mapping aliases.
 
 ### 4. Validation & Error Matrix
 
@@ -407,8 +411,8 @@ and RCA reasoning all consume these build artifacts.
 - Base: old build directories with only `nodes.csv`, `edges.csv`, and
   `kg_construction_manifest.json` remain readable through fallback paths.
 - Bad: parser audit stores a source document chunk's full text in the manifest.
-- Bad: automatic external ID alignment creates hundreds of `ALIGNS_TO` edges
-  that are later skipped by semantic projection.
+- Bad: automatic external ID alignment creates hundreds of semantic/runtime
+  `ALIGNS_TO` edges that are later skipped by semantic projection.
 
 ### 6. Tests Required
 

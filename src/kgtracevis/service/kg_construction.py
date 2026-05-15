@@ -153,6 +153,7 @@ class KGConstructionBuildResponse(BaseModel):
     manifest_path: str
     source_library_manifest_path: str | None = None
     draft_manifest_path: str | None = None
+    alignment_manifest_path: str | None = None
     source_audit_graph_manifest_path: str | None = None
     semantic_layer_manifest_path: str | None = None
     rca_view_manifest_path: str | None = None
@@ -251,6 +252,7 @@ class KGConstructionBuildRecord(BaseModel):
     manifest_path: str
     source_library_manifest_path: str | None = None
     draft_manifest_path: str | None = None
+    alignment_manifest_path: str | None = None
     source_audit_graph_manifest_path: str | None = None
     semantic_layer_manifest_path: str | None = None
     rca_view_manifest_path: str | None = None
@@ -508,6 +510,7 @@ def run_kg_construction_build(
         manifest_path=str(result.manifest_path),
         source_library_manifest_path=str(result.source_library_manifest_path),
         draft_manifest_path=str(result.draft_manifest_path),
+        alignment_manifest_path=str(result.alignment_manifest_path),
         source_audit_graph_manifest_path=str(result.source_audit_graph_manifest_path),
         semantic_layer_manifest_path=str(result.semantic_layer_manifest_path),
         rca_view_manifest_path=str(result.rca_view_manifest_path),
@@ -905,6 +908,11 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
             artifacts,
             "draft_manifest",
             fallback=default_artifacts["draft_manifest"],
+        ),
+        alignment_manifest_path=_artifact_path(
+            artifacts,
+            "alignment_manifest",
+            fallback=default_artifacts["alignment_manifest"],
         ),
         source_audit_graph_manifest_path=_artifact_path(
             artifacts,

@@ -259,6 +259,7 @@ def test_kg_construction_build_route_writes_runtime_artifacts(
     assert Path(payload["manifest_path"]).is_file()
     assert Path(payload["source_library_manifest_path"]).is_file()
     assert Path(payload["draft_manifest_path"]).is_file()
+    assert Path(payload["alignment_manifest_path"]).is_file()
     assert Path(payload["source_audit_graph_manifest_path"]).is_file()
     assert Path(payload["semantic_layer_manifest_path"]).is_file()
     assert Path(payload["rca_view_manifest_path"]).is_file()
@@ -271,6 +272,9 @@ def test_kg_construction_build_route_writes_runtime_artifacts(
     )
     review_queue_artifact = client.get(
         "/api/kg/construction/builds/kgbuild_api_unit/artifacts/review_queue"
+    )
+    alignment_artifact = client.get(
+        "/api/kg/construction/builds/kgbuild_api_unit/artifacts/alignment_manifest"
     )
     decisions_artifact = client.get(
         "/api/kg/construction/builds/kgbuild_api_unit/artifacts/review_decisions"
@@ -292,6 +296,8 @@ def test_kg_construction_build_route_writes_runtime_artifacts(
     assert "ApiManualSource" in nodes_artifact.text
     assert review_queue_artifact.status_code == 200
     assert isinstance(review_queue_artifact.json(), list)
+    assert alignment_artifact.status_code == 200
+    assert alignment_artifact.json()["artifact_type"] == "entity_alignment_manifest_v1"
     assert decisions_artifact.status_code == 200
     assert decisions_artifact.text == ""
     assert diff_artifact.status_code == 200
@@ -424,6 +430,9 @@ def test_kg_construction_build_registry_lists_details_and_validates(
         "source_library_manifest.json"
     )
     assert builds[0]["draft_manifest_path"].endswith("draft_manifest.json")
+    assert builds[0]["alignment_manifest_path"].endswith(
+        "entity_alignment_manifest.json"
+    )
     assert builds[0]["source_audit_graph_manifest_path"].endswith(
         "source_audit_graph_manifest.json"
     )
@@ -440,6 +449,9 @@ def test_kg_construction_build_registry_lists_details_and_validates(
     assert detail["build"]["summary_path"].endswith("kg_construction_summary.json")
     assert detail["build"]["source_library_manifest_path"].endswith(
         "source_library_manifest.json"
+    )
+    assert detail["build"]["alignment_manifest_path"].endswith(
+        "entity_alignment_manifest.json"
     )
     assert detail["build"]["review_queue_path"].endswith("review_queue.json")
     assert detail["summary"]["node_count"] == 2
@@ -489,6 +501,7 @@ def test_kg_construction_build_registry_supports_legacy_manifests_and_edges(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     for key in (
         "draft_manifest",
+        "alignment_manifest",
         "source_audit_graph_manifest",
         "semantic_layer_manifest",
         "rca_view_manifest",
@@ -503,6 +516,7 @@ def test_kg_construction_build_registry_supports_legacy_manifests_and_edges(
     build = list_response.json()["builds"][0]
     assert build["source_library_manifest_path"].endswith("source_library_manifest.json")
     assert build["draft_manifest_path"].endswith("draft_manifest.json")
+    assert build["alignment_manifest_path"].endswith("entity_alignment_manifest.json")
     assert build["source_audit_graph_manifest_path"].endswith(
         "source_audit_graph_manifest.json"
     )
@@ -1411,9 +1425,11 @@ def test_kg_material_direct_build_runs_material_workflow(
     assert payload["summary"]["material_library"]["material_ids"] == ["pump_manual"]
     assert payload["material_ids"] == ["pump_manual"]
     assert Path(payload["source_library_manifest_path"]).is_file()
+    assert Path(payload["alignment_manifest_path"]).is_file()
     assert Path(payload["published_nodes_path"]).is_file()
     assert Path(payload["published_edges_path"]).is_file()
     assert Path(payload["publish_manifest_path"]).is_file()
+    assert payload["artifacts"]["alignment_manifest"] == payload["alignment_manifest_path"]
     assert payload["artifacts"]["kg_construction_diff"] == payload["diff_path"]
     manifest = json.loads(Path(payload["manifest_path"]).read_text(encoding="utf-8"))
     assert manifest["material_library"]["extraction_mode"] == "never"

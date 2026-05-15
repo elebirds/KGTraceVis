@@ -55,6 +55,7 @@ def test_material_workflow_extracts_selected_material_and_builds_artifacts(
     assert result.nodes_path == output_dir / "nodes.csv"
     assert result.edges_path == output_dir / "edges.csv"
     assert result.diff_path == output_dir / "kg_construction_diff.json"
+    assert result.alignment_manifest_path == output_dir / "entity_alignment_manifest.json"
     assert result.review_queue_path == output_dir / "review_queue.json"
     assert result.publish_report_path == output_dir / "publish_report.json"
     assert len(result.extraction_results) == 1

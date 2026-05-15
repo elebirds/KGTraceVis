@@ -46,6 +46,7 @@ def test_source_kg_construction_workflow_writes_candidate_artifacts(
     assert result.source_audit_graph_manifest_path == (
         output_dir / "source_audit_graph_manifest.json"
     )
+    assert result.alignment_manifest_path == output_dir / "entity_alignment_manifest.json"
     assert result.publish_manifest_path == output_dir / "publish_manifest.json"
     assert result.summary["node_count"] == 2
     assert result.summary["edge_count"] == 1
@@ -108,6 +109,7 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
         result.nodes_path,
         result.edges_path,
         result.draft_manifest_path,
+        result.alignment_manifest_path,
         result.source_audit_graph_manifest_path,
         result.semantic_layer_manifest_path,
         result.rca_view_manifest_path,
@@ -125,6 +127,7 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
     assert all(path.is_file() for path in expected_files)
     summary = json.loads(result.summary_path.read_text())
     semantic_manifest = json.loads(result.semantic_layer_manifest_path.read_text())
+    alignment_manifest = json.loads(result.alignment_manifest_path.read_text())
     rca_manifest = json.loads(result.rca_view_manifest_path.read_text())
     publish_manifest = json.loads(result.publish_manifest_path.read_text())
     manifest = json.loads(result.manifest_path.read_text())
@@ -150,6 +153,7 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
     assert publish_manifest["extractor_versions"] == {"structured_record": "v1"}
     assert publish_manifest["profile_version"] == "generic_rca_v1"
     assert semantic_manifest["edge_count"] == 1
+    assert alignment_manifest["artifact_type"] == "entity_alignment_manifest_v1"
     assert rca_manifest["kg_build_id"] == "kgbuild_toy_generic"
     assert rca_manifest["propagation_edge_count"] == 1
     assert edge_rows[0]["relation"] == "OBSERVED_BY"
@@ -223,6 +227,7 @@ def _required_artifact_keys() -> set[str]:
         "kg_construction_diff",
         "source_library_manifest",
         "draft_manifest",
+        "alignment_manifest",
         "source_audit_graph_manifest",
         "semantic_layer_manifest",
         "rca_view_manifest",

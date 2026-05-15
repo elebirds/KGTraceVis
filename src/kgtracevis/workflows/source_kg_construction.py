@@ -68,6 +68,7 @@ class SourceKGConstructionWorkflowResult:
     manifest_path: Path
     source_library_manifest_path: Path
     draft_manifest_path: Path
+    alignment_manifest_path: Path
     source_audit_graph_manifest_path: Path
     semantic_layer_manifest_path: Path
     rca_view_manifest_path: Path
@@ -149,6 +150,7 @@ def run_source_kg_construction_workflow(
         ),
         "layer_manifests": {
             "draft": result.draft_manifest(),
+            "alignment": result.alignment.manifest(),
             "source_audit_graph": result.audit_graph.manifest(),
             "semantic_layer": result.semantic_layer.manifest,
             "rca_view": result.rca_view.manifest,
@@ -189,6 +191,7 @@ def run_source_kg_construction_workflow(
         manifest_path=manifest_path,
         source_library_manifest_path=source_library_manifest_path,
         draft_manifest_path=layer_artifacts["draft_manifest"],
+        alignment_manifest_path=layer_artifacts["alignment_manifest"],
         source_audit_graph_manifest_path=layer_artifacts["source_audit_graph_manifest"],
         semantic_layer_manifest_path=layer_artifacts["semantic_layer_manifest"],
         rca_view_manifest_path=layer_artifacts["rca_view_manifest"],

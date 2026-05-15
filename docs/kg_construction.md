@@ -106,8 +106,9 @@ POST /api/kg/construction/build
 
 The API intentionally accepts only explicit structured/manual source records or
 explicit TEP semantic-lift / variable-mapping artifact paths. It writes the same
-candidate `nodes.csv`, `edges.csv`, `kg_construction_summary.json`, and
-`kg_construction_manifest.json` files under `runs/source_kg_build/<output_name>`.
+candidate `nodes.csv`, `edges.csv`, `entity_alignment_manifest.json`,
+`kg_construction_summary.json`, and `kg_construction_manifest.json` files under
+`runs/source_kg_build/<output_name>`.
 It does not call live LLM extractors, parse source code, or publish to Neo4j.
 
 Completed construction builds can be inspected and validated before any future
@@ -130,6 +131,13 @@ does not import to Neo4j.
 The artifact endpoint serves one conventional construction artifact by stable
 key, such as `nodes`, `review_queue`, `review_decisions`, or
 `kg_construction_diff`, without accepting raw filesystem paths.
+
+Alignment is exported as its own audit layer. `entity_alignment_manifest.json`
+contains canonical entity table rows, nontrivial deterministic `ALIGNS_TO`
+candidate rows, merge candidates, unresolved entities, and conflicts. These
+alignment rows document why endpoints were canonicalized, but they do not
+become runtime RCA propagation edges unless an extractor emits an explicit
+semantic relation.
 
 The review endpoint is the pre-publish control point for candidate edges. It
 updates only the selected construction build's `edges.csv` and manifest. A
