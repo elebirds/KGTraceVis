@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
+from typing import Any
 
 from kgtracevis.kg.graph import normalize_text
 from kgtracevis.kg_construction.draft import DraftEntity, DraftKG, DraftRelation
@@ -21,26 +22,73 @@ class AlignmentCandidate:
 
 
 @dataclass(frozen=True)
+class CanonicalEntityEntry:
+    """One canonical entity table row emitted by deterministic alignment."""
+
+    canonical_id: str
+    name: str
+    label: str
+    scenario: str
+    source_entity_ids: tuple[str, ...]
+    draft_ids: tuple[str, ...]
+    source_ids: tuple[str, ...]
+    aliases: tuple[str, ...]
+    external_ids: tuple[str, ...]
+    evidence_refs: tuple[str, ...]
+    confidence: float
+
+
+@dataclass(frozen=True)
+class AlignmentIssueRecord:
+    """Stable manifest row for unresolved entities and alignment conflicts."""
+
+    issue_id: str
+    issue_type: str
+    source_entity_id: str
+    canonical_id: str
+    reason: str
+    scenario: str
+    source_id: str
+    evidence: str
+    confidence: float
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class AlignmentResult:
     """Output of the entity alignment stage."""
 
     draft: DraftKG
     alignment_relations: tuple[DraftRelation, ...]
+    canonical_entities: tuple[CanonicalEntityEntry, ...]
     merge_candidates: tuple[AlignmentCandidate, ...]
     unresolved_entities: tuple[DraftEntity, ...]
+    unresolved_records: tuple[AlignmentIssueRecord, ...]
     conflicts: tuple[dict[str, object], ...]
+    conflict_records: tuple[AlignmentIssueRecord, ...]
 
     def manifest(self) -> dict[str, object]:
         """Return a JSON-friendly alignment manifest."""
         return {
             "artifact_type": "entity_alignment_manifest_v1",
             "aligned_entity_count": len(self.draft.entities),
+            "canonical_entity_count": len(self.canonical_entities),
             "alignment_relation_count": len(self.alignment_relations),
             "merge_candidate_count": len(self.merge_candidates),
             "unresolved_entity_count": len(self.unresolved_entities),
             "conflict_count": len(self.conflicts),
-            "merge_candidates": [candidate.__dict__ for candidate in self.merge_candidates],
-            "conflicts": list(self.conflicts),
+            "canonical_entities": [
+                _jsonable(asdict(entry)) for entry in self.canonical_entities
+            ],
+            "merge_candidates": [
+                _jsonable(asdict(candidate)) for candidate in self.merge_candidates
+            ],
+            "unresolved_entities": [
+                _jsonable(asdict(record)) for record in self.unresolved_records
+            ],
+            "conflicts": [
+                _jsonable(asdict(record)) for record in self.conflict_records
+            ],
         }
 
 
@@ -51,7 +99,8 @@ def run_entity_alignment(draft: DraftKG, profile: RcaProfile) -> AlignmentResult
     conflicts: list[dict[str, object]] = []
     aligned_entities: list[DraftEntity] = []
     endpoint_map: dict[str, str] = {}
-    alignment_relations: list[DraftRelation] = []
+    unresolved_records: list[AlignmentIssueRecord] = []
+    conflict_records: list[AlignmentIssueRecord] = []
 
     for entity in draft.entities:
         suggested = entity.canonical_id or entity.entity_id_suggestion
@@ -76,43 +125,36 @@ def run_entity_alignment(draft: DraftKG, profile: RcaProfile) -> AlignmentResult
             break
         aligned = replace(entity, canonical_id=canonical_id)
         aligned_entities.append(aligned)
-        endpoint_map[entity.entity_id_suggestion] = canonical_id
-        endpoint_map[entity.canonical_id] = canonical_id
+        if not canonical_id:
+            unresolved_records.append(_unresolved_record(aligned))
+            continue
+        if entity.entity_id_suggestion:
+            endpoint_map[entity.entity_id_suggestion] = canonical_id
+        if entity.canonical_id:
+            endpoint_map[entity.canonical_id] = canonical_id
         for alias in entity.aliases:
             endpoint_map[alias] = canonical_id
         for identity in _entity_identities(aligned):
             prior = canonical_by_identity.get(identity)
             if prior is not None and prior != canonical_id:
-                conflicts.append(
-                    {
-                        "identity": identity,
-                        "left": prior,
-                        "right": canonical_id,
-                        "entity_id_suggestion": entity.entity_id_suggestion,
-                    }
+                conflict = {
+                    "identity": identity,
+                    "left_canonical_id": prior,
+                    "right_canonical_id": canonical_id,
+                    "entity_id_suggestion": entity.entity_id_suggestion,
+                    "draft_id": entity.draft_id,
+                    "source_id": entity.source_id,
+                    "scenario": entity.scenario,
+                    "name": entity.name,
+                    "label": entity.label,
+                    "evidence": entity.evidence or entity.evidence_span or entity.draft_id,
+                    "confidence": entity.confidence,
+                }
+                conflicts.append(conflict)
+                conflict_records.append(
+                    _conflict_record(conflict, entity=aligned)
                 )
             canonical_by_identity[identity] = canonical_id
-        external_id = str(entity.metadata.get("external_id") or "").strip()
-        if external_id and external_id != canonical_id:
-            alignment_relations.append(
-                DraftRelation(
-                    draft_id=f"{entity.draft_id}:aligns_to",
-                    source_id=entity.source_id,
-                    extractor_name="entity_alignment",
-                    extractor_version="v1",
-                    scenario=entity.scenario,
-                    head=external_id,
-                    relation="ALIGNS_TO",
-                    tail=canonical_id,
-                    evidence=entity.evidence or entity.draft_id,
-                    confidence=0.95,
-                    status="auto",
-                    metadata={
-                        "relation_family": "ALIGNMENT",
-                        "propagation_enabled": False,
-                    },
-                )
-            )
 
     aligned_relations = tuple(
         replace(
@@ -125,18 +167,21 @@ def run_entity_alignment(draft: DraftKG, profile: RcaProfile) -> AlignmentResult
     return AlignmentResult(
         draft=DraftKG(
             entities=tuple(aligned_entities),
-            relations=(*aligned_relations, *alignment_relations),
+            relations=aligned_relations,
         ),
-        alignment_relations=tuple(alignment_relations),
+        alignment_relations=(),
+        canonical_entities=_canonical_entity_table(aligned_entities),
         merge_candidates=tuple(candidates),
         unresolved_entities=tuple(
             entity for entity in aligned_entities if not entity.canonical_id
         ),
+        unresolved_records=tuple(unresolved_records),
         conflicts=tuple(conflicts),
+        conflict_records=tuple(conflict_records),
     )
 
 
-def _entity_identities(entity: DraftEntity) -> set[str]:
+def _entity_identities(entity: DraftEntity) -> tuple[str, ...]:
     identities: set[str] = set()
     for value in (entity.canonical_id, entity.entity_id_suggestion):
         if normalized := normalize_text(value):
@@ -149,4 +194,123 @@ def _entity_identities(entity: DraftEntity) -> set[str]:
     external_id = str(entity.metadata.get("external_id") or "")
     if normalized_external_id := normalize_text(external_id):
         identities.add(f"external:{normalized_external_id}")
-    return identities
+    return tuple(sorted(identities))
+
+
+def _canonical_entity_table(
+    entities: list[DraftEntity],
+) -> tuple[CanonicalEntityEntry, ...]:
+    grouped: dict[str, list[DraftEntity]] = {}
+    for entity in entities:
+        if entity.canonical_id:
+            grouped.setdefault(entity.canonical_id, []).append(entity)
+    rows: list[CanonicalEntityEntry] = []
+    for canonical_id in sorted(grouped):
+        members = grouped[canonical_id]
+        primary = members[0]
+        rows.append(
+            CanonicalEntityEntry(
+                canonical_id=canonical_id,
+                name=primary.name,
+                label=primary.label,
+                scenario=primary.scenario,
+                source_entity_ids=tuple(
+                    sorted(
+                        {
+                            entity.entity_id_suggestion
+                            for entity in members
+                            if entity.entity_id_suggestion
+                        }
+                    )
+                ),
+                draft_ids=tuple(sorted({entity.draft_id for entity in members})),
+                source_ids=tuple(sorted({entity.source_id for entity in members})),
+                aliases=tuple(
+                    sorted(
+                        {
+                            alias
+                            for entity in members
+                            for alias in entity.aliases
+                            if alias
+                        }
+                    )
+                ),
+                external_ids=tuple(
+                    sorted(
+                        {
+                            str(entity.metadata.get("external_id") or "").strip()
+                            for entity in members
+                            if str(entity.metadata.get("external_id") or "").strip()
+                        }
+                    )
+                ),
+                evidence_refs=tuple(
+                    sorted(
+                        {
+                            entity.evidence or entity.evidence_span or entity.draft_id
+                            for entity in members
+                            if entity.evidence or entity.evidence_span or entity.draft_id
+                        }
+                    )
+                ),
+                confidence=round(
+                    min(max(entity.confidence, 0.0) for entity in members),
+                    4,
+                ),
+            )
+        )
+    return tuple(rows)
+
+
+def _unresolved_record(entity: DraftEntity) -> AlignmentIssueRecord:
+    evidence = entity.evidence or entity.evidence_span or entity.draft_id
+    return AlignmentIssueRecord(
+        issue_id=f"unresolved_entity:{entity.draft_id}",
+        issue_type="unresolved_entity",
+        source_entity_id=entity.entity_id_suggestion,
+        canonical_id=entity.canonical_id,
+        reason="entity has no deterministic canonical ID",
+        scenario=entity.scenario,
+        source_id=entity.source_id,
+        evidence=evidence,
+        confidence=entity.confidence,
+        payload={
+            "draft_id": entity.draft_id,
+            "entity_id_suggestion": entity.entity_id_suggestion,
+            "name": entity.name,
+            "label": entity.label,
+            "aliases": list(entity.aliases),
+            "external_id": str(entity.metadata.get("external_id") or ""),
+        },
+    )
+
+
+def _conflict_record(
+    conflict: dict[str, object],
+    *,
+    entity: DraftEntity,
+) -> AlignmentIssueRecord:
+    evidence = str(conflict.get("evidence") or entity.evidence or entity.draft_id)
+    identity = str(conflict.get("identity") or "")
+    return AlignmentIssueRecord(
+        issue_id=f"alignment_conflict:{identity}:{entity.draft_id}",
+        issue_type="alignment_conflict",
+        source_entity_id=entity.entity_id_suggestion,
+        canonical_id=entity.canonical_id,
+        reason="deterministic alignment found conflicting canonical IDs",
+        scenario=entity.scenario,
+        source_id=entity.source_id,
+        evidence=evidence,
+        confidence=entity.confidence,
+        payload=dict(conflict),
+    )
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, tuple):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, list):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    return value

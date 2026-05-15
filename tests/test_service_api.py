@@ -12,6 +12,14 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+from kgtracevis.kg_construction import (
+    GENERIC_PROFILE,
+    DraftEntity,
+    DraftKG,
+    build_review_queue,
+    review_queue_payload,
+    run_entity_alignment,
+)
 from kgtracevis.producers.backends import AMAZON_PATCHCORE_BACKEND, ANOMALIB_ENGINE_BACKEND
 from kgtracevis.service import api as service_api
 from kgtracevis.service import dashboard as service_dashboard
@@ -718,6 +726,66 @@ def test_kg_construction_review_queue_filters_edges(
     assert empty_page["total_count"] == 1
     assert empty_page["returned_count"] == 0
     assert empty_page["edges"] == []
+
+
+def test_alignment_review_queue_items_parse_as_service_dtos() -> None:
+    """Alignment review queue rows should stay parseable by service queue DTOs."""
+    draft = DraftKG(
+        entities=(
+            DraftEntity(
+                draft_id="entity:pump-a",
+                source_id="alignment_service_unit",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="PumpA",
+                name="Feed pump",
+                label="Equipment",
+                aliases=("asset:alias_a",),
+                evidence="pump A source row",
+                confidence=0.9,
+            ),
+            DraftEntity(
+                draft_id="entity:pump-b",
+                source_id="alignment_service_unit",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="PumpB",
+                name="Feed pump",
+                label="Equipment",
+                evidence="duplicate pump source row",
+                confidence=0.87,
+            ),
+            DraftEntity(
+                draft_id="entity:unknown",
+                source_id="alignment_service_unit",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="",
+                name="Mystery equipment",
+                label="Equipment",
+                evidence="unresolved source row",
+                confidence=0.5,
+            ),
+        )
+    )
+    alignment = run_entity_alignment(draft, GENERIC_PROFILE)
+    payload = review_queue_payload(build_review_queue((), alignment=alignment))
+
+    rows = [
+        service_kg_construction._queue_edge_from_review_item(item)
+        for item in payload
+    ]
+
+    assert {row.item_type for row in rows} == {
+        "entity_merge_candidate",
+        "unresolved_entity",
+    }
+    assert {row.review_status for row in rows} == {"auto"}
+    assert all(row.priority and row.reason for row in rows)
+    assert all(row.recommended_action for row in rows)
 
 
 def test_kg_construction_build_route_accepts_tep_rca_graph_artifacts(

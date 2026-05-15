@@ -2,7 +2,9 @@
 
 from kgtracevis.kg_construction.alignment import (
     AlignmentCandidate,
+    AlignmentIssueRecord,
     AlignmentResult,
+    CanonicalEntityEntry,
     run_entity_alignment,
 )
 from kgtracevis.kg_construction.audit_graph import SourceAuditGraph
@@ -94,6 +96,7 @@ from kgtracevis.kg_construction.rca_view import (
 from kgtracevis.kg_construction.review_queue import (
     ReviewQueueItem,
     build_review_queue,
+    review_queue_payload,
 )
 from kgtracevis.kg_construction.semantic_projection import (
     SemanticLayerResult,
@@ -129,7 +132,9 @@ __all__ = [
     "ExtractorRegistry",
     "GENERIC_PROFILE",
     "AlignmentCandidate",
+    "AlignmentIssueRecord",
     "AlignmentResult",
+    "CanonicalEntityEntry",
     "KGConstructionResult",
     "KGConstructionBuildSummary",
     "KGConstructionDraftRow",
@@ -187,6 +192,7 @@ __all__ = [
     "profile_for_scenario",
     "project_semantic_layer",
     "review_decision_for_edge",
+    "review_queue_payload",
     "run_kg_construction",
     "run_entity_alignment",
     "run_kg_qa",

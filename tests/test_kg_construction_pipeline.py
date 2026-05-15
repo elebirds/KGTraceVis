@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from kgtracevis.kg_construction import (
+    GENERIC_PROFILE,
     CandidateEntity,
     CandidateTriple,
     DraftEntity,
@@ -18,11 +19,13 @@ from kgtracevis.kg_construction import (
     TepRcaGraphExtractor,
     TepSemanticLiftExtractor,
     TepVariableMappingExtractor,
+    build_review_queue,
     clean_candidate_nodes,
     clean_candidate_triples,
     clean_kg_edges,
     clean_kg_nodes,
     draft_status_to_review_status,
+    run_entity_alignment,
     run_kg_construction,
     tep_external_id_to_kg_id,
 )
@@ -138,6 +141,109 @@ def test_draft_status_maps_to_kg_review_status() -> None:
     assert draft_status_to_review_status("accepted") == "reviewed"
     assert draft_status_to_review_status("published") == "reviewed"
     assert draft_status_to_review_status("rejected") == "rejected"
+
+
+def test_alignment_manifest_and_review_queue_cover_entity_decisions() -> None:
+    """Alignment should expose canonical rows and all entity decisions for review."""
+    draft = DraftKG(
+        entities=(
+            DraftEntity(
+                draft_id="entity:pump-a",
+                source_id="alignment_unit",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="PumpA",
+                name="Feed pump",
+                label="Equipment",
+                aliases=("asset:alias_a",),
+                evidence="pump A source row",
+                confidence=0.9,
+            ),
+            DraftEntity(
+                draft_id="entity:pump-b",
+                source_id="alignment_unit",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="PumpB",
+                name="Feed pump",
+                label="Equipment",
+                evidence="duplicate pump source row",
+                confidence=0.87,
+            ),
+            DraftEntity(
+                draft_id="entity:motor-d",
+                source_id="alignment_unit",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="MotorD",
+                name="Drive motor",
+                label="Equipment",
+                aliases=("asset:alias_b",),
+                evidence="motor source row",
+                confidence=0.88,
+            ),
+            DraftEntity(
+                draft_id="entity:conflict-c",
+                source_id="alignment_unit",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="ConflictC",
+                name="Conflicting equipment",
+                label="Equipment",
+                aliases=("asset:alias_a", "asset:alias_b"),
+                evidence="conflicting aliases source row",
+                confidence=0.72,
+            ),
+            DraftEntity(
+                draft_id="entity:unknown",
+                source_id="alignment_unit",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="",
+                name="Mystery equipment",
+                label="Equipment",
+                evidence="unresolved source row",
+                confidence=0.5,
+            ),
+        )
+    )
+
+    alignment = run_entity_alignment(draft, GENERIC_PROFILE)
+    manifest = alignment.manifest()
+    review_queue = build_review_queue((), alignment=alignment)
+    queue_by_type = {item.item_type: item for item in review_queue}
+
+    assert manifest["artifact_type"] == "entity_alignment_manifest_v1"
+    assert manifest["canonical_entity_count"] == 2
+    assert manifest["merge_candidate_count"] == 2
+    assert manifest["unresolved_entity_count"] == 1
+    assert manifest["conflict_count"] == 1
+    pump_entry = next(
+        entry
+        for entry in manifest["canonical_entities"]
+        if entry["canonical_id"] == "PumpA"
+    )
+    assert pump_entry["source_entity_ids"] == ["ConflictC", "PumpA", "PumpB"]
+    assert "pump A source row" in pump_entry["evidence_refs"]
+    assert queue_by_type["entity_alignment_conflict"].recommended_action == (
+        "resolve_conflict"
+    )
+    assert queue_by_type["entity_merge_candidate"].recommended_action == (
+        "confirm_or_split_merge"
+    )
+    assert queue_by_type["unresolved_entity"].recommended_action == (
+        "assign_canonical_entity"
+    )
+    assert all(item.reason and item.priority > 0 for item in review_queue)
+    assert {item.review_status for item in review_queue} == {"auto"}
+    assert json.loads(json.dumps(manifest))["canonical_entities"] == (
+        manifest["canonical_entities"]
+    )
 
 
 def test_draft_rows_convert_directly_to_kg_rows_with_rca_metadata() -> None:
@@ -333,6 +439,11 @@ def test_tep_semantic_lift_extractor_imports_runtime_graph(tmp_path: Path) -> No
     assert "relation_family=OBSERVATION" in edge.evidence
     assert "support_triple_ids=triple_1" in edge.evidence
     assert result.draft.relations[0].metadata["propagation_enabled"] is True
+    assert result.alignment.manifest()["alignment_relation_count"] == 0
+    assert result.alignment.manifest()["canonical_entities"][0]["external_ids"] == [
+        "stream:stream_1_a_feed",
+    ]
+    assert result.semantic_layer.manifest["skipped_relation_count"] == 0
 
 
 def test_tep_variable_mapping_extractor_imports_channel_aliases(tmp_path: Path) -> None:
@@ -379,6 +490,8 @@ def test_tep_variable_mapping_extractor_imports_channel_aliases(tmp_path: Path) 
     assert edge.tail == "ManipulatedVariable1DFeedVariable"
     assert edge.confidence == 0.96
     assert "mapping_source=explicit_rule_mv_plus_prior_mv_alignment" in edge.evidence
+    assert result.alignment.manifest()["alignment_relation_count"] == 0
+    assert result.semantic_layer.manifest["skipped_relation_count"] == 0
 
 
 def test_tep_import_preserves_alignment_alias_nodes(tmp_path: Path) -> None:

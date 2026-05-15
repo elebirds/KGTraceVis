@@ -28,7 +28,7 @@ The system is not a general industrial KG builder. It creates source-grounded, r
 
 `Draft KG` is the unified intermediate layer for `DraftEntity`, `DraftRelation`, optional alignments, signal mappings, and RCA hints. Auto-generated rows default to `draft` or `auto`, not reviewed.
 
-`Entity Alignment` performs deterministic ID, alias, external ID, and mapping-table alignment. High-risk merges should remain candidates or conflicts for review.
+`Entity Alignment` performs deterministic ID, alias, external ID, and mapping-table alignment. Its manifest is the stable handoff for canonical entity table rows, merge candidates, unresolved entities, and conflicts. High-risk merges should remain candidates or conflicts for review.
 
 `Source Audit Graph` preserves the full provenance-rich extraction state for debug and drill-down. It is not the default RCA runtime graph.
 
@@ -36,7 +36,7 @@ The system is not a general industrial KG builder. It creates source-grounded, r
 
 `RCA Reasoning View` annotates the semantic layer with RCA metadata: `relation_family`, `propagation_enabled`, `propagation_direction`, `propagation_priority`, `attenuation`, `edge_weight`, root/observable flags, task view, confidence policy, and `kg_build_id`.
 
-`Review Queue` prioritizes candidates that need human attention, especially causal/root-cause edges, low-confidence propagation edges, new anchors, merge conflicts, and facts that can affect Top-K RCA paths.
+`Review Queue` prioritizes candidates that need human attention, especially causal/root-cause edges, low-confidence propagation edges, new anchors, merge candidates, unresolved entities, alignment conflicts, and facts that can affect Top-K RCA paths. Every item carries `review_status`, `priority`, `reason`, and `recommended_action`.
 
 `Versioned Publish` prepares build metadata for runtime publication. Neo4j remains the runtime KG target; CSV/JSON artifacts are reproducible experiment snapshots.
 
@@ -80,6 +80,13 @@ The current import path uses:
 ```
 
 TEP import extractors preserve `relation_family`, `propagation_enabled`, external IDs, variable channels, RCA anchor roles, and source/provenance metadata. TEP `accept` review status is not automatically mapped to KGTraceVis `reviewed`; imported rows remain candidate `auto` unless reviewed or allowed by policy.
+
+External IDs are retained in the alignment manifest's canonical entity table rather
+than materialized as draft `ALIGNS_TO` edges by default. This avoids noisy
+semantic-layer skips when an external identifier is provenance metadata rather
+than a KG node. Source-backed mapping rows can still emit explicit `ALIGNS_TO`
+draft relations; the TEP variable mapping extractor uses that path for
+alternate variable IDs such as `variable:mv_42 -> variable:manipulated_variable_*`.
 
 ## Current Implementation Slice
 
