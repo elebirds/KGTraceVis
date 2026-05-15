@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 23
+- **Total Sessions**: 24
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~781 | Active |
+| `journal-1.md` | ~814 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 24 | 2026-05-15 | Generic review decisions for RCA KG construction | `50b063e` | `main` |
 | 23 | 2026-05-15 | Acceptance smoke for RCA KG construction | `8aacb98` | `main` |
 | 22 | 2026-05-15 | Source Library build artifact for RCA KG | `0aff118` | `main` |
 | 21 | 2026-05-15 | Source Library input for RCA KG construction CLI | `0fb1d29` | `main` |

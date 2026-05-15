@@ -779,3 +779,36 @@ Added a reusable RCA KG construction smoke workflow and CLI covering toy Source 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: Generic review decisions for RCA KG construction
+
+**Date**: 2026-05-15
+**Task**: Generic review decisions for RCA KG construction
+**Branch**: `main`
+
+### Summary
+
+Generalized construction review decisions beyond edges, added CLI/API support for non-edge queue items, preserved edge publish behavior, and verified full pytest/run_examples/ruff/mypy.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `50b063e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
