@@ -77,6 +77,20 @@ uv run python scripts/run_examples.py \
   --kg-edge-path runs/source_kg_build/tep_candidate/edges.csv
 ```
 
+For a single reusable validation report that covers runtime RCA consumption and
+Neo4j import dry-run readiness, run:
+
+```bash
+uv run python scripts/validate_kg_overlay.py \
+  --build-dir runs/source_kg_build/tep_candidate
+```
+
+This writes `kg_overlay_validation_report.json` beside the build. The report
+records example-level linking/path counts, RCA path metadata such as
+`path_strength`, `rca_score`, `source_edge_ids`, and `kg_build_ids`, plus the
+merged import dry-run counts. It does not rebuild KG artifacts, review
+candidates, or publish anything.
+
 Before publishing to Neo4j, validate the merged default KG plus candidate layer:
 
 ```bash

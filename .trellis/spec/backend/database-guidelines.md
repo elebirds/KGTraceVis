@@ -503,6 +503,8 @@ prepared for Neo4j publication.
 - Build candidate CSVs: `uv run python scripts/build_source_kg.py ...`
 - Run examples with candidate overlay:
   `uv run python scripts/run_examples.py --kg-node-path <nodes.csv> --kg-edge-path <edges.csv>`
+- Write a reusable overlay validation report:
+  `uv run python scripts/validate_kg_overlay.py --build-dir <build_dir>`
 - Validate import overlay:
   `uv run python scripts/import_kg.py --include-defaults --nodes <nodes.csv> --edges <edges.csv> --dry-run`
 - Construction manifest:
@@ -521,6 +523,13 @@ prepared for Neo4j publication.
   used.
 - `run_examples.py` reports `kg_backend=explicit_seed_overlay` when explicit KG
   CSV paths are supplied.
+- `validate_kg_overlay.py` is the reusable acceptance entry point for a
+  construction build or explicit candidate CSVs. It must delegate to
+  `kgtracevis.workflows.kg_overlay_validation`, run example evidence through
+  `KGTracePipeline`, preserve RCA path metadata (`path_strength`, `rca_score`,
+  `source_edge_ids`, `kg_build_ids`), and include Neo4j import dry-run counts.
+  It must not rebuild construction artifacts, mutate review decisions, or
+  publish to Neo4j.
 - TEP semantic-lift `full_kg_entity_ids` are entity-resolution cluster members,
   not KGTraceVis node aliases. Do not import them into `aliases` unless the
   alias-review and endpoint-rewrite logic explicitly supports that behavior.
@@ -554,6 +563,9 @@ prepared for Neo4j publication.
   overlay-only import.
 - CLI tests assert `run_examples.py --kg-node-path ... --kg-edge-path ...`
   reports `explicit_seed_overlay`.
+- Workflow/CLI tests assert `validate_kg_overlay.py --build-dir ...` writes a
+  report with example runtime metadata, `kg_build_ids`, and dry-run import
+  counts.
 - Manifest tests assert source-to-KG builds write
   `kg_construction_manifest.json` with draft rows and artifact paths.
 - KG Studio tests assert both legacy candidate CSV names and source-to-KG build

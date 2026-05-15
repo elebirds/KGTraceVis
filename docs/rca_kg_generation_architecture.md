@@ -111,6 +111,18 @@ source confidence from RCA scoring impact. Path and ranked root-cause payloads
 also carry `kg_build_ids` collected from supporting edges, preserving the
 Versioned Publish boundary in downstream RCA explanations.
 
+Candidate runtime overlays can be validated without mutating the seed KG or
+publishing to Neo4j:
+
+```bash
+uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_build/tep_candidate
+```
+
+The reusable validation workflow loads the candidate `nodes.csv` / `edges.csv`
+beside the default KG, runs example evidence through `KGTracePipeline`, records
+RCA path provenance (`path_strength`, `rca_score`, `source_edge_ids`,
+`kg_build_ids`), and performs a Neo4j import dry-run over the same overlay.
+
 ## LLM Boundary
 
 LLMs may extract source-grounded candidate entities and relations from documents, propose aliases, summarize review items, explain conflicts, or generate RCA path explanation text.
