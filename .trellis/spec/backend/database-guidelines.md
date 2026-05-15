@@ -303,6 +303,14 @@ and RCA reasoning all consume these build artifacts.
 - Offline document IE may replay source-grounded fixtures for tests and local
   demos, but fixture/LLM output is still DraftKG candidate output with
   `review_status=auto`, not reviewed KG truth.
+- Material/document IE extraction is not the final product experience. Material
+  extraction runs should leave product-facing audit artifacts alongside
+  `structured_records.jsonl`: a chunk-level extraction results JSONL and an
+  extraction manifest that records parser/chunking parameters, prompt version,
+  extractor version, relation whitelist, chunk/error counts, candidate counts,
+  and the claim boundary that LLM output is unreviewed candidate material.
+  Manifests should use chunk locators and text hashes instead of duplicating
+  full source text; full text belongs in the source-chunk audit store.
 - Source Library manifests passed by `--source-library` are loaded through
   `load_source_library(...)`; relative source paths resolve from the manifest
   directory before parsing or extraction.

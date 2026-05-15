@@ -73,6 +73,16 @@ LLMs may extract source-grounded candidate entities and relations from documents
 
 LLMs must not directly publish KG facts, decide canonical IDs, decide propagation direction, overwrite reviewed facts, train edge weights, or replace RCA ranking algorithms. LLM output stays in DraftKG with source evidence and `auto` review status.
 
+Document IE is deliberately not the final product experience. A live or fake
+LLM call only fills candidate DraftKG rows. The user-facing construction
+workspace must also expose the source library record, parser/chunk audit,
+prompt/version policy, chunk-level extraction results, extraction manifest,
+alignment/projection decisions, review queue, and versioned publish manifest.
+The current material-library extraction endpoint writes
+`structured_records.jsonl`, `chunk_extraction_results.jsonl`, and
+`extraction_manifest.json` so reviewers can see what the model attempted before
+those candidates enter RCA-KG construction.
+
 ## TEP_KG Integration
 
 TEP_KG is treated as a strong TEP domain pack, not as the global schema.

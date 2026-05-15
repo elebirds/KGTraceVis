@@ -10,10 +10,12 @@ from typing import Any
 import pytest
 
 from kgtracevis.kg_construction.document_extraction import (
+    DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
     OpenAICompatibleKGExtractionClient,
     SourceTextChunk,
     chunk_source_document,
     extract_draft_kg_from_chunks,
+    extract_draft_kg_from_chunks_with_report,
     extract_draft_kg_from_source_material,
     extraction_response_schema,
     parse_source_material,
@@ -196,9 +198,90 @@ def test_extract_draft_kg_from_chunks_reuses_parser_output() -> None:
     assert len(draft.relations) == 1
     assert client.calls[0]["chunk_id"] == "maintenance_note:chunk:0001:abc"
     assert "Source text:" in client.calls[0]["prompt"]
+    assert DEFAULT_DOCUMENT_IE_PROMPT_VERSION in client.calls[0]["prompt"]
     assert draft.relations[0].evidence_span == (
         f"maintenance_note:chunk:0001:abc:0-{len(chunk.text)}"
     )
+    assert draft.relations[0].metadata["prompt_version"] == DEFAULT_DOCUMENT_IE_PROMPT_VERSION
+
+
+def test_extract_draft_kg_from_chunks_with_report_summarizes_chunk_outcomes() -> None:
+    """Product-facing audit reports stay separate from DraftKG candidates."""
+    chunk = SourceTextChunk(
+        chunk_id="maintenance_note:chunk:0001:abc",
+        source_id="maintenance_note",
+        source_type="txt",
+        scenario="shared",
+        text="Cooling alert can suggest pump seal wear.",
+        start_char=0,
+        end_char=len("Cooling alert can suggest pump seal wear."),
+        index=1,
+    )
+    client = FakeIEClient(
+        {
+            "entities": [
+                {
+                    "id": "CoolingAlert",
+                    "name": "Cooling alert",
+                    "label": "Event",
+                    "evidence": "Cooling alert",
+                }
+            ],
+            "relations": [],
+        }
+    )
+
+    result = extract_draft_kg_from_chunks_with_report(
+        (chunk,),
+        client,
+        prompt_version="unit_prompt_v2",
+    )
+
+    assert len(result.draft.entities) == 1
+    assert result.chunk_count == 1
+    assert result.error_count == 0
+    assert result.prompt_version == "unit_prompt_v2"
+    assert result.chunk_summaries[0].status == "extracted"
+    assert result.chunk_summaries[0].entity_count == 1
+    assert result.draft.entities[0].metadata["prompt_version"] == "unit_prompt_v2"
+
+
+def test_extract_draft_kg_from_chunks_with_report_can_continue_after_chunk_error() -> None:
+    """Partial extraction failures should be visible without publishing facts."""
+    chunks = (
+        SourceTextChunk(
+            chunk_id="maintenance_note:chunk:0001:abc",
+            source_id="maintenance_note",
+            source_type="txt",
+            scenario="shared",
+            text="Cooling alert can suggest pump seal wear.",
+            start_char=0,
+            end_char=39,
+            index=1,
+        ),
+        SourceTextChunk(
+            chunk_id="maintenance_note:chunk:0002:def",
+            source_id="maintenance_note",
+            source_type="txt",
+            scenario="shared",
+            text="This chunk will fail.",
+            start_char=40,
+            end_char=61,
+            index=2,
+        ),
+    )
+    client = FailingSecondChunkIEClient()
+
+    result = extract_draft_kg_from_chunks_with_report(
+        chunks,
+        client,
+        continue_on_chunk_error=True,
+    )
+
+    assert len(result.draft.entities) == 1
+    assert result.error_count == 1
+    assert [summary.status for summary in result.chunk_summaries] == ["extracted", "failed"]
+    assert "simulated chunk failure" in str(result.chunk_summaries[1].error_message)
 
 
 def test_strict_grounding_rejects_relation_without_source_evidence() -> None:
@@ -364,6 +447,30 @@ class FakeIEClient:
     ) -> dict[str, Any] | str:
         self.calls.append({"chunk_id": chunk.chunk_id, "prompt": prompt, "schema": response_schema})
         return self.payload
+
+
+class FailingSecondChunkIEClient:
+    def extract_candidates(
+        self,
+        chunk: SourceTextChunk,
+        *,
+        prompt: str,
+        response_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        del prompt, response_schema
+        if chunk.index == 2:
+            raise ValueError("simulated chunk failure")
+        return {
+            "entities": [
+                {
+                    "id": "CoolingAlert",
+                    "name": "Cooling alert",
+                    "label": "Event",
+                    "evidence": "Cooling alert",
+                }
+            ],
+            "relations": [],
+        }
 
 
 class FakeOpenAIChatClient:

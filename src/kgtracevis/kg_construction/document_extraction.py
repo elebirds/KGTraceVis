@@ -26,6 +26,7 @@ DEFAULT_DOCUMENT_CHUNK_MAX_CHARS = 2_000
 DEFAULT_DOCUMENT_CHUNK_OVERLAP_CHARS = 200
 DEFAULT_DOCUMENT_EXTRACTOR_NAME = "llm_document_ie"
 DEFAULT_DOCUMENT_EXTRACTOR_VERSION = "v1"
+DEFAULT_DOCUMENT_IE_PROMPT_VERSION = "document_ie_prompt_v1"
 
 ALLOWED_DOCUMENT_IE_RELATIONS = frozenset(
     {
@@ -101,6 +102,42 @@ class SourceTextChunk:
     end_char: int
     index: int
     metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class DocumentIEChunkExtractionSummary:
+    """Audit summary for candidate extraction over one source text chunk."""
+
+    chunk_id: str
+    source_id: str
+    chunk_index: int
+    status: str
+    entity_count: int = 0
+    relation_count: int = 0
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class DocumentIEExtractionResult:
+    """DraftKG plus product-facing audit metadata for document IE runs."""
+
+    draft: DraftKG
+    chunk_summaries: tuple[DocumentIEChunkExtractionSummary, ...]
+    extractor_name: str
+    extractor_version: str
+    prompt_version: str
+    default_confidence: float
+    strict_grounding: bool
+
+    @property
+    def chunk_count(self) -> int:
+        """Return the number of attempted source chunks."""
+        return len(self.chunk_summaries)
+
+    @property
+    def error_count(self) -> int:
+        """Return the number of chunks that failed extraction."""
+        return sum(1 for summary in self.chunk_summaries if summary.status == "failed")
 
 
 class DocumentIEClient(Protocol):
@@ -263,6 +300,7 @@ def extract_draft_kg_from_source_material(
     extractor_version: str = DEFAULT_DOCUMENT_EXTRACTOR_VERSION,
     default_confidence: float = 0.55,
     strict_grounding: bool = True,
+    prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
 ) -> DraftKG:
     """Parse, chunk, and extract a source-constrained candidate DraftKG."""
     document = parse_source_material(source)
@@ -278,6 +316,7 @@ def extract_draft_kg_from_source_material(
         extractor_version=extractor_version,
         default_confidence=default_confidence,
         strict_grounding=strict_grounding,
+        prompt_version=prompt_version,
     )
 
 
@@ -289,45 +328,117 @@ def extract_draft_kg_from_chunks(
     extractor_version: str = DEFAULT_DOCUMENT_EXTRACTOR_VERSION,
     default_confidence: float = 0.55,
     strict_grounding: bool = True,
+    prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
 ) -> DraftKG:
     """Extract draft KG candidates from already parsed source text chunks."""
+    result = extract_draft_kg_from_chunks_with_report(
+        chunks,
+        client,
+        extractor_name=extractor_name,
+        extractor_version=extractor_version,
+        default_confidence=default_confidence,
+        strict_grounding=strict_grounding,
+        prompt_version=prompt_version,
+    )
+    return result.draft
+
+
+def extract_draft_kg_from_chunks_with_report(
+    chunks: Sequence[SourceTextChunk],
+    client: DocumentIEClient,
+    *,
+    extractor_name: str = DEFAULT_DOCUMENT_EXTRACTOR_NAME,
+    extractor_version: str = DEFAULT_DOCUMENT_EXTRACTOR_VERSION,
+    default_confidence: float = 0.55,
+    strict_grounding: bool = True,
+    prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
+    continue_on_chunk_error: bool = False,
+) -> DocumentIEExtractionResult:
+    """Extract DraftKG candidates and chunk-level audit summaries.
+
+    The report is for review/audit UX only. Extractor output still enters the
+    pipeline as unreviewed DraftKG candidates.
+    """
     schema = extraction_response_schema()
     entities: list[DraftEntity] = []
     relations: list[DraftRelation] = []
+    summaries: list[DocumentIEChunkExtractionSummary] = []
     for chunk in chunks:
-        prompt = build_document_ie_prompt(chunk)
-        response = client.extract_candidates(chunk, prompt=prompt, response_schema=schema)
-        payload = _coerce_extracted_payload(response, chunk_id=chunk.chunk_id)
-        entities.extend(
-            _entity_to_draft(
-                entity,
-                chunk=chunk,
-                index=index,
-                extractor_name=extractor_name,
-                extractor_version=extractor_version,
-                default_confidence=default_confidence,
-                strict_grounding=strict_grounding,
+        try:
+            prompt = build_document_ie_prompt(chunk, prompt_version=prompt_version)
+            response = client.extract_candidates(chunk, prompt=prompt, response_schema=schema)
+            payload = _coerce_extracted_payload(response, chunk_id=chunk.chunk_id)
+            chunk_entities = [
+                _entity_to_draft(
+                    entity,
+                    chunk=chunk,
+                    index=index,
+                    extractor_name=extractor_name,
+                    extractor_version=extractor_version,
+                    default_confidence=default_confidence,
+                    strict_grounding=strict_grounding,
+                    prompt_version=prompt_version,
+                )
+                for index, entity in enumerate(payload.entities, start=1)
+            ]
+            chunk_relations = [
+                _relation_to_draft(
+                    relation,
+                    chunk=chunk,
+                    index=index,
+                    extractor_name=extractor_name,
+                    extractor_version=extractor_version,
+                    default_confidence=default_confidence,
+                    strict_grounding=strict_grounding,
+                    prompt_version=prompt_version,
+                )
+                for index, relation in enumerate(payload.relations, start=1)
+            ]
+        except Exception as exc:
+            if not continue_on_chunk_error:
+                raise
+            summaries.append(
+                DocumentIEChunkExtractionSummary(
+                    chunk_id=chunk.chunk_id,
+                    source_id=chunk.source_id,
+                    chunk_index=chunk.index,
+                    status="failed",
+                    error_message=str(exc),
+                )
             )
-            for index, entity in enumerate(payload.entities, start=1)
-        )
-        relations.extend(
-            _relation_to_draft(
-                relation,
-                chunk=chunk,
-                index=index,
-                extractor_name=extractor_name,
-                extractor_version=extractor_version,
-                default_confidence=default_confidence,
-                strict_grounding=strict_grounding,
+            continue
+
+        entities.extend(chunk_entities)
+        relations.extend(chunk_relations)
+        summaries.append(
+            DocumentIEChunkExtractionSummary(
+                chunk_id=chunk.chunk_id,
+                source_id=chunk.source_id,
+                chunk_index=chunk.index,
+                status="extracted",
+                entity_count=len(chunk_entities),
+                relation_count=len(chunk_relations),
             )
-            for index, relation in enumerate(payload.relations, start=1)
         )
-    return DraftKG(entities=tuple(entities), relations=tuple(relations))
+    return DocumentIEExtractionResult(
+        draft=DraftKG(entities=tuple(entities), relations=tuple(relations)),
+        chunk_summaries=tuple(summaries),
+        extractor_name=extractor_name,
+        extractor_version=extractor_version,
+        prompt_version=prompt_version,
+        default_confidence=default_confidence,
+        strict_grounding=strict_grounding,
+    )
 
 
-def build_document_ie_prompt(chunk: SourceTextChunk) -> str:
+def build_document_ie_prompt(
+    chunk: SourceTextChunk,
+    *,
+    prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
+) -> str:
     """Build a source-constrained IE prompt for one text chunk."""
     return (
+        f"Prompt version: {prompt_version}.\n"
         "Extract only candidate industrial KG entities and relations explicitly "
         "supported by the source text chunk. Do not infer causal facts beyond the "
         "text. Use concise evidence copied from the chunk for every candidate.\n\n"
@@ -608,6 +719,7 @@ def _entity_to_draft(
     extractor_version: str,
     default_confidence: float,
     strict_grounding: bool,
+    prompt_version: str,
 ) -> DraftEntity:
     raw_entity_id = _first_text(entity.id, entity.entity_id, entity.node_id)
     entity_id = _coerce_entity_id(raw_entity_id, candidate=f"entity candidate in {chunk.chunk_id}")
@@ -642,6 +754,7 @@ def _entity_to_draft(
         metadata={
             "chunk_id": chunk.chunk_id,
             "chunk_index": chunk.index,
+            "prompt_version": prompt_version,
             "raw_entity_id": raw_entity_id,
         },
     )
@@ -656,6 +769,7 @@ def _relation_to_draft(
     extractor_version: str,
     default_confidence: float,
     strict_grounding: bool,
+    prompt_version: str,
 ) -> DraftRelation:
     raw_head = _first_text(relation.head, relation.subject, relation.source_node)
     head = _coerce_entity_id(raw_head, candidate=f"relation head in {chunk.chunk_id}")
@@ -692,6 +806,7 @@ def _relation_to_draft(
         metadata={
             "chunk_id": chunk.chunk_id,
             "chunk_index": chunk.index,
+            "prompt_version": prompt_version,
             "raw_head": raw_head,
             "raw_tail": raw_tail,
         },

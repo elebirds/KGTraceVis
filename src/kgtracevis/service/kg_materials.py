@@ -8,17 +8,23 @@ import re
 import urllib.request
 import uuid
 from datetime import UTC, datetime
+from hashlib import sha1
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from kgtracevis.kg_construction.document_extraction import (
+    ALLOWED_DOCUMENT_IE_RELATIONS,
+    DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
+    DocumentIEChunkExtractionSummary,
     DocumentIEClient,
+    DocumentIEExtractionResult,
     OpenAICompatibleKGExtractionClient,
+    ParsedSourceDocument,
     SourceTextChunk,
     chunk_source_document,
-    extract_draft_kg_from_chunks,
+    extract_draft_kg_from_chunks_with_report,
     parse_source_material,
 )
 from kgtracevis.kg_construction.draft import DraftEntity, DraftRelation, KGConstructionSource
@@ -58,8 +64,13 @@ class KGMaterialExtractionState(BaseModel):
     source_id: str | None = None
     extractor_name: str | None = None
     extractor_version: str | None = None
+    prompt_version: str | None = None
     extracted_at: str | None = None
     record_count: int | None = Field(default=None, ge=0)
+    chunk_count: int | None = Field(default=None, ge=0)
+    error_count: int | None = Field(default=None, ge=0)
+    extraction_manifest_path: str | None = None
+    chunk_results_path: str | None = None
     error_message: str | None = None
 
     @model_validator(mode="after")
@@ -234,6 +245,10 @@ class KGMaterialExtractionRunRequest(BaseModel):
     max_chars: int = Field(default=2_000, ge=200, le=8_000)
     overlap_chars: int = Field(default=200, ge=0, le=2_000)
     source_format: ConstructionSourceFormat = "jsonl"
+    prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION
+    default_confidence: float = Field(default=0.55, ge=0.0, le=1.0)
+    strict_grounding: bool = True
+    continue_on_chunk_error: bool = False
     overwrite: bool = False
 
     @model_validator(mode="after")
@@ -262,6 +277,11 @@ class KGMaterialExtractionRunResponse(BaseModel):
     material: KGMaterialRecord
     structured_records_path: str
     record_count: int
+    extraction_manifest_path: str
+    chunk_results_path: str
+    chunk_count: int
+    error_count: int
+    prompt_version: str
     claim_boundary: str = (
         "LLM/IE outputs are source-grounded candidate KG rows for review; they "
         "are not verified industrial facts"
@@ -621,8 +641,16 @@ def extract_kg_material_to_structured_records(
     material = detail.material
     record_dir = Path(material.metadata_path).parent
     records_path = record_dir / "structured_records.jsonl"
-    if records_path.exists() and not request.overwrite:
-        raise ValueError("structured_records.jsonl already exists; pass overwrite=true to replace")
+    chunk_results_path = record_dir / "chunk_extraction_results.jsonl"
+    extraction_manifest_path = record_dir / "extraction_manifest.json"
+    existing_artifacts = [
+        path.name
+        for path in (records_path, chunk_results_path, extraction_manifest_path)
+        if path.exists()
+    ]
+    if existing_artifacts and not request.overwrite:
+        names = ", ".join(existing_artifacts)
+        raise ValueError(f"{names} already exist; pass overwrite=true to replace")
 
     source_path, source_metadata = _local_source_for_extraction(material)
     source = KGConstructionSource(
@@ -650,18 +678,44 @@ def extract_kg_material_to_structured_records(
     )
 
     ie_client = client or OpenAICompatibleKGExtractionClient()
-    draft = extract_draft_kg_from_chunks(
+    extraction_result = extract_draft_kg_from_chunks_with_report(
         chunks,
         ie_client,
         extractor_name="openai_document_ie",
         extractor_version="v1",
+        default_confidence=request.default_confidence,
+        strict_grounding=request.strict_grounding,
+        prompt_version=request.prompt_version,
+        continue_on_chunk_error=request.continue_on_chunk_error,
     )
+    draft = extraction_result.draft
     records = _structured_records_from_draft(draft)
-    if not records:
-        raise ValueError(f"material_id={material.material_id} produced no candidate records")
     _write_jsonl(records_path, records)
+    _write_jsonl(
+        chunk_results_path,
+        [
+            _chunk_extraction_result_record(summary)
+            for summary in extraction_result.chunk_summaries
+        ],
+    )
 
     now = _utc_now()
+    extraction_run_id = str(uuid.uuid4())
+    manifest = _material_extraction_manifest(
+        material=material,
+        document=document,
+        chunks=chunks,
+        extraction_result=extraction_result,
+        records=records,
+        records_path=records_path,
+        chunk_results_path=chunk_results_path,
+        extraction_manifest_path=extraction_manifest_path,
+        extraction_run_id=extraction_run_id,
+        provider=request.provider,
+        request=request,
+        created_at=now,
+    )
+    _write_json_object(extraction_manifest_path, manifest)
     updated = material.model_copy(
         update={
             "status": "extracted",
@@ -673,8 +727,13 @@ def extract_kg_material_to_structured_records(
                 source_id=material.material_id,
                 extractor_name="openai_document_ie",
                 extractor_version="v1",
+                prompt_version=request.prompt_version,
                 extracted_at=now,
                 record_count=len(records),
+                chunk_count=extraction_result.chunk_count,
+                error_count=extraction_result.error_count,
+                extraction_manifest_path=str(extraction_manifest_path),
+                chunk_results_path=str(chunk_results_path),
             ),
         }
     )
@@ -682,15 +741,24 @@ def extract_kg_material_to_structured_records(
     extraction_run = store.record_extraction_run(
         updated.material_id,
         updated.extraction,
+        extraction_run_id=extraction_run_id,
         provider=request.provider,
         parameters={
             "max_chars": request.max_chars,
             "overlap_chars": request.overlap_chars,
             "source_format": request.source_format,
+            "prompt_version": request.prompt_version,
+            "default_confidence": request.default_confidence,
+            "strict_grounding": request.strict_grounding,
+            "continue_on_chunk_error": request.continue_on_chunk_error,
         },
         result_summary={
             "record_count": len(records),
+            "chunk_count": extraction_result.chunk_count,
+            "error_count": extraction_result.error_count,
             "structured_records_path": str(records_path),
+            "chunk_results_path": str(chunk_results_path),
+            "extraction_manifest_path": str(extraction_manifest_path),
         },
     )
     store.save_extraction_artifact(
@@ -704,10 +772,39 @@ def extract_kg_material_to_structured_records(
             "record_types": sorted({str(record.get("record_type")) for record in records}),
         },
     )
+    store.save_extraction_artifact(
+        material_id=updated.material_id,
+        extraction_run_id=extraction_run.get("extraction_run_id"),
+        artifact_type="chunk_extraction_results",
+        uri=str(chunk_results_path),
+        media_type="application/jsonl",
+        payload={
+            "chunk_count": extraction_result.chunk_count,
+            "error_count": extraction_result.error_count,
+        },
+    )
+    store.save_extraction_artifact(
+        material_id=updated.material_id,
+        extraction_run_id=extraction_run.get("extraction_run_id"),
+        artifact_type="extraction_manifest",
+        uri=str(extraction_manifest_path),
+        media_type="application/json",
+        payload={
+            "record_count": len(records),
+            "chunk_count": extraction_result.chunk_count,
+            "prompt_version": request.prompt_version,
+            "claim_boundary": manifest["claim_boundary"],
+        },
+    )
     return KGMaterialExtractionRunResponse(
         material=updated,
         structured_records_path=str(records_path),
         record_count=len(records),
+        extraction_manifest_path=str(extraction_manifest_path),
+        chunk_results_path=str(chunk_results_path),
+        chunk_count=extraction_result.chunk_count,
+        error_count=extraction_result.error_count,
+        prompt_version=request.prompt_version,
     )
 
 
@@ -746,8 +843,18 @@ def _construction_source_from_material(
         metadata["extractor_name"] = extraction.extractor_name
     if extraction.extractor_version:
         metadata["extractor_version"] = extraction.extractor_version
+    if extraction.prompt_version:
+        metadata["prompt_version"] = extraction.prompt_version
     if extraction.record_count is not None:
         metadata["record_count"] = extraction.record_count
+    if extraction.chunk_count is not None:
+        metadata["chunk_count"] = extraction.chunk_count
+    if extraction.error_count is not None:
+        metadata["error_count"] = extraction.error_count
+    if extraction.extraction_manifest_path:
+        metadata["extraction_manifest_path"] = extraction.extraction_manifest_path
+    if extraction.chunk_results_path:
+        metadata["chunk_results_path"] = extraction.chunk_results_path
     return KGConstructionSourceInput(
         source_id=source_id,
         source_type=source_type,
@@ -836,6 +943,116 @@ def _relation_record(relation: DraftRelation) -> dict[str, Any]:
         "draft_id": relation.draft_id,
         "metadata": dict(relation.metadata),
     }
+
+
+def _chunk_extraction_result_record(
+    summary: DocumentIEChunkExtractionSummary,
+) -> dict[str, Any]:
+    return {
+        "chunk_id": summary.chunk_id,
+        "source_id": summary.source_id,
+        "chunk_index": summary.chunk_index,
+        "status": summary.status,
+        "entity_count": summary.entity_count,
+        "relation_count": summary.relation_count,
+        "error_message": summary.error_message,
+    }
+
+
+def _material_extraction_manifest(
+    *,
+    material: KGMaterialRecord,
+    document: ParsedSourceDocument,
+    chunks: tuple[SourceTextChunk, ...],
+    extraction_result: DocumentIEExtractionResult,
+    records: list[dict[str, Any]],
+    records_path: Path,
+    chunk_results_path: Path,
+    extraction_manifest_path: Path,
+    extraction_run_id: str,
+    provider: str,
+    request: KGMaterialExtractionRunRequest,
+    created_at: str,
+) -> dict[str, Any]:
+    entity_count = sum(1 for record in records if record.get("record_type") == "entity")
+    relation_count = sum(1 for record in records if record.get("record_type") == "relation")
+    return {
+        "artifact_type": "document_ie_extraction_manifest",
+        "manifest_version": "v1",
+        "extraction_run_id": extraction_run_id,
+        "created_at": created_at,
+        "claim_boundary": (
+            "Document IE output is source-grounded DraftKG candidate material for "
+            "review and construction staging; it is not reviewed or published KG."
+        ),
+        "material": {
+            "material_id": material.material_id,
+            "title": material.title,
+            "scenario": material.scenario,
+            "material_type": material.material_type,
+            "source_kind": material.source_kind,
+            "source_uri": material.source_uri,
+            "metadata_path": material.metadata_path,
+        },
+        "source": {
+            "source_id": document.source_id,
+            "source_type": document.source_type,
+            "scenario": document.scenario,
+            "parser": document.parser,
+            "path": str(document.path) if document.path is not None else None,
+            "metadata": dict(document.metadata),
+        },
+        "chunking": {
+            "max_chars": request.max_chars,
+            "overlap_chars": request.overlap_chars,
+            "chunk_count": len(chunks),
+            "chunks": [_manifest_chunk_summary(chunk) for chunk in chunks],
+        },
+        "extraction": {
+            "provider": provider,
+            "extractor_name": extraction_result.extractor_name,
+            "extractor_version": extraction_result.extractor_version,
+            "prompt_version": request.prompt_version,
+            "default_confidence": request.default_confidence,
+            "strict_grounding": request.strict_grounding,
+            "continue_on_chunk_error": request.continue_on_chunk_error,
+            "allowed_relations": sorted(ALLOWED_DOCUMENT_IE_RELATIONS),
+            "llm_boundary": (
+                "LLM extraction proposes source-attached candidates only; review, "
+                "alignment, semantic projection, and RCA view build remain separate."
+            ),
+        },
+        "summary": {
+            "record_count": len(records),
+            "entity_count": entity_count,
+            "relation_count": relation_count,
+            "chunk_count": extraction_result.chunk_count,
+            "error_count": extraction_result.error_count,
+            "review_status": "auto",
+        },
+        "artifacts": {
+            "structured_records": str(records_path),
+            "chunk_extraction_results": str(chunk_results_path),
+            "extraction_manifest": str(extraction_manifest_path),
+        },
+    }
+
+
+def _manifest_chunk_summary(chunk: SourceTextChunk) -> dict[str, Any]:
+    return {
+        "chunk_id": chunk.chunk_id,
+        "chunk_index": chunk.index,
+        "char_start": chunk.start_char,
+        "char_end": chunk.end_char,
+        "text_sha1": sha1(chunk.text.encode("utf-8")).hexdigest(),
+        "text_length": len(chunk.text),
+        "source_locator": f"chars={chunk.start_char}-{chunk.end_char}",
+    }
+
+
+def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:

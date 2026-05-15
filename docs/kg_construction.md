@@ -220,8 +220,14 @@ artifacts and does not publish anything to Neo4j.
 
 The extraction endpoint parses supported local material content into text
 chunks, calls an OpenAI-compatible IE client, writes
-`structured_records.jsonl`, and updates the material's extraction metadata.
-These records can then be converted into an ordinary
+`structured_records.jsonl`, `chunk_extraction_results.jsonl`, and
+`extraction_manifest.json`, then updates the material's extraction metadata.
+The manifest records parser/chunking settings, prompt version, extractor
+version, the relation whitelist, chunk counts, error counts, and the explicit
+claim boundary that LLM output is only candidate material. It stores chunk
+locators and text hashes rather than duplicating the full source text; the
+full parsed chunks stay in the source-chunk audit store. These records can then
+be converted into an ordinary
 `KGConstructionBuildRequest` through `POST /api/kg/materials/build-sources` and
 passed to the existing source-to-KG build endpoint.
 For pre-extracted materials, `POST /api/kg/materials/build` runs the reusable
@@ -240,6 +246,12 @@ ungrounded model evidence, invalid scenarios, or relation names outside the
 RCA-oriented KG construction whitelist fail before a candidate build is
 produced. Document IE also coerces model-returned entity references into the
 same PascalCase-ish node ID style used by KG CSV validation.
+
+The product boundary is therefore not "LLM returned triples". The product
+experience is the audited construction workspace: source registration, parser
+and chunk audit, source-grounded candidate generation, DraftKG conversion,
+alignment/projection/review queues, and versioned build artifacts. The LLM is
+one adapter inside that workspace and cannot skip review or publish.
 
 The reusable orchestration entry point for this material-driven path is
 `kgtracevis.workflows.material_kg_construction.run_material_kg_construction_workflow`.

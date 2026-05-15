@@ -100,17 +100,86 @@ def test_material_extraction_writes_structured_records_with_fake_ie(
 
     assert response.status == "extracted"
     assert response.record_count == 3
+    assert response.chunk_count == 1
+    assert response.error_count == 0
+    assert response.prompt_version == "document_ie_prompt_v1"
     assert response.material.extraction.status == "extracted"
+    assert response.material.extraction.extraction_manifest_path == (
+        response.extraction_manifest_path
+    )
     records_path = Path(response.structured_records_path)
     rows = [json.loads(line) for line in records_path.read_text().splitlines()]
     assert {row["record_type"] for row in rows} == {"entity", "relation"}
     assert rows[-1]["relation"] == "SUGGESTS_ROOT_CAUSE"
+    chunk_results = [
+        json.loads(line)
+        for line in Path(response.chunk_results_path).read_text(encoding="utf-8").splitlines()
+    ]
+    assert chunk_results == [
+        {
+            "chunk_id": chunk_results[0]["chunk_id"],
+            "chunk_index": 1,
+            "entity_count": 2,
+            "error_message": None,
+            "relation_count": 1,
+            "source_id": "pump_note",
+            "status": "extracted",
+        }
+    ]
+    manifest = json.loads(Path(response.extraction_manifest_path).read_text(encoding="utf-8"))
+    assert manifest["claim_boundary"].startswith("Document IE output is source-grounded")
+    assert manifest["extraction"]["prompt_version"] == "document_ie_prompt_v1"
+    assert manifest["summary"]["review_status"] == "auto"
+    assert manifest["summary"]["record_count"] == 3
+    assert "Pump cavitation indicates seal wear." not in json.dumps(manifest)
 
     build_sources = prepare_kg_material_construction_build(
         KGMaterialSelectedBuildRequest(material_ids=["pump_note"]),
         material_root=tmp_path,
     )
     assert build_sources.sources[0].path == str(records_path)
+    assert build_sources.sources[0].metadata["extraction_manifest_path"] == (
+        response.extraction_manifest_path
+    )
+
+
+def test_material_extraction_writes_audit_artifacts_for_zero_candidates(
+    tmp_path: Path,
+) -> None:
+    """A no-candidate IE result is still an auditable extraction outcome."""
+    source_text = "This note has no supported KG candidates."
+    save_kg_material_upload(
+        material_id="empty_note",
+        title="Empty note",
+        filename="empty_note.txt",
+        content=source_text.encode(),
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+
+    response = extract_kg_material_to_structured_records(
+        "empty_note",
+        KGMaterialExtractionRunRequest(overwrite=True),
+        client=EmptyIEClient(),
+        material_root=tmp_path,
+    )
+
+    assert response.status == "extracted"
+    assert response.record_count == 0
+    assert Path(response.structured_records_path).read_text(encoding="utf-8") == ""
+    chunk_results = [
+        json.loads(line)
+        for line in Path(response.chunk_results_path).read_text(encoding="utf-8").splitlines()
+    ]
+    assert chunk_results[0]["status"] == "extracted"
+    assert chunk_results[0]["entity_count"] == 0
+    assert chunk_results[0]["relation_count"] == 0
+    manifest = json.loads(Path(response.extraction_manifest_path).read_text(encoding="utf-8"))
+    assert manifest["summary"]["record_count"] == 0
+    assert manifest["summary"]["entity_count"] == 0
+    assert manifest["summary"]["relation_count"] == 0
+    assert source_text not in json.dumps(manifest)
 
 
 def test_runtime_material_store_provider_persists_extraction_state(
@@ -151,8 +220,15 @@ def test_runtime_material_store_provider_persists_extraction_state(
     )
     assert store.runs[0]["extraction"]["status"] == "extracted"
     assert store.runs[0]["parameters"]["source_format"] == "jsonl"
+    assert store.runs[0]["parameters"]["prompt_version"] == "document_ie_prompt_v1"
+    assert store.runs[0]["result_summary"]["chunk_count"] == 1
     assert store.artifacts[0]["artifact_type"] == "structured_records"
     assert store.artifacts[0]["uri"] == response.structured_records_path
+    assert [artifact["artifact_type"] for artifact in store.artifacts] == [
+        "structured_records",
+        "chunk_extraction_results",
+        "extraction_manifest",
+    ]
 
 
 def test_selected_materials_prepare_build_ready_construction_sources(
@@ -321,6 +397,20 @@ class FakeIEClient:
                 }
             ],
         }
+
+
+class EmptyIEClient:
+    """Fake document IE client that returns no candidates."""
+
+    def extract_candidates(
+        self,
+        chunk: SourceTextChunk,
+        *,
+        prompt: str,
+        response_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        del chunk, prompt, response_schema
+        return {"entities": [], "relations": []}
 
 
 class InMemoryMaterialStore:
