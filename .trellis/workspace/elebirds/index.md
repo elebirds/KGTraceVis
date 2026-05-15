@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 34
+- **Total Sessions**: 35
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1144 | Active |
+| `journal-1.md` | ~1177 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 35 | 2026-05-15 | M18 external RCA profile domain packs | `1bb2852` | `main` |
 | 34 | 2026-05-15 | M17 auditable alignment layer | `36df9f2` | `main` |
 | 33 | 2026-05-15 | M16 profile-driven RCA projection policies | `c53be25` | `main` |
 | 32 | 2026-05-15 | M15 document IE extraction audit | `fb8fc7d` | `main` |

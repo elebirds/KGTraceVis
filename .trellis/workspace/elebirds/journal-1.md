@@ -1142,3 +1142,36 @@ Materialized audit-layer alignment relations, added entity_alignment_manifest ar
 ### Next Steps
 
 - None - task complete
+
+
+## Session 35: M18 external RCA profile domain packs
+
+**Date**: 2026-05-15
+**Task**: M18 external RCA profile domain packs
+**Branch**: `main`
+
+### Summary
+
+Added JSON RCA profile loading, profile_manifest artifacts, profile_path workflow/API/CLI propagation, example generic/TEP profile packs, replay preservation, docs/spec updates, and tests. Gates: ruff, mypy, pytest 337, run_examples, RCA-KG smoke with toy/material/TEP passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1bb2852` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
