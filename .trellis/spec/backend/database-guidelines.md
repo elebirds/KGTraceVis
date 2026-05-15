@@ -196,7 +196,9 @@ Generic graph path ranking should use optional RCA view score metadata when it
 is present on candidate KG overlays. Preserve the legacy confidence fallback
 for seed KG rows without `rca_score`, and keep both `confidence` and
 `path_strength` in path payloads so reviewers can tell source confidence apart
-from RCA scoring impact.
+from RCA scoring impact. Top-k paths and projected ranked root causes should
+also preserve supporting `kg_build_ids` when construction/runtime edges carry
+them.
 
 Backward-compatible re-exports from `service.runs` are allowed for public API
 tests and existing service callers, but new code should import the focused

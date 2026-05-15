@@ -107,7 +107,9 @@ inspectable without turning candidate edges into reviewed facts.
 At runtime, generic graph path ranking uses these RCA scores as path strength
 when present and falls back to edge confidence for legacy KG rows. The path
 payload keeps both `confidence` and `path_strength` so reviewers can distinguish
-source confidence from RCA scoring impact.
+source confidence from RCA scoring impact. Path and ranked root-cause payloads
+also carry `kg_build_ids` collected from supporting edges, preserving the
+Versioned Publish boundary in downstream RCA explanations.
 
 ## LLM Boundary
 

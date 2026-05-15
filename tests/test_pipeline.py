@@ -131,6 +131,7 @@ def test_pipeline_path_contract_for_known_example() -> None:
     assert root_cause.candidate_id == "MechanicalContact"
     assert root_cause.scoring_method == "relation_weighted_path"
     assert root_cause.explanation_paths[0]["path_id"] == "path_mvtec_0001_742df5e1c9"
+    assert root_cause.scoring_details["kg_build_ids"] == []
     assert root_cause.supporting_edges
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from kgtracevis.core.rca import GenericGraphPathReasoner
 from kgtracevis.kg.entity_linker import link_evidence_entities
 from kgtracevis.kg.graph import KGEdge, KGNode, KnowledgeGraph
 from kgtracevis.kg.path_ranker import rank_root_cause_paths
@@ -79,6 +80,40 @@ def test_path_ranking_uses_rca_view_scores_when_available() -> None:
     assert paths[0]["rca_score"] == 0.95
     assert paths[0]["path_strength"] == 0.95
     assert paths[0]["confidence"] == 0.7
+    assert paths[0]["kg_build_ids"] == ["kgbuild_test"]
+
+
+def test_generic_reasoner_preserves_kg_build_provenance() -> None:
+    """RCA outputs should record which construction KG build supported them."""
+    evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
+    graph = KnowledgeGraph(
+        nodes=[
+            KGNode("ScratchDefect", "Scratch defect", "DefectType", "mvtec", ("scratch",)),
+            KGNode("HighRcaCause", "High RCA cause", "RootCause", "mvtec", ()),
+        ],
+        edges=[
+            _edge(
+                "ScratchDefect",
+                "HighRcaCause",
+                scenario="mvtec",
+                confidence=0.7,
+                rca_score=0.95,
+            ),
+        ],
+    )
+    links = link_evidence_entities(evidence, graph)
+
+    result = GenericGraphPathReasoner().reason_root_causes(
+        evidence,
+        graph=graph,
+        linked_entities=links,
+    )
+
+    assert result.metadata["kg_build_ids"] == ["kgbuild_test"]
+    assert result.top_k_paths[0]["kg_build_ids"] == ["kgbuild_test"]
+    assert result.ranked_root_causes[0].scoring_details["kg_build_ids"] == [
+        "kgbuild_test"
+    ]
 
 
 def _edge(
@@ -104,4 +139,5 @@ def _edge(
         rejected_count=0,
         propagation_enabled=rca_score > 0,
         rca_score=rca_score,
+        kg_build_id="kgbuild_test" if rca_score > 0 else "",
     )

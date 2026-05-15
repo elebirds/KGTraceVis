@@ -77,6 +77,7 @@ def rank_root_cause_paths(
                         "supporting_evidence": [edge.evidence for edge in edges],
                         "source_edge_ids": [edge.edge_id for edge in edges],
                         "source_edges": [edge.model_dump() for edge in edges],
+                        "kg_build_ids": _path_kg_build_ids(edges),
                     }
                 )
 
@@ -133,6 +134,10 @@ def _path_rca_score(edges: list[KGEdge]) -> float:
     if not scores:
         return 0.0
     return sum(scores) / len(scores)
+
+
+def _path_kg_build_ids(edges: list[KGEdge]) -> list[str]:
+    return sorted({edge.kg_build_id for edge in edges if edge.kg_build_id})
 
 
 def _edge_strength(edge: KGEdge) -> float:

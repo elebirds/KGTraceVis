@@ -93,6 +93,7 @@ def ranked_root_causes_from_paths(
                 "supporting_edges_by_id": {},
                 "supporting_evidence": [],
                 "source_path_ids": [],
+                "kg_build_ids": set(),
             },
         )
         score = float(path.get("score") or 0.0)
@@ -104,10 +105,16 @@ def ranked_root_causes_from_paths(
         candidate["explanation_paths"].append(dict(path))
         if path.get("path_id"):
             candidate["source_path_ids"].append(str(path["path_id"]))
+        for kg_build_id in path.get("kg_build_ids") or []:
+            if str(kg_build_id):
+                candidate["kg_build_ids"].add(str(kg_build_id))
         for edge in _dict_items(path.get("source_edges")):
             edge_id = str(edge.get("edge_id") or "")
             if edge_id:
                 candidate["supporting_edges_by_id"].setdefault(edge_id, edge)
+            kg_build_id = str(edge.get("kg_build_id") or "")
+            if kg_build_id:
+                candidate["kg_build_ids"].add(kg_build_id)
         for index, evidence in enumerate(path.get("supporting_evidence") or []):
             candidate["supporting_evidence"].append(
                 {
@@ -139,7 +146,10 @@ def ranked_root_causes_from_paths(
             ],
             supporting_evidence=list(item["supporting_evidence"]),
             scoring_method="relation_weighted_path",
-            scoring_details={"source_path_ids": list(item["source_path_ids"])},
+            scoring_details={
+                "source_path_ids": list(item["source_path_ids"]),
+                "kg_build_ids": sorted(item["kg_build_ids"]),
+            },
             source="top_k_paths_projection",
             review_status="auto",
         )
