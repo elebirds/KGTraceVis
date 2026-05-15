@@ -1,0 +1,2 @@
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"diff helper used by replay workflow and CLI"}
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"artifact contract update"}
