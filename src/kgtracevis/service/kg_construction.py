@@ -39,6 +39,10 @@ from kgtracevis.workflows.kg_construction_review import (
     review_kg_construction_edge_artifact,
     review_kg_construction_item_artifact,
 )
+from kgtracevis.workflows.kg_overlay_validation import (
+    KGOverlayValidationConfig,
+    run_kg_overlay_validation,
+)
 from kgtracevis.workflows.source_kg_construction import (
     DEFAULT_SOURCE_KG_BUILD_DIR,
     SourceKGConstructionWorkflowConfig,
@@ -46,6 +50,8 @@ from kgtracevis.workflows.source_kg_construction import (
 )
 
 DEFAULT_SOURCE_KG_SOURCE_DIR = Path("runs/source_kg_sources")
+KG_OVERLAY_VALIDATION_REPORT_ARTIFACT_KEY = "kg_overlay_validation_report"
+KG_OVERLAY_VALIDATION_REPORT_FILENAME = "kg_overlay_validation_report.json"
 MAX_SOURCE_UPLOAD_BYTES = 5_000_000
 ConstructionSourceType = Literal[
     "structured_records",
@@ -304,6 +310,31 @@ class KGConstructionBuildValidationResponse(BaseModel):
     claim_boundary: str = (
         "validation reports KG CSV contract issues and warnings; it does not "
         "mutate KG files or publish to Neo4j"
+    )
+
+
+class KGConstructionOverlayValidationRequest(BaseModel):
+    """Request to validate a construction build as a runtime KG overlay."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    example_dir: str = "data/examples"
+    overlay_only_import: bool = False
+    top_k: int = Field(default=5, ge=1)
+
+
+class KGConstructionOverlayValidationResponse(BaseModel):
+    """Response envelope for runtime KG overlay validation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    report: dict[str, Any]
+    report_path: str | None = None
+    claim_boundary: str = (
+        "overlay validation runs candidate/reviewable KG rows through runtime "
+        "RCA and import dry-run checks; it does not rebuild KG, review facts, "
+        "or publish to Neo4j"
     )
 
 
@@ -683,6 +714,30 @@ def validate_kg_construction_build(
     )
 
 
+def validate_kg_construction_overlay(
+    run_id: str,
+    request: KGConstructionOverlayValidationRequest,
+    *,
+    build_root: Path | None = None,
+) -> KGConstructionOverlayValidationResponse:
+    """Validate one construction build as an explicit runtime KG overlay."""
+    build = _find_build_record(run_id, build_root=build_root)
+    _require_build_artifacts(build)
+    result = run_kg_overlay_validation(
+        KGOverlayValidationConfig(
+            build_dir=Path(build.output_dir),
+            example_dir=Path(request.example_dir),
+            include_defaults_for_import=not request.overlay_only_import,
+            top_k=request.top_k,
+        )
+    )
+    return KGConstructionOverlayValidationResponse(
+        build=build,
+        report=result.report,
+        report_path=str(result.output_path) if result.output_path is not None else None,
+    )
+
+
 def publish_kg_construction_build(
     run_id: str,
     request: KGConstructionPublishRequest,
@@ -997,7 +1052,11 @@ def _safe_artifact_key(value: str) -> str:
 
 
 def _known_construction_artifact_key(key: str) -> bool:
-    return key in KG_CONSTRUCTION_ARTIFACT_FILENAMES or key == "output_dir"
+    return key in {
+        *KG_CONSTRUCTION_ARTIFACT_FILENAMES,
+        KG_OVERLAY_VALIDATION_REPORT_ARTIFACT_KEY,
+        "output_dir",
+    }
 
 
 def _resolved_construction_artifact_path(
@@ -1023,6 +1082,9 @@ def _construction_build_artifact_map(
         if _known_construction_artifact_key(key)
     }
     artifacts["output_dir"] = output_dir
+    artifacts[KG_OVERLAY_VALIDATION_REPORT_ARTIFACT_KEY] = (
+        output_dir / KG_OVERLAY_VALIDATION_REPORT_FILENAME
+    )
     artifacts.update(_artifact_map_from_json(Path(build.summary_path), "output"))
     artifacts.update(_artifact_map_from_json(Path(build.manifest_path), "artifacts"))
     return {
@@ -1401,6 +1463,8 @@ __all__ = [
     "KGConstructionReviewQueueSummary",
     "KGConstructionBuildRecord",
     "KGConstructionBuildValidationResponse",
+    "KGConstructionOverlayValidationRequest",
+    "KGConstructionOverlayValidationResponse",
     "KGConstructionSourceListResponse",
     "KGConstructionSourceInput",
     "KGConstructionSourceUploadRequest",
@@ -1414,4 +1478,5 @@ __all__ = [
     "run_kg_construction_build",
     "save_kg_construction_source_upload",
     "validate_kg_construction_build",
+    "validate_kg_construction_overlay",
 ]

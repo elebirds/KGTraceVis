@@ -133,6 +133,7 @@ GET /api/kg/construction/builds
 GET /api/kg/construction/builds/{run_id}
 GET /api/kg/construction/builds/{run_id}/artifacts/{artifact_key}
 POST /api/kg/construction/builds/{run_id}/validate
+POST /api/kg/construction/builds/{run_id}/validate-overlay
 GET /api/kg/construction/builds/{run_id}/review-queue
 POST /api/kg/construction/builds/{run_id}/review
 POST /api/kg/construction/builds/{run_id}/publish
@@ -144,7 +145,15 @@ runs structured KG CSV QA on the selected build. Validation is read-only and
 does not import to Neo4j.
 The artifact endpoint serves one conventional construction artifact by stable
 key, such as `nodes`, `review_queue`, `review_decisions`, or
-`kg_construction_diff`, without accepting raw filesystem paths.
+`kg_construction_diff`, without accepting raw filesystem paths. After overlay
+validation runs, the same endpoint can serve `kg_overlay_validation_report`.
+
+`validate-overlay` runs the candidate build through the same reusable overlay
+validation workflow as `scripts/validate_kg_overlay.py`. It writes
+`kg_overlay_validation_report.json` beside the build and returns the report
+payload, including runtime RCA path metadata and import dry-run counts. It does
+not rebuild construction artifacts, record review decisions, or publish to
+Neo4j.
 
 Alignment is exported as its own audit layer. `entity_alignment_manifest.json`
 contains canonical entity table rows, nontrivial deterministic `ALIGNS_TO`

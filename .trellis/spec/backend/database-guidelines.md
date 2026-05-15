@@ -291,6 +291,8 @@ and RCA reasoning all consume these build artifacts.
   `GET /api/kg/construction/builds/{run_id}/artifacts/{artifact_key}`
 - Service review action:
   `POST /api/kg/construction/builds/{run_id}/review`
+- Service runtime overlay validation:
+  `POST /api/kg/construction/builds/{run_id}/validate-overlay`
 - Required artifact keys:
   `nodes`, `edges`, `published_nodes`, `published_edges`,
   `source_library_manifest`, `draft_manifest`, `profile_manifest`, `alignment_manifest`,
@@ -375,6 +377,11 @@ and RCA reasoning all consume these build artifacts.
 - Service artifact retrieval accepts stable construction artifact keys only. It
   must not accept raw filesystem paths and must reject path separators before
   resolving the conventional artifact path for a known build.
+- Service overlay validation delegates to
+  `kgtracevis.workflows.kg_overlay_validation`, writes
+  `kg_overlay_validation_report.json` beside the build, and exposes it through
+  artifact key `kg_overlay_validation_report`. It is read-only with respect to
+  construction/review/publish state.
 - `POST /review` and `scripts/review_source_kg.py` accept edge and non-edge
   review queue items. Edge decisions update `edges.csv` status/counters,
   refresh the matching `review_queue.json` candidate payload, append the

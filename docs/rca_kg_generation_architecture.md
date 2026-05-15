@@ -122,6 +122,14 @@ The reusable validation workflow loads the candidate `nodes.csv` / `edges.csv`
 beside the default KG, runs example evidence through `KGTracePipeline`, records
 RCA path provenance (`path_strength`, `rca_score`, `source_edge_ids`,
 `kg_build_ids`), and performs a Neo4j import dry-run over the same overlay.
+The service exposes the same check at:
+
+```http
+POST /api/kg/construction/builds/{run_id}/validate-overlay
+```
+
+and serves the saved report with the stable artifact key
+`kg_overlay_validation_report`.
 
 ## LLM Boundary
 

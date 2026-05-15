@@ -467,6 +467,74 @@ def test_kg_construction_build_registry_lists_details_and_validates(
     assert validation["qa_report"]["summary"]["edge_count"] == 1
 
 
+def test_kg_construction_overlay_validation_route_runs_runtime_report(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Build-scoped overlay validation should expose runtime RCA readiness."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+    example_dir = _write_overlay_validation_examples(tmp_path)
+
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "overlay_validation_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_overlay_api_unit",
+            "sources": [
+                {
+                    "source_id": "api_overlay_unit",
+                    "source_type": "manual_table",
+                    "scenario": "shared",
+                    "source_format": "csv",
+                    "source_text": _manual_overlay_validation_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    validation_response = client.post(
+        "/api/kg/construction/builds/kgbuild_overlay_api_unit/validate-overlay",
+        json={"example_dir": str(example_dir), "top_k": 3},
+    )
+    missing_response = client.post(
+        "/api/kg/construction/builds/missing_overlay_unit/validate-overlay",
+        json={"example_dir": str(example_dir)},
+    )
+
+    assert validation_response.status_code == 200
+    payload = validation_response.json()
+    assert payload["build"]["run_id"] == "kgbuild_overlay_api_unit"
+    assert Path(payload["report_path"]).is_file()
+    assert payload["report"]["kg_backend"] == "explicit_seed_overlay"
+    assert payload["report"]["import_dry_run"]["dry_run"] is True
+    assert payload["report"]["import_dry_run"]["include_defaults"] is True
+    assert payload["report"]["examples"][0]["case_id"] == "api_overlay_case"
+    assert payload["report"]["examples"][0]["top_target_entity_id"] == (
+        "ApiOverlayCause"
+    )
+    assert payload["report"]["examples"][0]["kg_build_ids"] == [
+        "kgbuild_overlay_api_unit"
+    ]
+    assert "does not rebuild KG" in payload["claim_boundary"]
+
+    artifact_response = client.get(
+        "/api/kg/construction/builds/kgbuild_overlay_api_unit/artifacts/"
+        "kg_overlay_validation_report"
+    )
+    assert artifact_response.status_code == 200
+    assert artifact_response.json()["artifact_type"] == (
+        "kg_overlay_validation_report_v1"
+    )
+    assert missing_response.status_code == 404
+
+
 def test_kg_construction_build_registry_supports_legacy_manifests_and_edges(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2066,6 +2134,57 @@ def _manual_rca_source_csv() -> str:
             "",
         ]
     )
+
+
+def _manual_overlay_validation_source_csv() -> str:
+    return "\n".join(
+        [
+            "id,name,label,head,relation,tail,scenario,evidence,confidence",
+            (
+                "ApiOverlayAlert,API overlay alert,FaultType,,,,shared,"
+                "overlay alert source row,0.88"
+            ),
+            (
+                "ApiOverlayCause,API overlay cause,RootCause,,,,shared,"
+                "overlay cause source row,0.88"
+            ),
+            (
+                ",,,ApiOverlayAlert,CAUSES,ApiOverlayCause,shared,"
+                "overlay RCA source row,0.88"
+            ),
+            "",
+        ]
+    )
+
+
+def _write_overlay_validation_examples(tmp_path: Path) -> Path:
+    example_dir = tmp_path / "overlay_examples"
+    example_dir.mkdir()
+    payload = {
+        "case_id": "api_overlay_case",
+        "dataset": "mvtec",
+        "source": "unknown",
+        "object": "pump",
+        "anomaly_type": "API overlay alert",
+        "location": None,
+        "morphology": None,
+        "severity": 0.7,
+        "confidence": 0.8,
+        "timestamp": None,
+        "raw_evidence": {
+            "variables": [],
+            "variable_contributions": {},
+            "log_events": [],
+            "description": "API overlay validation fixture.",
+        },
+        "normalized_evidence": {},
+        "kg_analysis": {},
+    }
+    (example_dir / "api_overlay_case.json").write_text(
+        json.dumps(payload),
+        encoding="utf-8",
+    )
+    return example_dir
 
 
 def _manual_alignment_source_csv() -> str:

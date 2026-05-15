@@ -31,6 +31,7 @@ from kgtracevis.service.kg_construction import (
     ConstructionSourceType,
     KGConstructionBuildRequest,
     KGConstructionEdgeReviewRequest,
+    KGConstructionOverlayValidationRequest,
     KGConstructionPublishRequest,
     KGConstructionReviewQueueRequest,
     get_kg_construction_build,
@@ -43,6 +44,7 @@ from kgtracevis.service.kg_construction import (
     run_kg_construction_build,
     save_kg_construction_source_upload,
     validate_kg_construction_build,
+    validate_kg_construction_overlay,
 )
 from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
 from kgtracevis.service.kg_material_build import run_kg_material_build
@@ -361,6 +363,23 @@ def create_app() -> FastAPI:
             return validate_kg_construction_build(run_id).model_dump(mode="json")
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/builds/{run_id}/validate-overlay")
+    def kg_construction_build_validate_overlay(
+        run_id: str,
+        request: KGConstructionOverlayValidationRequest | None = None,
+    ) -> dict[str, object]:
+        try:
+            validation_request = request or KGConstructionOverlayValidationRequest()
+            return validate_kg_construction_overlay(
+                run_id,
+                validation_request,
+            ).model_dump(mode="json")
+        except ValueError as exc:
+            status_code = (
+                404 if "unknown construction build run_id" in str(exc) else 400
+            )
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
     @app.get("/api/kg/construction/builds/{run_id}/artifacts/{artifact_key}")
     def kg_construction_build_artifact(

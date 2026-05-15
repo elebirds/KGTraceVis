@@ -7,14 +7,20 @@
     "Equipment",
     "Event",
     "Fault",
+    "FaultType",
+    "AnomalyType",
     "Metric",
     "RootCause",
     "Signal",
-    "Variable"
+    "Variable",
+    "DefectType"
   ],
   "observable_labels": [
     "Alert",
+    "AnomalyType",
+    "DefectType",
     "Event",
+    "FaultType",
     "Metric",
     "Signal",
     "Variable"

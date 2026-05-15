@@ -182,6 +182,8 @@ GENERIC_PROFILE = RcaProfile(
             "Metric",
             "Signal",
             "Fault",
+            "FaultType",
+            "AnomalyType",
             "Event",
             "Alert",
             "Service",
@@ -190,6 +192,7 @@ GENERIC_PROFILE = RcaProfile(
             "Product",
             "Wafer",
             "Defect",
+            "DefectType",
             "Morphology",
             "ProcessUnit",
             "RootCause",
@@ -259,7 +262,19 @@ GENERIC_PROFILE = RcaProfile(
         "ALIGNS_TO": RelationFamilyPolicy(propagation_enabled=False),
     },
     root_candidate_labels=frozenset({"Fault", "RootCause", "Component", "Equipment"}),
-    observable_labels=frozenset({"Variable", "Metric", "Signal", "Event", "Alert", "Defect"}),
+    observable_labels=frozenset(
+        {
+            "Variable",
+            "Metric",
+            "Signal",
+            "FaultType",
+            "AnomalyType",
+            "Event",
+            "Alert",
+            "Defect",
+            "DefectType",
+        }
+    ),
 )
 
 
