@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 31
+- **Total Sessions**: 32
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1045 | Active |
+| `journal-1.md` | ~1078 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 32 | 2026-05-15 | M15 document IE extraction audit | `fb8fc7d` | `main` |
 | 31 | 2026-05-15 | RCA KG construction final acceptance | `6c8e623` | `main` |
 | 30 | 2026-05-15 | M14 RCA KG construction acceptance smoke expansion | `6c8e623` | `main` |
 | 29 | 2026-05-15 | M13 review action artifact diff refresh | `b920a30` | `main` |

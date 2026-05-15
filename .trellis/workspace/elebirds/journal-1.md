@@ -1043,3 +1043,36 @@ Ran final acceptance smoke against toy Source Library, pre-extracted material di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 32: M15 document IE extraction audit
+
+**Date**: 2026-05-15
+**Task**: M15 document IE extraction audit
+**Branch**: `main`
+
+### Summary
+
+Added document IE prompt/version audit reports, material extraction manifests, chunk-result artifacts, zero-candidate audit handling, tests, docs, and backend spec guidance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fb8fc7d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
