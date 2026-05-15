@@ -33,6 +33,7 @@ KGConstructionReviewAction = Literal[
 ]
 
 KG_CONSTRUCTION_ARTIFACT_FILENAMES: dict[str, str] = {
+    "source_library_manifest": "source_library_manifest.json",
     "nodes": "nodes.csv",
     "edges": "edges.csv",
     "published_nodes": "published_nodes.csv",

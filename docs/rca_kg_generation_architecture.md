@@ -127,6 +127,7 @@ nodes.csv
 edges.csv
 published_nodes.csv
 published_edges.csv
+source_library_manifest.json
 draft_manifest.json
 source_audit_graph_manifest.json
 semantic_layer_manifest.json
@@ -147,6 +148,7 @@ nodes
 edges
 published_nodes
 published_edges
+source_library_manifest
 draft_manifest
 source_audit_graph_manifest
 semantic_layer_manifest

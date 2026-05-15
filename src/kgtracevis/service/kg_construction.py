@@ -146,6 +146,7 @@ class KGConstructionBuildResponse(BaseModel):
     edges_path: str
     summary_path: str
     manifest_path: str
+    source_library_manifest_path: str | None = None
     draft_manifest_path: str | None = None
     source_audit_graph_manifest_path: str | None = None
     semantic_layer_manifest_path: str | None = None
@@ -239,6 +240,7 @@ class KGConstructionBuildRecord(BaseModel):
     edges_path: str
     summary_path: str
     manifest_path: str
+    source_library_manifest_path: str | None = None
     draft_manifest_path: str | None = None
     source_audit_graph_manifest_path: str | None = None
     semantic_layer_manifest_path: str | None = None
@@ -481,6 +483,7 @@ def run_kg_construction_build(
         edges_path=str(result.edges_path),
         summary_path=str(result.summary_path),
         manifest_path=str(result.manifest_path),
+        source_library_manifest_path=str(result.source_library_manifest_path),
         draft_manifest_path=str(result.draft_manifest_path),
         source_audit_graph_manifest_path=str(result.source_audit_graph_manifest_path),
         semantic_layer_manifest_path=str(result.semantic_layer_manifest_path),
@@ -810,6 +813,11 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
             artifacts.get("summary") or default_artifacts["summary"]
         ),
         manifest_path=str(artifacts.get("manifest") or default_artifacts["manifest"]),
+        source_library_manifest_path=_artifact_path(
+            artifacts,
+            "source_library_manifest",
+            fallback=default_artifacts["source_library_manifest"],
+        ),
         draft_manifest_path=_artifact_path(
             artifacts,
             "draft_manifest",

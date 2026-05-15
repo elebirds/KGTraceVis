@@ -1076,6 +1076,7 @@ def test_build_source_kg_script_writes_candidate_artifacts(tmp_path: Path) -> No
     assert "source_to_kg_construction_result_v1" in completed.stdout
     assert (output_dir / "nodes.csv").exists()
     assert (output_dir / "edges.csv").exists()
+    assert (output_dir / "source_library_manifest.json").exists()
     assert (output_dir / "draft_manifest.json").exists()
     assert (output_dir / "source_audit_graph_manifest.json").exists()
     assert (output_dir / "semantic_layer_manifest.json").exists()
@@ -1095,6 +1096,9 @@ def test_build_source_kg_script_writes_candidate_artifacts(tmp_path: Path) -> No
     assert summary["node_count"] == 4
     assert summary["edge_count"] == 2
     assert summary["output"]["manifest"].endswith("kg_construction_manifest.json")
+    assert summary["output"]["source_library_manifest"].endswith(
+        "source_library_manifest.json"
+    )
     assert summary["output"]["publish_manifest"].endswith("publish_manifest.json")
     manifest = json.loads((output_dir / "kg_construction_manifest.json").read_text())
     assert manifest["summary"]["edge_count"] == 2
@@ -1303,6 +1307,7 @@ def _required_artifact_keys() -> set[str]:
         "edges",
         "published_nodes",
         "published_edges",
+        "source_library_manifest",
         "draft_manifest",
         "source_audit_graph_manifest",
         "semantic_layer_manifest",

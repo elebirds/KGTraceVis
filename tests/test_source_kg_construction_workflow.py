@@ -40,6 +40,7 @@ def test_source_kg_construction_workflow_writes_candidate_artifacts(
     assert result.run_id == "kgbuild_manual_unit"
     assert result.nodes_path == output_dir / "nodes.csv"
     assert result.edges_path == output_dir / "edges.csv"
+    assert result.source_library_manifest_path == output_dir / "source_library_manifest.json"
     assert result.summary_path == output_dir / "kg_construction_summary.json"
     assert result.manifest_path == output_dir / "kg_construction_manifest.json"
     assert result.source_audit_graph_manifest_path == (
@@ -54,6 +55,9 @@ def test_source_kg_construction_workflow_writes_candidate_artifacts(
     assert result.summary["profile_version"] == "tep_rca_v1"
     assert result.summary["review_policy"]
     assert result.summary["output"]["manifest"].endswith("kg_construction_manifest.json")
+    assert result.summary["output"]["source_library_manifest"].endswith(
+        "source_library_manifest.json"
+    )
     assert (output_dir / "_sources" / "manual_unit.csv").is_file()
 
     edge_rows = _read_csv_rows(result.edges_path)
@@ -63,11 +67,19 @@ def test_source_kg_construction_workflow_writes_candidate_artifacts(
     assert edge_rows[0]["review_status"] == "auto"
 
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    source_library_manifest = json.loads(
+        result.source_library_manifest_path.read_text(encoding="utf-8")
+    )
     assert manifest["artifact_type"] == "source_to_kg_construction_manifest_v1"
     assert manifest["run"]["run_id"] == "kgbuild_manual_unit"
     assert len(manifest["draft_rows"]) == 3
     assert manifest["artifacts"]["nodes"].endswith("nodes.csv")
     assert _required_artifact_keys() <= set(manifest["artifacts"])
+    assert source_library_manifest["artifact_type"] == "source_library_manifest_v1"
+    assert source_library_manifest["source_ids"] == ["manual_unit"]
+    assert source_library_manifest["sources"][0]["has_text"] is False
+    assert source_library_manifest["sources"][0]["path"].endswith("_sources/manual_unit.csv")
+    assert "explicit manual source row" not in json.dumps(source_library_manifest)
 
 
 def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
@@ -103,6 +115,7 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
         result.publish_manifest_path,
         output_dir / "published_nodes.csv",
         output_dir / "published_edges.csv",
+        output_dir / "source_library_manifest.json",
         output_dir / "review_decisions.jsonl",
         output_dir / "publish_report.json",
         output_dir / "kg_construction_summary.json",
@@ -201,6 +214,7 @@ def _required_artifact_keys() -> set[str]:
         "edges",
         "published_nodes",
         "published_edges",
+        "source_library_manifest",
         "draft_manifest",
         "source_audit_graph_manifest",
         "semantic_layer_manifest",

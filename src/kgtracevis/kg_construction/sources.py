@@ -143,6 +143,34 @@ def write_source_library_manifest(
     return manifest_path
 
 
+def source_library_records_from_construction_sources(
+    sources: Sequence[KGConstructionSource],
+) -> tuple[SourceLibraryRecord, ...]:
+    """Build audit-safe Source Library records from construction sources."""
+    records: list[SourceLibraryRecord] = []
+    for source in sources:
+        metadata = dict(source.metadata)
+        provenance_policy = str(
+            metadata.pop("provenance_policy", "source_grounded_candidate")
+        )
+        created_at = str(metadata.pop("created_at", ""))
+        url = str(metadata.pop("url", ""))
+        records.append(
+            SourceLibraryRecord(
+                source_id=source.source_id,
+                source_type=source.source_type,
+                scenario=source.scenario,
+                path=source.path,
+                url=url,
+                text=source.text,
+                metadata=metadata,
+                created_at=created_at,
+                provenance_policy=provenance_policy,
+            )
+        )
+    return tuple(records)
+
+
 def current_utc_iso() -> str:
     """Return the current UTC timestamp in JSON-friendly ISO format."""
     return datetime.now(timezone.utc).isoformat()

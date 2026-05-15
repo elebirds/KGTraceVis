@@ -1,0 +1,5 @@
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"RCA KG construction artifact contract"}
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"workflow artifact boundary"}
+{"type":"spec","path":".trellis/spec/backend/quality-guidelines.md","reason":"verification commands"}
+{"type":"guide","path":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"artifact keys cross workflow, service, CLI, docs"}
+{"type":"guide","path":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"reuse source library manifest writer and artifact helpers"}

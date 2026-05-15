@@ -123,6 +123,7 @@ from kgtracevis.kg_construction.source_loader import (
 from kgtracevis.kg_construction.sources import (
     SourceLibraryRecord,
     load_source_library,
+    source_library_records_from_construction_sources,
     write_source_library_manifest,
 )
 from kgtracevis.kg_construction.tep_import import tep_external_id_to_kg_id
@@ -222,6 +223,7 @@ __all__ = [
     "run_kg_construction",
     "run_entity_alignment",
     "run_kg_qa",
+    "source_library_records_from_construction_sources",
     "run_before_after_comparison",
     "tep_external_id_to_kg_id",
     "validate_candidate_claim_boundaries",

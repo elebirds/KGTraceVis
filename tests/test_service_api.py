@@ -257,6 +257,7 @@ def test_kg_construction_build_route_writes_runtime_artifacts(
     assert Path(payload["edges_path"]).is_file()
     assert Path(payload["summary_path"]).is_file()
     assert Path(payload["manifest_path"]).is_file()
+    assert Path(payload["source_library_manifest_path"]).is_file()
     assert Path(payload["draft_manifest_path"]).is_file()
     assert Path(payload["source_audit_graph_manifest_path"]).is_file()
     assert Path(payload["semantic_layer_manifest_path"]).is_file()
@@ -302,6 +303,9 @@ def test_kg_construction_build_registry_lists_details_and_validates(
     assert [build["run_id"] for build in builds] == ["kgbuild_registry_unit"]
     assert builds[0]["node_count"] == 2
     assert builds[0]["edge_count"] == 1
+    assert builds[0]["source_library_manifest_path"].endswith(
+        "source_library_manifest.json"
+    )
     assert builds[0]["draft_manifest_path"].endswith("draft_manifest.json")
     assert builds[0]["source_audit_graph_manifest_path"].endswith(
         "source_audit_graph_manifest.json"
@@ -317,6 +321,9 @@ def test_kg_construction_build_registry_lists_details_and_validates(
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert detail["build"]["summary_path"].endswith("kg_construction_summary.json")
+    assert detail["build"]["source_library_manifest_path"].endswith(
+        "source_library_manifest.json"
+    )
     assert detail["build"]["review_queue_path"].endswith("review_queue.json")
     assert detail["summary"]["node_count"] == 2
     assert detail["manifest"]["run"]["run_id"] == "kgbuild_registry_unit"
@@ -377,6 +384,7 @@ def test_kg_construction_build_registry_supports_legacy_manifests_and_edges(
     list_response = client.get("/api/kg/construction/builds")
     assert list_response.status_code == 200
     build = list_response.json()["builds"][0]
+    assert build["source_library_manifest_path"].endswith("source_library_manifest.json")
     assert build["draft_manifest_path"].endswith("draft_manifest.json")
     assert build["source_audit_graph_manifest_path"].endswith(
         "source_audit_graph_manifest.json"

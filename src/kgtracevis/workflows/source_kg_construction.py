@@ -18,6 +18,8 @@ from kgtracevis.kg_construction import (
     TepSemanticLiftExtractor,
     TepVariableMappingExtractor,
     run_kg_construction,
+    source_library_records_from_construction_sources,
+    write_source_library_manifest,
 )
 from kgtracevis.kg_construction.models import (
     construction_output_path_payload,
@@ -55,6 +57,7 @@ class SourceKGConstructionWorkflowResult:
     edges_path: Path
     summary_path: Path
     manifest_path: Path
+    source_library_manifest_path: Path
     draft_manifest_path: Path
     source_audit_graph_manifest_path: Path
     semantic_layer_manifest_path: Path
@@ -85,6 +88,10 @@ def run_source_kg_construction_workflow(
         run_id=config.run_id,
     )
     artifact_paths = kg_construction_artifact_paths(config.output_dir)
+    source_library_manifest_path = write_source_library_manifest(
+        artifact_paths["source_library_manifest"],
+        source_library_records_from_construction_sources(sources),
+    )
     nodes_path, edges_path = result.export_csv(config.output_dir)
     layer_artifacts = result.write_layer_artifacts(config.output_dir)
     artifact_paths["review_decisions"].parent.mkdir(parents=True, exist_ok=True)
@@ -133,6 +140,9 @@ def run_source_kg_construction_workflow(
             "semantic_layer": result.semantic_layer.manifest,
             "rca_view": result.rca_view.manifest,
             "publish": result.publish_manifest.model_dump(),
+            "source_library": json.loads(
+                source_library_manifest_path.read_text(encoding="utf-8")
+            ),
         },
     }
     summary_path.write_text(
@@ -152,6 +162,7 @@ def run_source_kg_construction_workflow(
         edges_path=edges_path,
         summary_path=summary_path,
         manifest_path=manifest_path,
+        source_library_manifest_path=source_library_manifest_path,
         draft_manifest_path=layer_artifacts["draft_manifest"],
         source_audit_graph_manifest_path=layer_artifacts["source_audit_graph_manifest"],
         semantic_layer_manifest_path=layer_artifacts["semantic_layer_manifest"],

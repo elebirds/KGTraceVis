@@ -278,10 +278,11 @@ and RCA reasoning all consume these build artifacts.
 - Service review action:
   `POST /api/kg/construction/builds/{run_id}/review`
 - Required artifact keys:
-  `nodes`, `edges`, `published_nodes`, `published_edges`, `draft_manifest`,
-  `source_audit_graph_manifest`, `semantic_layer_manifest`,
-  `rca_view_manifest`, `review_queue`, `review_decisions`,
-  `publish_manifest`, `publish_report`, `summary`, `manifest`
+  `nodes`, `edges`, `published_nodes`, `published_edges`,
+  `source_library_manifest`, `draft_manifest`, `source_audit_graph_manifest`,
+  `semantic_layer_manifest`, `rca_view_manifest`, `review_queue`,
+  `review_decisions`, `publish_manifest`, `publish_report`, `summary`,
+  `manifest`
 
 ### 3. Contracts
 
@@ -299,6 +300,9 @@ and RCA reasoning all consume these build artifacts.
 - Source Library manifests passed by `--source-library` are loaded through
   `load_source_library(...)`; relative source paths resolve from the manifest
   directory before parsing or extraction.
+- Every build writes `source_library_manifest.json` before downstream layer
+  manifests, and this artifact must not include inline source text or row
+  values.
 - `kg_construction_summary.json` and `kg_construction_manifest.json` must share
   the same stable artifact keys for all required outputs.
 - `review_decisions.jsonl` is the append-only review decision log.
