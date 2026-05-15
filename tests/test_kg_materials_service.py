@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -10,11 +11,14 @@ import pytest
 from pydantic import ValidationError
 
 from kgtracevis.kg_construction.document_extraction import SourceTextChunk
+from kgtracevis.service import kg_materials as service_kg_materials
 from kgtracevis.service.kg_materials import (
     KGMaterialExtractionRunRequest,
     KGMaterialExtractionState,
+    KGMaterialRecord,
     KGMaterialRegisterRequest,
     KGMaterialSelectedBuildRequest,
+    configure_material_store_for_testing,
     extract_kg_material_to_structured_records,
     get_kg_material,
     list_kg_materials,
@@ -107,6 +111,48 @@ def test_material_extraction_writes_structured_records_with_fake_ie(
         material_root=tmp_path,
     )
     assert build_sources.sources[0].path == str(records_path)
+
+
+def test_runtime_material_store_provider_persists_extraction_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured runtime stores should persist metadata while files stay on disk."""
+    store = InMemoryMaterialStore()
+    configure_material_store_for_testing(store)
+    monkeypatch.setattr(service_kg_materials, "DEFAULT_SOURCE_KG_MATERIAL_DIR", tmp_path)
+    try:
+        record = save_kg_material_upload(
+            material_id="runtime_note",
+            title="Runtime note",
+            filename="runtime_note.txt",
+            content=b"Pump cavitation indicates seal wear.",
+            scenario="tep",
+            material_type="text",
+        )
+
+        response = extract_kg_material_to_structured_records(
+            "runtime_note",
+            KGMaterialExtractionRunRequest(overwrite=True),
+            client=FakeIEClient(),
+        )
+
+        listing = list_kg_materials()
+    finally:
+        configure_material_store_for_testing(None)
+
+    assert Path(record.source_uri).read_bytes() == b"Pump cavitation indicates seal wear."
+    assert Path(response.structured_records_path).is_file()
+    assert [material.material_id for material in listing.materials] == ["runtime_note"]
+    assert store.records["runtime_note"].status == "extracted"
+    assert store.records["runtime_note"].extraction.record_count == 3
+    assert store.chunks["runtime_note"][0]["text_content"] == (
+        "Pump cavitation indicates seal wear."
+    )
+    assert store.runs[0]["extraction"]["status"] == "extracted"
+    assert store.runs[0]["parameters"]["source_format"] == "jsonl"
+    assert store.artifacts[0]["artifact_type"] == "structured_records"
+    assert store.artifacts[0]["uri"] == response.structured_records_path
 
 
 def test_selected_materials_prepare_build_ready_construction_sources(
@@ -275,3 +321,78 @@ class FakeIEClient:
                 }
             ],
         }
+
+
+class InMemoryMaterialStore:
+    """Small material-store fake for runtime provider tests."""
+
+    def __init__(self) -> None:
+        self.records: dict[str, KGMaterialRecord] = {}
+        self.chunks: dict[str, list[dict[str, Any]]] = {}
+        self.runs: list[dict[str, Any]] = []
+        self.artifacts: list[dict[str, Any]] = []
+
+    def save_material_record(self, material: KGMaterialRecord) -> KGMaterialRecord:
+        self.records[material.material_id] = material
+        return material
+
+    def list_material_records(self) -> list[KGMaterialRecord]:
+        return list(self.records.values())
+
+    def get_material_record(self, material_id: str) -> KGMaterialRecord:
+        try:
+            return self.records[material_id]
+        except KeyError as exc:
+            raise ValueError(f"unknown material_id: {material_id}") from exc
+
+    def save_source_chunks(
+        self,
+        material_id: str,
+        chunks: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        self.chunks[material_id] = chunks
+        return chunks
+
+    def record_extraction_run(
+        self,
+        material_id: str,
+        extraction: KGMaterialExtractionState,
+        *,
+        extraction_run_id: str | uuid.UUID | None = None,
+        provider: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        result_summary: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        run = {
+            "extraction_run_id": str(extraction_run_id or "runtime-extraction-001"),
+            "material_id": material_id,
+            "status": extraction.status,
+            "provider": provider,
+            "extraction": extraction.model_dump(mode="json"),
+            "parameters": parameters or {},
+            "result_summary": result_summary or {},
+        }
+        self.runs.append(run)
+        return run
+
+    def save_extraction_artifact(
+        self,
+        *,
+        material_id: str,
+        artifact_type: str,
+        extraction_run_id: str | uuid.UUID | None = None,
+        uri: str | None = None,
+        media_type: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        artifact = {
+            "artifact_id": "runtime-artifact-001",
+            "material_id": material_id,
+            "extraction_run_id": str(extraction_run_id) if extraction_run_id else None,
+            "artifact_type": artifact_type,
+            "uri": uri,
+            "media_type": media_type,
+            "payload": payload or {},
+        }
+        self.artifacts.append(artifact)
+        return artifact

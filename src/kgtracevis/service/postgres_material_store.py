@@ -241,6 +241,8 @@ class PostgresMaterialStore:
             "status": state.status,
             "provider": provider,
             "extraction": state.model_dump(mode="json"),
+            "parameters": dict(parameters or {}),
+            "result_summary": dict(result_summary or {}),
             "started_at": _iso_or_none(row.get("started_at")) if row else None,
             "completed_at": _iso_or_none(row.get("completed_at")) if row else None,
         }

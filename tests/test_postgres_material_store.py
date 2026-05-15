@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from kgtracevis.service.kg_materials import KGMaterialRecord
+from kgtracevis.service import kg_materials as service_kg_materials
+from kgtracevis.service.kg_materials import FileKGMaterialStore, KGMaterialRecord
 from kgtracevis.service.postgres import PostgresConfig
 from kgtracevis.service.postgres_material_store import PostgresMaterialStore
 
@@ -101,6 +103,65 @@ def test_postgres_material_store_saves_material_record_payload() -> None:
     assert params[7] == "registered"
     assert _json_obj(params[13]) == {"source": "manual"}
     assert _json_obj(params[14])["status"] == "not_started"
+
+
+def test_material_store_provider_uses_postgres_when_env_dsn_is_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default runtime provider should opt into Postgres only from real config."""
+    service_kg_materials.configure_material_store_for_testing(None)
+    monkeypatch.setenv("KGTRACE_POSTGRES_DSN", "postgresql://unit-test")
+
+    store = service_kg_materials.material_store()
+
+    assert isinstance(store, PostgresMaterialStore)
+    assert store.config.dsn == "postgresql://unit-test"
+
+
+def test_material_store_provider_keeps_explicit_root_file_backed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit material roots should keep local tests off runtime Postgres."""
+    service_kg_materials.configure_material_store_for_testing(None)
+    monkeypatch.setenv("KGTRACE_POSTGRES_DSN", "postgresql://unit-test")
+
+    store = service_kg_materials.material_store(material_root=tmp_path)
+
+    assert isinstance(store, FileKGMaterialStore)
+    assert store.root == tmp_path
+
+
+def test_material_store_provider_falls_back_to_files_without_dsn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No configured DSN should preserve local file-backed material APIs."""
+    service_kg_materials.configure_material_store_for_testing(None)
+    for env_name in (
+        "KGTRACE_POSTGRES_DSN",
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_DB",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+    ):
+        monkeypatch.delenv(env_name, raising=False)
+    monkeypatch.setattr(
+        service_kg_materials,
+        "DEFAULT_MATERIAL_POSTGRES_CONFIG_PATH",
+        tmp_path / "missing_database.yaml",
+    )
+    monkeypatch.setattr(
+        service_kg_materials,
+        "DEFAULT_SOURCE_KG_MATERIAL_DIR",
+        tmp_path / "materials",
+    )
+
+    store = service_kg_materials.material_store()
+
+    assert isinstance(store, FileKGMaterialStore)
+    assert store.root == tmp_path / "materials"
 
 
 def test_postgres_material_store_lists_and_gets_material_records() -> None:
@@ -202,6 +263,8 @@ def test_postgres_material_store_records_extraction_run_and_artifact() -> None:
     )
 
     assert run["status"] == "extracted"
+    assert run["parameters"] == {"max_chars": 1000}
+    assert run["result_summary"] == {}
     assert artifact["artifact_id"] == "22222222-2222-2222-2222-222222222222"
     extraction_params = next(
         params

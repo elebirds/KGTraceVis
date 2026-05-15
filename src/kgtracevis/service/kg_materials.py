@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.request
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from kgtracevis.kg_construction.document_extraction import (
     DocumentIEClient,
     OpenAICompatibleKGExtractionClient,
-    extract_draft_kg_from_source_material,
+    SourceTextChunk,
+    chunk_source_document,
+    extract_draft_kg_from_chunks,
+    parse_source_material,
 )
 from kgtracevis.kg_construction.draft import DraftEntity, DraftRelation, KGConstructionSource
 from kgtracevis.service.kg_construction import (
@@ -24,6 +29,7 @@ from kgtracevis.service.kg_construction import (
 )
 
 DEFAULT_SOURCE_KG_MATERIAL_DIR = Path("runs/source_kg_materials")
+DEFAULT_MATERIAL_POSTGRES_CONFIG_PATH = Path("configs/database.yaml")
 MAX_MATERIAL_UPLOAD_BYTES = 20_000_000
 
 MaterialSourceKind = Literal["uploaded_file", "url", "local_path", "citation"]
@@ -255,6 +261,197 @@ class KGMaterialExtractionRunResponse(BaseModel):
     )
 
 
+class KGMaterialStore(Protocol):
+    """Persistence boundary for material-library runtime state."""
+
+    def save_material_record(self, material: KGMaterialRecord) -> KGMaterialRecord:
+        """Persist one material record and return the validated record."""
+
+    def list_material_records(self) -> list[KGMaterialRecord]:
+        """Return persisted material records."""
+
+    def get_material_record(self, material_id: str) -> KGMaterialRecord:
+        """Return one material record."""
+
+    def save_source_chunks(
+        self,
+        material_id: str,
+        chunks: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Persist parsed source chunks for a material."""
+
+    def record_extraction_run(
+        self,
+        material_id: str,
+        extraction: KGMaterialExtractionState,
+        *,
+        extraction_run_id: str | uuid.UUID | None = None,
+        provider: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        result_summary: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Persist one extraction run metadata row."""
+
+    def save_extraction_artifact(
+        self,
+        *,
+        material_id: str,
+        artifact_type: str,
+        extraction_run_id: str | uuid.UUID | None = None,
+        uri: str | None = None,
+        media_type: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Persist one extraction artifact reference."""
+
+
+class FileKGMaterialStore:
+    """File-backed material store used for local/default workflows."""
+
+    def __init__(self, root: Path | None = None) -> None:
+        self.root = root or DEFAULT_SOURCE_KG_MATERIAL_DIR
+
+    def save_material_record(self, material: KGMaterialRecord) -> KGMaterialRecord:
+        """Persist one material record as metadata JSON."""
+        _write_material_record(material)
+        return material
+
+    def list_material_records(self) -> list[KGMaterialRecord]:
+        """Return material records from local metadata JSON files."""
+        if not self.root.exists():
+            return []
+        materials = [
+            _load_material_record(metadata_path)
+            for metadata_path in sorted(self.root.glob("*/metadata.json"))
+        ]
+        materials.sort(key=lambda item: item.updated_at, reverse=True)
+        return materials
+
+    def get_material_record(self, material_id: str) -> KGMaterialRecord:
+        """Return one file-backed material record."""
+        metadata_path = (
+            _material_dir(
+                _safe_path_component(material_id, field_name="material_id"),
+                material_root=self.root,
+            )
+            / "metadata.json"
+        )
+        if not metadata_path.is_file():
+            raise ValueError(f"unknown material_id: {material_id}")
+        return _load_material_record(metadata_path)
+
+    def save_source_chunks(
+        self,
+        material_id: str,
+        chunks: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Persist parsed chunks as a local JSONL sidecar."""
+        material_id = _safe_path_component(material_id, field_name="material_id")
+        normalized = [
+            _source_chunk_store_payload(material_id, chunk, index=index)
+            for index, chunk in enumerate(chunks)
+        ]
+        record_dir = _material_dir(material_id, material_root=self.root)
+        record_dir.mkdir(parents=True, exist_ok=True)
+        _write_jsonl(record_dir / "source_chunks.jsonl", normalized)
+        return normalized
+
+    def record_extraction_run(
+        self,
+        material_id: str,
+        extraction: KGMaterialExtractionState,
+        *,
+        extraction_run_id: str | uuid.UUID | None = None,
+        provider: str | None = None,
+        parameters: dict[str, Any] | None = None,
+        result_summary: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Append extraction run metadata to a local JSONL sidecar."""
+        material_id = _safe_path_component(material_id, field_name="material_id")
+        run_id = str(extraction_run_id or uuid.uuid4())
+        payload = {
+            "extraction_run_id": run_id,
+            "material_id": material_id,
+            "status": extraction.status,
+            "provider": provider,
+            "extraction": extraction.model_dump(mode="json"),
+            "parameters": parameters or {},
+            "result_summary": result_summary or {},
+            "recorded_at": _utc_now(),
+        }
+        _append_jsonl(
+            _material_dir(material_id, material_root=self.root) / "extraction_runs.jsonl",
+            payload,
+        )
+        return payload
+
+    def save_extraction_artifact(
+        self,
+        *,
+        material_id: str,
+        artifact_type: str,
+        extraction_run_id: str | uuid.UUID | None = None,
+        uri: str | None = None,
+        media_type: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Append an extraction artifact reference to a local JSONL sidecar."""
+        material_id = _safe_path_component(material_id, field_name="material_id")
+        artifact_type = artifact_type.strip()
+        if not artifact_type:
+            raise ValueError("artifact_type cannot be empty")
+        artifact = {
+            "artifact_id": str(uuid.uuid4()),
+            "material_id": material_id,
+            "extraction_run_id": str(extraction_run_id) if extraction_run_id else None,
+            "artifact_type": artifact_type,
+            "uri": uri,
+            "media_type": media_type,
+            "payload": payload or {},
+            "created_at": _utc_now(),
+        }
+        _append_jsonl(
+            _material_dir(material_id, material_root=self.root)
+            / "extraction_artifacts.jsonl",
+            artifact,
+        )
+        return artifact
+
+
+_MATERIAL_STORE_OVERRIDE: KGMaterialStore | None = None
+
+
+def configure_material_store_for_testing(store: KGMaterialStore | None) -> None:
+    """Override the default runtime material store in tests."""
+    global _MATERIAL_STORE_OVERRIDE
+    _MATERIAL_STORE_OVERRIDE = store
+
+
+def material_store(*, material_root: Path | None = None) -> KGMaterialStore:
+    """Return the configured material store.
+
+    Passing ``material_root`` explicitly always selects the file-backed adapter.
+    Without a root, the runtime provider uses Postgres only when a real
+    Postgres DSN resolves from environment or ``configs/database.yaml``.
+    """
+    if material_root is not None:
+        return FileKGMaterialStore(material_root)
+    if _MATERIAL_STORE_OVERRIDE is not None:
+        return _MATERIAL_STORE_OVERRIDE
+
+    from kgtracevis.service.postgres import resolve_postgres_config
+
+    config = resolve_postgres_config(
+        env=os.environ,
+        config_path=DEFAULT_MATERIAL_POSTGRES_CONFIG_PATH,
+    )
+    if config.dsn:
+        from kgtracevis.service.postgres_material_store import PostgresMaterialStore
+
+        return PostgresMaterialStore(config)
+    return FileKGMaterialStore(DEFAULT_SOURCE_KG_MATERIAL_DIR)
+
+
 def save_kg_material_upload(
     *,
     material_id: str,
@@ -285,9 +482,10 @@ def save_kg_material_upload(
             f"uploaded material file exceeds {MAX_MATERIAL_UPLOAD_BYTES} bytes: {len(content)}"
         )
 
+    store = material_store(material_root=material_root)
     record_dir = _material_dir(request.material_id, material_root=material_root)
     metadata_path = record_dir / "metadata.json"
-    if metadata_path.exists() and not overwrite:
+    if _material_record_exists(store, request.material_id) and not overwrite:
         raise ValueError(
             f"material_id already exists; pass overwrite=true to replace: {material_id}"
         )
@@ -313,8 +511,7 @@ def save_kg_material_upload(
         size_bytes=len(content),
         metadata=request.metadata,
     )
-    _write_material_record(record)
-    return record
+    return store.save_material_record(record)
 
 
 def register_kg_material(
@@ -324,9 +521,10 @@ def register_kg_material(
     overwrite: bool = False,
 ) -> KGMaterialRecord:
     """Register a source material reference without fetching or extracting it."""
+    store = material_store(material_root=material_root)
     record_dir = _material_dir(request.material_id, material_root=material_root)
     metadata_path = record_dir / "metadata.json"
-    if metadata_path.exists() and not overwrite:
+    if _material_record_exists(store, request.material_id) and not overwrite:
         raise ValueError(
             f"material_id already exists; pass overwrite=true to replace: {request.material_id}"
         )
@@ -350,8 +548,7 @@ def register_kg_material(
         metadata=request.metadata,
         extraction=request.extraction,
     )
-    _write_material_record(record)
-    return record
+    return store.save_material_record(record)
 
 
 def list_kg_materials(
@@ -360,12 +557,7 @@ def list_kg_materials(
 ) -> KGMaterialListResponse:
     """List persisted material-library records."""
     root = material_root or DEFAULT_SOURCE_KG_MATERIAL_DIR
-    if not root.exists():
-        return KGMaterialListResponse(material_root=str(root), materials=[])
-    materials = [
-        _load_material_record(metadata_path)
-        for metadata_path in sorted(root.glob("*/metadata.json"))
-    ]
+    materials = material_store(material_root=material_root).list_material_records()
     materials.sort(key=lambda item: item.updated_at, reverse=True)
     return KGMaterialListResponse(material_root=str(root), materials=materials)
 
@@ -376,16 +568,8 @@ def get_kg_material(
     material_root: Path | None = None,
 ) -> KGMaterialDetailResponse:
     """Return one persisted material-library record."""
-    metadata_path = (
-        _material_dir(
-            _safe_path_component(material_id, field_name="material_id"),
-            material_root=material_root,
-        )
-        / "metadata.json"
-    )
-    if not metadata_path.is_file():
-        raise ValueError(f"unknown material_id: {material_id}")
-    return KGMaterialDetailResponse(material=_load_material_record(metadata_path))
+    material = material_store(material_root=material_root).get_material_record(material_id)
+    return KGMaterialDetailResponse(material=material)
 
 
 def prepare_kg_material_construction_build(
@@ -425,6 +609,7 @@ def extract_kg_material_to_structured_records(
     material_root: Path | None = None,
 ) -> KGMaterialExtractionRunResponse:
     """Extract one material into structured records consumable by construction."""
+    store = material_store(material_root=material_root)
     detail = get_kg_material(material_id, material_root=material_root)
     material = detail.material
     record_dir = Path(material.metadata_path).parent
@@ -446,12 +631,23 @@ def extract_kg_material_to_structured_records(
             **source_metadata,
         },
     )
-    ie_client = client or OpenAICompatibleKGExtractionClient()
-    draft = extract_draft_kg_from_source_material(
-        source,
-        ie_client,
+    document = parse_source_material(source)
+    chunks = chunk_source_document(
+        document,
         max_chars=request.max_chars,
         overlap_chars=request.overlap_chars,
+    )
+    store.save_source_chunks(
+        material.material_id,
+        [_source_chunk_store_payload(material.material_id, chunk) for chunk in chunks],
+    )
+
+    ie_client = client or OpenAICompatibleKGExtractionClient()
+    draft = extract_draft_kg_from_chunks(
+        chunks,
+        ie_client,
+        extractor_name="openai_document_ie",
+        extractor_version="v1",
     )
     records = _structured_records_from_draft(draft)
     if not records:
@@ -475,7 +671,32 @@ def extract_kg_material_to_structured_records(
             ),
         }
     )
-    _write_material_record(updated)
+    store.save_material_record(updated)
+    extraction_run = store.record_extraction_run(
+        updated.material_id,
+        updated.extraction,
+        provider=request.provider,
+        parameters={
+            "max_chars": request.max_chars,
+            "overlap_chars": request.overlap_chars,
+            "source_format": request.source_format,
+        },
+        result_summary={
+            "record_count": len(records),
+            "structured_records_path": str(records_path),
+        },
+    )
+    store.save_extraction_artifact(
+        material_id=updated.material_id,
+        extraction_run_id=extraction_run.get("extraction_run_id"),
+        artifact_type="structured_records",
+        uri=str(records_path),
+        media_type="application/jsonl",
+        payload={
+            "record_count": len(records),
+            "record_types": sorted({str(record.get("record_type")) for record in records}),
+        },
+    )
     return KGMaterialExtractionRunResponse(
         material=updated,
         structured_records_path=str(records_path),
@@ -617,6 +838,59 @@ def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
     )
 
 
+def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def _material_record_exists(store: KGMaterialStore, material_id: str) -> bool:
+    try:
+        store.get_material_record(material_id)
+    except ValueError:
+        return False
+    return True
+
+
+def _source_chunk_store_payload(
+    material_id: str,
+    chunk: SourceTextChunk | dict[str, Any],
+    *,
+    index: int | None = None,
+) -> dict[str, Any]:
+    if isinstance(chunk, SourceTextChunk):
+        return {
+            "chunk_id": chunk.chunk_id,
+            "material_id": material_id,
+            "chunk_index": chunk.index - 1,
+            "source_locator": f"chars={chunk.start_char}-{chunk.end_char}",
+            "text_content": chunk.text,
+            "char_start": chunk.start_char,
+            "char_end": chunk.end_char,
+            "metadata": {
+                "source_id": chunk.source_id,
+                "source_type": chunk.source_type,
+                "scenario": chunk.scenario,
+                **dict(chunk.metadata),
+            },
+        }
+
+    text = str(chunk.get("text_content") or chunk.get("text") or "").strip()
+    if not text:
+        raise ValueError("source chunk text_content cannot be empty")
+    chunk_index = int(chunk.get("chunk_index", index or 0))
+    return {
+        "chunk_id": str(chunk.get("chunk_id") or f"{material_id}_chunk_{chunk_index:04d}"),
+        "material_id": material_id,
+        "chunk_index": chunk_index,
+        "source_locator": chunk.get("source_locator"),
+        "text_content": text,
+        "char_start": chunk.get("char_start"),
+        "char_end": chunk.get("char_end"),
+        "metadata": dict(chunk.get("metadata") or {}),
+    }
+
+
 def _material_dir(material_id: str, *, material_root: Path | None) -> Path:
     safe_id = _safe_path_component(material_id, field_name="material_id")
     return (material_root or DEFAULT_SOURCE_KG_MATERIAL_DIR) / safe_id
@@ -668,8 +942,11 @@ def _utc_now() -> str:
 
 __all__ = [
     "DEFAULT_SOURCE_KG_MATERIAL_DIR",
+    "DEFAULT_MATERIAL_POSTGRES_CONFIG_PATH",
+    "FileKGMaterialStore",
     "MAX_MATERIAL_UPLOAD_BYTES",
     "ExtractionStatus",
+    "KGMaterialStore",
     "KGMaterialBuildSourcesResponse",
     "KGMaterialDetailResponse",
     "KGMaterialExtractionRunRequest",
@@ -683,9 +960,11 @@ __all__ = [
     "MaterialSourceKind",
     "MaterialStatus",
     "MaterialType",
+    "configure_material_store_for_testing",
     "get_kg_material",
     "extract_kg_material_to_structured_records",
     "list_kg_materials",
+    "material_store",
     "prepare_kg_material_construction_build",
     "register_kg_material",
     "save_kg_material_upload",

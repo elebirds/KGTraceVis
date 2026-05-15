@@ -239,10 +239,17 @@ Use the three storage layers for different jobs:
 - CSV/JSON/JSONL stores reproducible build artifacts such as `nodes.csv`,
   `edges.csv`, `structured_records.jsonl`, and construction manifests.
 
-The current API remains file-backed for local v0 material operations, while the
-Postgres schema and `PostgresMaterialStore` define the runtime persistence path
-for productionizing the same material records, chunks, extraction runs, and
-candidate artifacts.
+The material service now uses a runtime material-store provider. Passing an
+explicit `material_root` keeps the file-backed adapter for local workflows and
+tests. Without an explicit root, the default provider uses Postgres when a real
+DSN is configured through `KGTRACE_POSTGRES_DSN`, `POSTGRES_*`, or
+`configs/database.yaml`; otherwise it falls back to
+`runs/source_kg_materials/`.
+
+Even in Postgres-backed mode, uploaded bytes, URL snapshots, and
+`structured_records.jsonl` stay on disk as reproducible artifacts. Postgres
+stores the material records, parsed source chunks, extraction run metadata, and
+artifact references that let the runtime workbench survive process restarts.
 
 For TEP-specific graph construction, the external `TEP_KG` implementation should
 be merged through extractor/import adapters rather than copied directly. See
