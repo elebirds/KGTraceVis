@@ -14,6 +14,8 @@ For the full source-to-KG methodology and future system design, see
 For the new RCA-oriented generation architecture, domain pack boundary, TEP_KG
 integration strategy, and layer manifests, see
 [`rca_kg_generation_architecture.md`](rca_kg_generation_architecture.md).
+For the current executable acceptance matrix and verification commands, see
+[`rca_kg_construction_acceptance_matrix.md`](rca_kg_construction_acceptance_matrix.md).
 
 ## Construction Lifecycle
 
