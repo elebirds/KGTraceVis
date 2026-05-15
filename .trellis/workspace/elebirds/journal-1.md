@@ -537,3 +537,42 @@ Added a read-only backend review queue endpoint for source-to-KG construction ed
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: RCA KG generation architecture refactor
+
+**Date**: 2026-05-15
+**Task**: RCA KG generation architecture refactor
+**Branch**: `main`
+
+### Summary
+
+Refactored KG construction into an RCA-oriented Source Library -> Parser -> Extractor Registry -> Draft KG -> Alignment -> Source Audit Graph -> Semantic Layer -> RCA Reasoning View -> Review Queue -> Versioned Publish pipeline. Added generic and TEP profiles, TEP semantic/variable/RCA graph importers, layer manifests, service/CLI artifact wiring, parser audit metadata, review queue alignment decisions, tests, architecture docs, and artifact contract spec. Verified full pytest, examples, ruff, mypy, Neo4j dry-run, toy generic build, and real TEP_KG smoke build.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5606489` | (see git log) |
+| `d6348c9` | (see git log) |
+| `2043b7e` | (see git log) |
+| `13692d6` | (see git log) |
+| `e916338` | (see git log) |
+| `87e50ba` | (see git log) |
+| `7b3563b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

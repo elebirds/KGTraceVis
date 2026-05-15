@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
-- **Last Active**: 2026-05-14
+- **Total Sessions**: 17
+- **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~539 | Active |
+| `journal-1.md` | ~578 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-05-15 | RCA KG generation architecture refactor | `5606489`, `d6348c9`, `2043b7e`, `13692d6`, `e916338`, `87e50ba`, `7b3563b` | `main` |
 | 16 | 2026-05-14 | KG construction review queue API | `04b2932` | `codex/rebuild-web-arco-echarts` |
 | 15 | 2026-05-14 | KG construction edge review API | `c7987a9` | `codex/rebuild-web-arco-echarts` |
 | 14 | 2026-05-14 | KG construction publish dry-run API | `c148600` | `codex/rebuild-web-arco-echarts` |
