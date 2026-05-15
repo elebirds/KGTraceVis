@@ -111,7 +111,11 @@ from kgtracevis.kg_construction.source_loader import (
     load_source_text,
     load_structured_records,
 )
-from kgtracevis.kg_construction.sources import SourceLibraryRecord
+from kgtracevis.kg_construction.sources import (
+    SourceLibraryRecord,
+    load_source_library,
+    write_source_library_manifest,
+)
 from kgtracevis.kg_construction.tep_import import tep_external_id_to_kg_id
 from kgtracevis.kg_construction.triple_cleaner import (
     clean_candidate_nodes,
@@ -195,6 +199,7 @@ __all__ = [
     "load_source_registry",
     "load_source_text",
     "load_structured_records",
+    "load_source_library",
     "profile_for_scenario",
     "project_semantic_layer",
     "review_decision_for_edge",
@@ -212,4 +217,5 @@ __all__ = [
     "write_case_audit_artifacts",
     "write_end_to_end_interpretability_audit",
     "write_edge_review_queue",
+    "write_source_library_manifest",
 ]

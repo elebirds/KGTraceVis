@@ -21,12 +21,14 @@ from kgtracevis.kg_construction import (
     export_kg_csv,
     extract_candidate_entities,
     extract_candidate_triples,
+    load_source_library,
     load_source_registry,
     load_source_text,
     validate_candidate_claim_boundaries,
     validate_edges,
     write_candidate_kg_artifacts,
     write_end_to_end_interpretability_audit,
+    write_source_library_manifest,
 )
 from kgtracevis.kg_construction.case_kg_hardening import WAFER_PATTERNS
 from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS, NODE_COLUMNS
@@ -66,6 +68,44 @@ def test_source_registry_and_text_loading(tmp_path: Path) -> None:
         )
     ]
     assert load_source_text(records[0]) == "structured source note"
+
+
+def test_source_library_loads_records_and_writes_safe_manifest(tmp_path: Path) -> None:
+    """Source Library records should convert to construction sources without text leaks."""
+    library_path = tmp_path / "source_library.json"
+    library_path.write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {
+                        "source_id": "inline_note",
+                        "source_type": "txt",
+                        "scenario": "shared",
+                        "text": "Cooling alert can suggest pump seal wear.",
+                        "metadata": {"owner": "unit"},
+                        "provenance_policy": "source_grounded_candidate",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    records = load_source_library(library_path)
+    source = records[0].to_construction_source()
+    manifest_path = write_source_library_manifest(tmp_path / "manifest.json", records)
+    manifest = json.loads(manifest_path.read_text())
+    manifest_payload = json.dumps(manifest, sort_keys=True)
+
+    assert len(records) == 1
+    assert source.source_id == "inline_note"
+    assert source.source_type == "txt"
+    assert source.text == "Cooling alert can suggest pump seal wear."
+    assert source.metadata["owner"] == "unit"
+    assert source.metadata["provenance_policy"] == "source_grounded_candidate"
+    assert manifest["artifact_type"] == "source_library_manifest_v1"
+    assert manifest["sources"][0]["has_text"] is True
+    assert "Cooling alert can suggest pump seal wear" not in manifest_payload
 
 
 def test_candidate_entity_and_triple_extraction_from_structured_records() -> None:

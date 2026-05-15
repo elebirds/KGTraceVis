@@ -61,10 +61,12 @@ LLM-as-adapter boundary.
 * Added `extract_from_parsed(...)` paths for structured records and document IE.
 * Added `extract_from_parsed(...)` for TEP variable mapping rows.
 * Added `OfflineDocumentIEExtractor` for no-key replay fixtures.
+* Added Source Library JSON/JSONL/CSV loading and safe manifest writing helpers.
 * Added `--toy-generic-document-source` CLI smoke path.
 * Curated Trellis implement/check context files for the M2 task.
 * Verification: focused tests `30 passed`; full pytest `305 passed`;
   `run_examples.py`, ruff, and mypy passed.
+* Additional focused verification: source library + pipeline tests `40 passed`.
 
 ## Definition of Done (team quality bar)
 

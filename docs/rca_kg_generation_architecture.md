@@ -162,6 +162,13 @@ values and document text stay out of the manifest.
 
 ## ParserOutput And Offline Document IE
 
+Source Library entries are represented by `SourceLibraryRecord` before parsing.
+They include `source_id`, `source_type`, `scenario`, `path`/`url`/`text`,
+metadata, `created_at`, and `provenance_policy`. JSON, JSONL, and CSV source
+library files can be loaded into construction sources, and source-library
+manifests record only safe descriptors such as IDs, paths, metadata, and
+`has_text`.
+
 `ParsedSourceContent` is the current `ParserOutput` contract. The pipeline
 resolves extractors first, parses each source once, and then prefers extractor
 implementations with `extract_from_parsed(parsed, source=...)`. Older
