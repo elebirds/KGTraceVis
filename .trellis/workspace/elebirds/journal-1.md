@@ -746,3 +746,36 @@ Added source_library_manifest.json as a required KG construction artifact, expos
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: Acceptance smoke for RCA KG construction
+
+**Date**: 2026-05-15
+**Task**: Acceptance smoke for RCA KG construction
+**Branch**: `main`
+
+### Summary
+
+Added a reusable RCA KG construction smoke workflow and CLI covering toy Source Library and TEP_KG paths, verified real local TEP_KG smoke plus full pytest/run_examples/ruff/mypy.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8aacb98` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
