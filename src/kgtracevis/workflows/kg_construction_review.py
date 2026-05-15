@@ -10,6 +10,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 from kgtracevis.kg.graph import REQUIRED_EDGE_COLUMNS, KnowledgeGraph
+from kgtracevis.kg_construction.artifact_diff import (
+    build_kg_construction_artifact_snapshot,
+    build_kg_construction_diff,
+    write_kg_construction_diff,
+)
 from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS
 from kgtracevis.kg_construction.models import (
     KGConstructionReviewDecision,
@@ -55,6 +60,7 @@ class ReviewKGConstructionItemResult:
     publish_report_path: Path
     published_nodes_path: Path
     published_edges_path: Path
+    diff_path: Path
 
 
 @dataclass(frozen=True)
@@ -88,6 +94,7 @@ class ReviewKGConstructionEdgeResult:
     publish_report_path: Path
     published_nodes_path: Path
     published_edges_path: Path
+    diff_path: Path
 
 
 def review_kg_construction_edge_artifact(
@@ -95,6 +102,7 @@ def review_kg_construction_edge_artifact(
 ) -> ReviewKGConstructionEdgeResult:
     """Apply an edge review decision to a construction build directory."""
     artifact_paths = kg_construction_artifact_paths(config.output_dir)
+    before_snapshot = build_kg_construction_artifact_snapshot(config.output_dir)
     target_key = _edge_key_from_config(config)
     edge_rows = _read_edge_rows(artifact_paths["edges"])
     updated_edge = _review_edge_row(edge_rows, target_key=target_key, action=config.action)
@@ -129,6 +137,13 @@ def review_kg_construction_edge_artifact(
         output_dir=config.output_dir,
         run_id=run_id,
     )
+    diff_path = _refresh_review_diff_artifact(
+        output_dir=config.output_dir,
+        run_id=run_id,
+        before_snapshot=before_snapshot,
+        decision=decision,
+        scope="review_edge_action",
+    )
     return ReviewKGConstructionEdgeResult(
         run_id=run_id,
         output_dir=config.output_dir,
@@ -140,6 +155,7 @@ def review_kg_construction_edge_artifact(
         publish_report_path=artifact_paths["publish_report"],
         published_nodes_path=artifact_paths["published_nodes"],
         published_edges_path=artifact_paths["published_edges"],
+        diff_path=diff_path,
     )
 
 
@@ -175,9 +191,11 @@ def review_kg_construction_item_artifact(
             publish_report_path=edge_result.publish_report_path,
             published_nodes_path=edge_result.published_nodes_path,
             published_edges_path=edge_result.published_edges_path,
+            diff_path=edge_result.diff_path,
         )
 
     artifact_paths = kg_construction_artifact_paths(config.output_dir)
+    before_snapshot = build_kg_construction_artifact_snapshot(config.output_dir)
     if not config.target_key.strip():
         raise ValueError("review target_key cannot be empty")
     if not config.item_type.strip():
@@ -219,6 +237,13 @@ def review_kg_construction_item_artifact(
     _write_json_list(artifact_paths["review_queue"], queue_items)
     _write_json_object(artifact_paths["summary"], summary)
     _write_json_object(artifact_paths["manifest"], manifest)
+    diff_path = _refresh_review_diff_artifact(
+        output_dir=config.output_dir,
+        run_id=run_id,
+        before_snapshot=before_snapshot,
+        decision=decision,
+        scope="review_item_action",
+    )
     return ReviewKGConstructionItemResult(
         run_id=run_id,
         output_dir=config.output_dir,
@@ -230,6 +255,7 @@ def review_kg_construction_item_artifact(
         publish_report_path=artifact_paths["publish_report"],
         published_nodes_path=artifact_paths["published_nodes"],
         published_edges_path=artifact_paths["published_edges"],
+        diff_path=diff_path,
     )
 
 
@@ -478,6 +504,28 @@ def _refresh_publish_snapshot_artifacts(
         nodes_path=artifact_paths["published_nodes"],
         edges_path=artifact_paths["published_edges"],
         report_path=artifact_paths["publish_report"],
+    )
+
+
+def _refresh_review_diff_artifact(
+    *,
+    output_dir: Path,
+    run_id: str,
+    before_snapshot: dict[str, Any],
+    decision: KGConstructionReviewDecision,
+    scope: str,
+) -> Path:
+    artifact_paths = kg_construction_artifact_paths(output_dir)
+    after_snapshot = build_kg_construction_artifact_snapshot(output_dir)
+    return write_kg_construction_diff(
+        artifact_paths["kg_construction_diff"],
+        build_kg_construction_diff(
+            run_id=run_id,
+            before=before_snapshot,
+            after=after_snapshot,
+            decision_provenance=(decision,),
+            scope=scope,
+        ),
     )
 
 

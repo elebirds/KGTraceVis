@@ -64,6 +64,7 @@ def test_review_workflow_accepts_edge_and_refreshes_publish_snapshot(
     ]
     published_edges = _read_csv_rows(result.published_edges_path)
     publish_report = json.loads(result.publish_report_path.read_text(encoding="utf-8"))
+    artifact_diff = json.loads(result.diff_path.read_text(encoding="utf-8"))
     review_queue = json.loads(build.review_queue_path.read_text(encoding="utf-8"))
 
     assert result.edge["review_status"] == "reviewed"
@@ -74,6 +75,11 @@ def test_review_workflow_accepts_edge_and_refreshes_publish_snapshot(
     assert published_edges[0]["kg_build_id"] == "kgbuild_review_workflow"
     assert publish_report["disposition_counts"] == {"accepted": 1}
     assert review_queue[0]["review_status"] == "reviewed"
+    assert artifact_diff["scope"] == "review_edge_action"
+    assert artifact_diff["decision_provenance"][0]["target_key"] == target_key
+    assert artifact_diff["artifacts"]["edges"]["changed_count"] == 1
+    assert artifact_diff["artifacts"]["review_queue"]["changed_count"] == 1
+    assert artifact_diff["artifacts"]["publish_report"]["changed_count"] == 1
 
 
 def test_review_source_kg_cli_accepts_offline_document_edge(
@@ -125,6 +131,7 @@ def test_review_source_kg_cli_accepts_offline_document_edge(
 
     assert payload["action"] == "accept"
     assert payload["edge_review_status"] == "reviewed"
+    assert payload["diff_path"] == str(output_dir / "kg_construction_diff.json")
     assert published_edges[0]["review_status"] == "reviewed"
     assert published_edges[0]["kg_build_id"] == "kgbuild_cli_review"
     assert publish_report["disposition_counts"] == {"accepted": 1}
@@ -177,6 +184,7 @@ def test_review_workflow_accepts_non_edge_review_item(
     )
     edge_rows = _read_csv_rows(build.edges_path)
     published_edges = _read_csv_rows(result.published_edges_path)
+    artifact_diff = json.loads(result.diff_path.read_text(encoding="utf-8"))
 
     assert result.decision.target_type == "entity_merge_candidate"
     assert result.decision.target_key == merge_item["target_key"]
@@ -191,6 +199,12 @@ def test_review_workflow_accepts_non_edge_review_item(
     assert refreshed_item["accepted_count"] == 1
     assert edge_rows == []
     assert published_edges == []
+    assert artifact_diff["scope"] == "review_item_action"
+    assert artifact_diff["decision_provenance"][0]["target_type"] == (
+        "entity_merge_candidate"
+    )
+    assert artifact_diff["artifacts"]["review_queue"]["changed_count"] == 1
+    assert artifact_diff["artifacts"]["summary_counts"]["changed_count"] == 1
 
 
 def test_review_source_kg_cli_accepts_non_edge_review_item(
@@ -251,6 +265,7 @@ def test_review_source_kg_cli_accepts_non_edge_review_item(
 
     assert payload["item_type"] == "entity_merge_candidate"
     assert payload["review_status"] == "rejected"
+    assert payload["diff_path"] == str(output_dir / "kg_construction_diff.json")
     assert refreshed_item["review_status"] == "rejected"
     assert refreshed_item["rejected_count"] == 1
 

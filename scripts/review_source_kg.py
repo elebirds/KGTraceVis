@@ -85,6 +85,7 @@ def main() -> None:
                 "published_nodes_path": str(result.published_nodes_path),
                 "published_edges_path": str(result.published_edges_path),
                 "publish_report_path": str(result.publish_report_path),
+                "diff_path": str(result.diff_path),
             }
         else:
             if args.target_key is None:
@@ -112,6 +113,7 @@ def main() -> None:
                 "published_nodes_path": str(item_result.published_nodes_path),
                 "published_edges_path": str(item_result.published_edges_path),
                 "publish_report_path": str(item_result.publish_report_path),
+                "diff_path": str(item_result.diff_path),
             }
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
