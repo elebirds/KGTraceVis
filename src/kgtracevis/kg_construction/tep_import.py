@@ -16,6 +16,7 @@ from kgtracevis.kg_construction.draft import (
     DraftRelation,
     KGConstructionSource,
 )
+from kgtracevis.kg_construction.parsers import ParsedSourceContent
 
 
 class TepSemanticLiftExtractor:
@@ -63,7 +64,26 @@ class TepVariableMappingExtractor:
         """Extract variable entities and alias relations from TEP mapping rows."""
         if source.path is None:
             raise ValueError("TEP variable mapping extraction requires source.path")
-        rows = _read_records(source.path)
+        return self._extract_rows(_read_records(source.path), source=source)
+
+    def extract_from_parsed(
+        self,
+        parsed: ParsedSourceContent,
+        *,
+        source: KGConstructionSource,
+    ) -> DraftKG:
+        """Extract variable mapping draft rows from parser output rows."""
+        if parsed.kind != "rows":
+            raise ValueError(f"TEP variable mapping requires row parser output: {parsed.source_id}")
+        return self._extract_rows(parsed.rows, source=source)
+
+    def _extract_rows(
+        self,
+        rows: Iterable[Mapping[str, Any]],
+        *,
+        source: KGConstructionSource,
+    ) -> DraftKG:
+        """Convert TEP variable mapping rows to DraftKG rows."""
         entities: list[DraftEntity] = []
         relations: list[DraftRelation] = []
         for row in rows:

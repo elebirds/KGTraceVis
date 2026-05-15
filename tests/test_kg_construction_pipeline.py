@@ -789,6 +789,51 @@ def test_tep_variable_mapping_extractor_imports_channel_aliases(tmp_path: Path) 
     assert result.semantic_layer.manifest["skipped_relation_count"] == 0
 
 
+def test_tep_variable_mapping_consumes_parser_rows_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TEP variable mapping extraction should use parsed rows instead of reloading."""
+    mapping_path = tmp_path / "tep_variable_mapping.jsonl"
+    _write_jsonl(
+        mapping_path,
+        [
+            {
+                "tep_channel": "xmeas_1",
+                "sequence_column": "xmeas_1",
+                "kg_entity_id": "variable:a_feed_stream",
+                "alternate_entity_ids": "",
+                "mapping_source": "explicit_table",
+            }
+        ],
+    )
+
+    def fail_if_extractor_reloads(path: Path) -> list[dict[str, object]]:
+        raise AssertionError(f"extractor reloaded TEP mapping rows from {path}")
+
+    monkeypatch.setattr(
+        "kgtracevis.kg_construction.tep_import._read_records",
+        fail_if_extractor_reloads,
+    )
+
+    result = run_kg_construction(
+        [
+            KGConstructionSource(
+                source_id="tep_variable_mapping_single_parse",
+                source_type="tep_variable_mapping",
+                scenario="tep",
+                path=mapping_path,
+            )
+        ],
+        registry=ExtractorRegistry([TepVariableMappingExtractor()]),
+        run_id="kgbuild_tep_mapping_single_parse",
+    )
+
+    assert result.parsed_sources[0].kind == "rows"
+    assert result.summary["extractor_versions"] == {"tep_variable_mapping": "v1"}
+    assert [node.id for node in result.nodes] == ["AFeedStreamVariable"]
+
+
 def test_tep_import_preserves_alignment_alias_nodes(tmp_path: Path) -> None:
     """TEP entity-resolution members should not collapse explicit alignment nodes."""
     semantic_dir = tmp_path / "semantic"

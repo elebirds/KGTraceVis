@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "RCA-oriented KG construction build contract, artifact contract, parser audit, and candidate KG rules."}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Source-to-KG workflow boundaries and script/service dependency direction."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Validation behavior for invalid sources, ambiguity, and low-confidence candidates."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required verification commands and KG quality rules."}

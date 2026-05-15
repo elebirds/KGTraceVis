@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify ParserOutput extraction, review queue, and artifact contract behavior."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Run required pytest, examples, ruff, and mypy checks."}
