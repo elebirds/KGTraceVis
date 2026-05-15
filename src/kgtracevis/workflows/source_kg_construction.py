@@ -11,6 +11,7 @@ from typing import Literal
 from kgtracevis.kg_construction import (
     ExtractorRegistry,
     KGConstructionManifest,
+    KGConstructionReviewDecision,
     KGConstructionSource,
     OfflineDocumentIEExtractor,
     StructuredRecordExtractor,
@@ -45,6 +46,7 @@ class SourceKGConstructionWorkflowConfig:
     overwrite: bool = False
     run_id: str | None = None
     allow_reviewed_overwrite: bool = False
+    review_decisions: tuple[KGConstructionReviewDecision, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,7 @@ def run_source_kg_construction_workflow(
         registry=registry or _runtime_extractor_registry(),
         allow_reviewed_overwrite=config.allow_reviewed_overwrite,
         run_id=config.run_id,
+        review_decisions=config.review_decisions,
     )
     artifact_paths = kg_construction_artifact_paths(config.output_dir)
     source_library_manifest_path = write_source_library_manifest(
@@ -95,11 +98,12 @@ def run_source_kg_construction_workflow(
     nodes_path, edges_path = result.export_csv(config.output_dir)
     layer_artifacts = result.write_layer_artifacts(config.output_dir)
     artifact_paths["review_decisions"].parent.mkdir(parents=True, exist_ok=True)
-    artifact_paths["review_decisions"].touch(exist_ok=True)
+    _write_review_decisions(artifact_paths["review_decisions"], config.review_decisions)
     publish_snapshot = build_publish_snapshot(
         kg_build_id=result.run_id,
         nodes=result.nodes,
         edges=result.edges,
+        review_decisions=config.review_decisions,
     )
     published_nodes_path, published_edges_path, publish_report_path = write_publish_snapshot(
         publish_snapshot,
@@ -150,7 +154,10 @@ def run_source_kg_construction_workflow(
         encoding="utf-8",
     )
     artifact_paths["output_dir"] = config.output_dir
-    manifest = result.manifest(artifact_paths=artifact_paths)
+    manifest = result.manifest(
+        artifact_paths=artifact_paths,
+        review_decisions=config.review_decisions,
+    )
     manifest_path.write_text(
         json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True),
         encoding="utf-8",
@@ -183,6 +190,22 @@ def _runtime_extractor_registry() -> ExtractorRegistry:
             TepVariableMappingExtractor(),
             TepRcaGraphExtractor(),
         ]
+    )
+
+
+def _write_review_decisions(
+    path: Path,
+    decisions: tuple[KGConstructionReviewDecision, ...],
+) -> None:
+    if not decisions:
+        path.touch(exist_ok=True)
+        return
+    path.write_text(
+        "".join(
+            json.dumps(decision.model_dump(mode="json"), sort_keys=True) + "\n"
+            for decision in decisions
+        ),
+        encoding="utf-8",
     )
 
 

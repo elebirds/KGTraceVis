@@ -21,6 +21,7 @@ from kgtracevis.kg_construction.models import (
     KG_CONSTRUCTION_LAYER_ARTIFACT_KEYS,
     KGConstructionBuildSummary,
     KGConstructionManifest,
+    KGConstructionReviewDecision,
     build_construction_manifest,
     build_construction_summary,
     build_kg_construction_run_id,
@@ -78,6 +79,7 @@ class KGConstructionResult:
         self,
         *,
         artifact_paths: dict[str, str | Path] | None = None,
+        review_decisions: tuple[KGConstructionReviewDecision, ...] = (),
     ) -> KGConstructionManifest:
         """Return a manifest DTO for the constructed candidate KG layer."""
         return build_construction_manifest(
@@ -86,6 +88,7 @@ class KGConstructionResult:
             draft=self.draft,
             summary=self.build_summary,
             artifact_paths=artifact_paths,
+            review_decisions=review_decisions,
         )
 
     def write_manifest(
@@ -93,13 +96,17 @@ class KGConstructionResult:
         path: str | Path,
         *,
         artifact_paths: dict[str, str | Path] | None = None,
+        review_decisions: tuple[KGConstructionReviewDecision, ...] = (),
     ) -> Path:
         """Write a construction manifest JSON file and return its path."""
         manifest_path = Path(path)
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(
             json.dumps(
-                self.manifest(artifact_paths=artifact_paths).model_dump(mode="json"),
+                self.manifest(
+                    artifact_paths=artifact_paths,
+                    review_decisions=review_decisions,
+                ).model_dump(mode="json"),
                 indent=2,
                 sort_keys=True,
             ),
@@ -148,6 +155,7 @@ def run_kg_construction(
     allow_reviewed_overwrite: bool = False,
     run_id: str | None = None,
     profile: RcaProfile | None = None,
+    review_decisions: tuple[KGConstructionReviewDecision, ...] = (),
 ) -> KGConstructionResult:
     """Run the RCA-oriented source-to-KG construction pipeline."""
     extractor_registry = registry or default_extractor_registry()
@@ -172,7 +180,11 @@ def run_kg_construction(
     draft = DraftKG.combine(drafts)
     resolved_run_id = run_id or build_kg_construction_run_id()
     resolved_profile = profile or profile_for_scenario(_primary_scenario(source_rows))
-    alignment = run_entity_alignment(draft, resolved_profile)
+    alignment = run_entity_alignment(
+        draft,
+        resolved_profile,
+        review_decisions=review_decisions,
+    )
     audit_graph = SourceAuditGraph(
         sources=tuple(source_rows),
         draft=draft,

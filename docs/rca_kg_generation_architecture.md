@@ -280,6 +280,19 @@ uv run python scripts/review_source_kg.py \
 This records the human decision and updates the queue item, but it does not
 silently publish an alignment merge as reviewed KG truth.
 
+To make accepted/rejected alignment decisions affect regenerated KG artifacts,
+replay the build from its Source Library and decision log:
+
+```bash
+uv run python scripts/replay_source_kg_reviews.py \
+  --build-dir runs/source_kg_build/source_library_candidate
+```
+
+Replay reruns Source Library -> Parse / Chunk -> Extractor Registry -> Draft KG
+-> Entity Alignment -> Semantic Layer -> RCA View -> Review Queue -> Publish
+using `review_decisions.jsonl` as an input. It refreshes artifacts in place
+while preserving the decision log.
+
 ```bash
 uv run python scripts/build_source_kg.py \
   --tep-semantic-lift-dir /Users/hhm/code/TEP_KG/data/processed/kg \

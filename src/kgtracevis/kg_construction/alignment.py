@@ -7,6 +7,7 @@ from typing import Any
 
 from kgtracevis.kg.graph import normalize_text
 from kgtracevis.kg_construction.draft import DraftEntity, DraftKG, DraftRelation
+from kgtracevis.kg_construction.models import KGConstructionReviewDecision
 from kgtracevis.kg_construction.profiles import RcaProfile
 
 
@@ -92,7 +93,12 @@ class AlignmentResult:
         }
 
 
-def run_entity_alignment(draft: DraftKG, profile: RcaProfile) -> AlignmentResult:
+def run_entity_alignment(
+    draft: DraftKG,
+    profile: RcaProfile,
+    *,
+    review_decisions: tuple[KGConstructionReviewDecision, ...] = (),
+) -> AlignmentResult:
     """Apply deterministic ID, alias, external-id, and signal mapping alignment."""
     canonical_by_identity: dict[str, str] = {}
     candidates: list[AlignmentCandidate] = []
@@ -101,29 +107,53 @@ def run_entity_alignment(draft: DraftKG, profile: RcaProfile) -> AlignmentResult
     endpoint_map: dict[str, str] = {}
     unresolved_records: list[AlignmentIssueRecord] = []
     conflict_records: list[AlignmentIssueRecord] = []
+    canonical_overrides, split_overrides = _alignment_review_overrides(review_decisions)
 
     for entity in draft.entities:
         suggested = entity.canonical_id or entity.entity_id_suggestion
         canonical_id = suggested
         match_type = "exact_id"
-        for identity in _entity_identities(entity):
-            existing = canonical_by_identity.get(identity)
-            if existing is None:
-                continue
-            canonical_id = existing
-            match_type = "alias"
-            if existing != suggested:
-                candidates.append(
-                    AlignmentCandidate(
-                        source_entity_id=entity.entity_id_suggestion,
-                        canonical_id=existing,
-                        match_type=match_type,
-                        confidence=0.95,
-                        reason=f"deterministic {match_type} match in {profile.domain_id}",
+        entity_key = entity.entity_id_suggestion or entity.draft_id
+        reviewed_override = canonical_overrides.get(entity_key)
+        reviewed_split = entity_key in split_overrides
+        if reviewed_override:
+            canonical_id = reviewed_override
+            match_type = "reviewed_override"
+        elif reviewed_split:
+            canonical_id = suggested or entity.entity_id_suggestion or entity.draft_id
+            match_type = "reviewed_split"
+        else:
+            for identity in _entity_identities(entity):
+                existing = canonical_by_identity.get(identity)
+                if existing is None:
+                    continue
+                canonical_id = existing
+                match_type = "alias"
+                if existing != suggested:
+                    candidates.append(
+                        AlignmentCandidate(
+                            source_entity_id=entity.entity_id_suggestion,
+                            canonical_id=existing,
+                            match_type=match_type,
+                            confidence=0.95,
+                            reason=f"deterministic {match_type} match in {profile.domain_id}",
+                        )
                     )
-                )
-            break
-        aligned = replace(entity, canonical_id=canonical_id)
+                break
+        metadata = dict(entity.metadata)
+        if match_type.startswith("reviewed_"):
+            metadata["alignment_review_match_type"] = match_type
+        reviewed_name = (
+            f"{entity.name} ({canonical_id})"
+            if reviewed_split and canonical_id and entity.name
+            else entity.name
+        )
+        aligned = replace(
+            entity,
+            canonical_id=canonical_id,
+            name=reviewed_name,
+            metadata=metadata,
+        )
         aligned_entities.append(aligned)
         if not canonical_id:
             unresolved_records.append(_unresolved_record(aligned))
@@ -134,7 +164,12 @@ def run_entity_alignment(draft: DraftKG, profile: RcaProfile) -> AlignmentResult
             endpoint_map[entity.canonical_id] = canonical_id
         for alias in entity.aliases:
             endpoint_map[alias] = canonical_id
-        for identity in _entity_identities(aligned):
+        identities = (
+            _reviewed_split_identities(aligned)
+            if reviewed_split
+            else _entity_identities(aligned)
+        )
+        for identity in identities:
             prior = canonical_by_identity.get(identity)
             if prior is not None and prior != canonical_id:
                 conflict = {
@@ -181,6 +216,71 @@ def run_entity_alignment(draft: DraftKG, profile: RcaProfile) -> AlignmentResult
     )
 
 
+def _alignment_review_overrides(
+    review_decisions: tuple[KGConstructionReviewDecision, ...],
+) -> tuple[dict[str, str], set[str]]:
+    canonical_overrides: dict[str, str] = {}
+    split_overrides: set[str] = set()
+    for decision in review_decisions:
+        if decision.target_type not in {
+            "entity_merge_candidate",
+            "unresolved_entity",
+            "entity_alignment_conflict",
+        }:
+            continue
+        source_entity_id = _decision_source_entity_id(decision)
+        if not source_entity_id:
+            continue
+        if decision.action == "accept":
+            canonical_id = _decision_canonical_id(decision)
+            if canonical_id:
+                canonical_overrides[source_entity_id] = canonical_id
+                split_overrides.discard(source_entity_id)
+        elif decision.action == "reject" and decision.target_type == "entity_merge_candidate":
+            canonical_overrides.pop(source_entity_id, None)
+            split_overrides.add(source_entity_id)
+    return canonical_overrides, split_overrides
+
+
+def _decision_source_entity_id(decision: KGConstructionReviewDecision) -> str:
+    for payload in _decision_payloads(decision):
+        value = payload.get("source_entity_id") or payload.get("entity_id_suggestion")
+        if value:
+            return str(value)
+    if decision.target_type == "entity_merge_candidate":
+        text = decision.target_key.removeprefix("entity_merge_candidate:")
+        if "->" in text:
+            return text.split("->", maxsplit=1)[0]
+    return ""
+
+
+def _decision_canonical_id(decision: KGConstructionReviewDecision) -> str:
+    for payload in _decision_payloads(decision):
+        for key in ("reviewed_canonical_id", "selected_canonical_id", "canonical_id"):
+            value = payload.get(key)
+            if value:
+                return str(value)
+    if decision.target_type == "entity_merge_candidate" and "->" in decision.target_key:
+        return decision.target_key.split("->", maxsplit=1)[1]
+    return ""
+
+
+def _decision_payloads(
+    decision: KGConstructionReviewDecision,
+) -> tuple[dict[str, Any], ...]:
+    payloads: list[dict[str, Any]] = []
+    if isinstance(decision.proposed_payload, dict):
+        payloads.append(dict(decision.proposed_payload))
+    metadata = decision.metadata
+    item = metadata.get("item") if isinstance(metadata, dict) else None
+    if isinstance(item, dict):
+        payloads.append(dict(item))
+        candidate = item.get("candidate_payload")
+        if isinstance(candidate, dict):
+            payloads.append(dict(candidate))
+    return tuple(payloads)
+
+
 def _entity_identities(entity: DraftEntity) -> tuple[str, ...]:
     identities: set[str] = set()
     for value in (entity.canonical_id, entity.entity_id_suggestion):
@@ -191,6 +291,17 @@ def _entity_identities(entity: DraftEntity) -> tuple[str, ...]:
     for alias in entity.aliases:
         if normalized_alias := normalize_text(alias):
             identities.add(f"alias:{entity.label}:{normalized_alias}")
+    external_id = str(entity.metadata.get("external_id") or "")
+    if normalized_external_id := normalize_text(external_id):
+        identities.add(f"external:{normalized_external_id}")
+    return tuple(sorted(identities))
+
+
+def _reviewed_split_identities(entity: DraftEntity) -> tuple[str, ...]:
+    identities: set[str] = set()
+    for value in (entity.canonical_id, entity.entity_id_suggestion):
+        if normalized := normalize_text(value):
+            identities.add(f"id:{normalized}")
     external_id = str(entity.metadata.get("external_id") or "")
     if normalized_external_id := normalize_text(external_id):
         identities.add(f"external:{normalized_external_id}")

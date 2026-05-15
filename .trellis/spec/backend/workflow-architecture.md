@@ -70,6 +70,10 @@ def run_source_kg_construction_workflow(
 def run_kg_construction_acceptance_smoke(
     config: KGConstructionSmokeConfig,
 ) -> KGConstructionSmokeResult: ...
+
+def replay_kg_construction_reviews(
+    config: ReplayKGConstructionReviewsConfig,
+) -> ReplayKGConstructionReviewsResult: ...
 ```
 
 CLI modules may re-export moved helper functions briefly for backward

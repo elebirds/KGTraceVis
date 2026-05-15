@@ -1,0 +1,6 @@
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"new reusable replay workflow and CLI boundary"}
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"RCA KG construction artifact and review decision contract"}
+{"type":"spec","path":".trellis/spec/backend/error-handling.md","reason":"deterministic replay validation errors"}
+{"type":"spec","path":".trellis/spec/backend/quality-guidelines.md","reason":"verification commands"}
+{"type":"guide","path":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"replay crosses source library, decisions, pipeline, artifacts"}
+{"type":"guide","path":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"reuse construction workflow and existing artifact helpers"}

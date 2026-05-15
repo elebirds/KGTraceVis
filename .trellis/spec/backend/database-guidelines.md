@@ -270,6 +270,8 @@ and RCA reasoning all consume these build artifacts.
   `uv run python scripts/build_source_kg.py [--source-library PATH] [--toy-generic-structured-source] [--toy-generic-document-source] [--tep-semantic-lift-dir DIR] [--tep-variable-mapping PATH] [--tep-rca-graph-dir DIR] [--run-id ID] --output-dir DIR`
 - Review CLI:
   `uv run python scripts/review_source_kg.py --build-dir DIR --action accept|reject [--item-type edge|ITEM_TYPE] --target-key TARGET_KEY`
+- Review replay CLI:
+  `uv run python scripts/replay_source_kg_reviews.py --build-dir DIR [--run-id ID]`
 - Acceptance smoke CLI:
   `uv run python scripts/smoke_rca_kg_construction.py --output-dir DIR [--tep-kg-root TEP_KG_ROOT] [--require-tep] [--overwrite]`
 - Service build source types:
@@ -334,6 +336,12 @@ and RCA reasoning all consume these build artifacts.
   facts.
 - API and CLI review actions must delegate to a reusable workflow under
   `src/kgtracevis/workflows/`, not duplicate artifact mutation logic.
+- Review replay must rebuild from `source_library_manifest.json` plus
+  `review_decisions.jsonl` rather than patching stale CSV rows. Accepted
+  alignment decisions may override canonical IDs; rejected merge decisions keep
+  the source entity split from the proposed canonical. Replay refreshes layer,
+  queue, publish, summary, and construction manifest artifacts while preserving
+  the append-only decision log.
 - TEP RCA graph imports are source-backed candidates. TEP_KG `accept` does not
   become KGTraceVis `reviewed` automatically.
 - Acceptance smoke must build the toy generic path from a Source Library
@@ -356,6 +364,7 @@ and RCA reasoning all consume these build artifacts.
 | `review_queue.json` contains alignment items | service DTO parses them and keeps `review_status=auto` filters working |
 | Candidate edge is accepted/rejected | edge CSV and queue payload counters stay synchronized |
 | Non-edge review item is accepted/rejected | queue payload and decision log update, but KG CSV rows are not republished as reviewed facts |
+| Review replay lacks source_library_manifest.json | fail with a deterministic source reconstruction error |
 
 ### 5. Good/Base/Bad Cases
 

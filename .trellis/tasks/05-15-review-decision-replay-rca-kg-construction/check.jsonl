@@ -1,0 +1,3 @@
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"verify replay artifact behavior"}
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"verify script delegates to workflow"}
+{"type":"spec","path":".trellis/spec/backend/quality-guidelines.md","reason":"quality gate"}
