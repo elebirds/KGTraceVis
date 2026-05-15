@@ -52,8 +52,23 @@ def test_tep_evaluation_uses_fault_number_only_as_reference(tmp_path: Path) -> N
         "faultanchor:stream_1_a_feed_loss"
     )
     assert output.summary["cases"][0]["rank"] == 1
-    assert "fault numbers are used only as evaluation references" in (
-        output.summary["claim_boundary"]
+    assert output.summary["metrics"]["explicit_fault_label_ablation_top1_stability"] == 1.0
+    assert output.summary["fault_coverage"] == {
+        "record_source": "input_records",
+        "record_count": 1,
+        "requested_faults": None,
+        "observed_faults": [6],
+        "cases_per_fault": {"6": 1},
+        "missing_requested_faults": None,
+    }
+    assert output.summary["explicit_fault_label_ablation"]["case_count"] == 1
+    assert (
+        output.summary["cases"][0]["explicit_fault_label_ablation_top1_candidate_id"]
+        == output.summary["cases"][0]["top1_candidate_id"]
+    )
+    assert output.summary["cases"][0]["explicit_fault_label_ablation_top1_stable"] is True
+    assert (
+        "fault numbers are used only as evaluation references" in (output.summary["claim_boundary"])
     )
 
 
@@ -91,9 +106,7 @@ def test_tep_evaluation_cli_uses_native_root_kgd_provider(tmp_path: Path) -> Non
 
     payload = json.loads(result.stdout)
     summary = json.loads(Path(payload["summary_path"]).read_text(encoding="utf-8"))
-    adapter_summary = json.loads(
-        Path(summary["adapter_summary_path"]).read_text(encoding="utf-8")
-    )
+    adapter_summary = json.loads(Path(summary["adapter_summary_path"]).read_text(encoding="utf-8"))
     case = summary["cases"][0]
     root_cause = case["ranked_root_causes"][0]
 
@@ -101,6 +114,7 @@ def test_tep_evaluation_cli_uses_native_root_kgd_provider(tmp_path: Path) -> Non
     assert adapter_summary["pipeline"]["tep_rca_reasoner"] == "tep_root_kgd"
     assert case["expected_root_cause_id"] == "faultanchor:stream_1_a_feed_loss"
     assert case["rank"] == 1
+    assert case["explicit_fault_label_ablation_top1_stable"] is True
     assert root_cause["candidate_id"] == "faultanchor:stream_1_a_feed_loss"
     assert root_cause["scoring_method"] == "tep_root_kgd"
 

@@ -5,12 +5,14 @@ from __future__ import annotations
 import csv
 import json
 import re
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from kgtracevis.adapters.tep_adapter import evidence_from_tep_record
 from kgtracevis.experiments.adapter_pipeline import run_adapter_pipeline
 from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
 from kgtracevis.metrics import mean_reciprocal_rank, top_k_root_cause_accuracy
@@ -22,6 +24,7 @@ from kgtracevis.producers.tep_records import (
     DEFAULT_TEP_WINDOW_SIZE,
 )
 from kgtracevis.workflows.dataset_records import DatasetRecordBuildConfig, build_dataset_records
+from kgtracevis.workflows.root_cause_provider_selection import build_pipeline
 from kgtracevis.workflows.tep_root_kgd import DEFAULT_ROOT_KGD_ASSET_DIR, load_root_kgd_assets
 
 SUMMARY_FILENAME = "tep_rca_evaluation_summary.json"
@@ -98,15 +101,31 @@ def run_tep_rca_evaluation(config: TepRcaEvaluationConfig) -> TepRcaEvaluationOu
         if not config.use_neo4j_runtime
         else KnowledgeGraph.from_default_paths()
     )
-    records_by_case = {
-        str(record.get("case_id")): record for record in _load_jsonl(records_path)
-    }
+    records = _load_jsonl(records_path)
+    records_by_case = {str(record.get("case_id")): record for record in records}
+    fault_coverage = _fault_coverage(config, records)
+    adapter_cases = [
+        case for case in adapter_output.summary.get("cases", []) if isinstance(case, Mapping)
+    ]
+    label_ablation = _label_ablation_audit(
+        adapter_cases,
+        records_by_case=records_by_case,
+        graph=graph,
+        top_k=config.top_k,
+        use_neo4j_runtime=config.use_neo4j_runtime,
+    )
     cases = [
-        _case_metrics(case, records_by_case=records_by_case, graph=graph, top_k=config.top_k)
-        for case in adapter_output.summary.get("cases", [])
-        if isinstance(case, Mapping)
+        _case_metrics(
+            case,
+            records_by_case=records_by_case,
+            graph=graph,
+            top_k=config.top_k,
+            label_ablation=label_ablation["cases_by_id"].get(str(case.get("case_id") or "")),
+        )
+        for case in adapter_cases
     ]
     metrics = _aggregate_metrics(cases, top_k=config.top_k)
+    metrics["explicit_fault_label_ablation_top1_stability"] = label_ablation["top1_stability"]
     summary = {
         "artifact_type": ARTIFACT_TYPE,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -119,7 +138,11 @@ def run_tep_rca_evaluation(config: TepRcaEvaluationConfig) -> TepRcaEvaluationOu
         "adapter_summary_path": str(adapter_output.summary_path),
         "adapter_table_path": str(adapter_output.table_path),
         "case_count": len(cases),
+        "fault_coverage": fault_coverage,
         "metrics": metrics,
+        "explicit_fault_label_ablation": {
+            key: value for key, value in label_ablation.items() if key != "cases_by_id"
+        },
         "cases": cases,
     }
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -131,6 +154,35 @@ def run_tep_rca_evaluation(config: TepRcaEvaluationConfig) -> TepRcaEvaluationOu
         adapter_summary_path=adapter_output.summary_path,
         summary=summary,
     )
+
+
+def _fault_coverage(
+    config: TepRcaEvaluationConfig,
+    records: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    observed_counter = Counter(
+        fault_number for record in records if (fault_number := _fault_number(record)) is not None
+    )
+    observed_faults = sorted(observed_counter)
+    requested_faults = None if config.input_records_path is not None else sorted(config.faults)
+    return {
+        "record_source": "input_records" if config.input_records_path is not None else "raw_tep",
+        "record_count": len(records),
+        "requested_faults": requested_faults,
+        "observed_faults": observed_faults,
+        "cases_per_fault": {
+            str(fault_number): observed_counter[fault_number] for fault_number in observed_faults
+        },
+        "missing_requested_faults": (
+            None
+            if requested_faults is None
+            else [
+                fault_number
+                for fault_number in requested_faults
+                if fault_number not in observed_counter
+            ]
+        ),
+    }
 
 
 def _prepare_records(config: TepRcaEvaluationConfig) -> Path:
@@ -166,6 +218,7 @@ def _case_metrics(
     records_by_case: Mapping[str, Mapping[str, Any]],
     graph: KnowledgeGraph,
     top_k: int,
+    label_ablation: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     case_id = str(case.get("case_id") or "")
     record = records_by_case.get(case_id, {})
@@ -180,6 +233,12 @@ def _case_metrics(
         "fault_number": fault_number,
         "expected_root_cause_id": expected_id,
         "top1_candidate_id": predicted_ids[0] if predicted_ids else None,
+        "explicit_fault_label_ablation_top1_candidate_id": (
+            label_ablation.get("top1_candidate_id") if label_ablation else None
+        ),
+        "explicit_fault_label_ablation_top1_stable": (
+            label_ablation.get("top1_stable") if label_ablation else None
+        ),
         "rank": rank,
         "hit_at_1": rank == 1,
         "hit_at_3": rank is not None and rank <= 3,
@@ -189,6 +248,68 @@ def _case_metrics(
         "ranked_root_causes": ranked,
         "top_k_paths": paths[:top_k],
     }
+
+
+def _label_ablation_audit(
+    adapter_cases: Sequence[Mapping[str, Any]],
+    *,
+    records_by_case: Mapping[str, Mapping[str, Any]],
+    graph: KnowledgeGraph,
+    top_k: int,
+    use_neo4j_runtime: bool,
+) -> dict[str, Any]:
+    """Rerun TEP RCA after removing explicit fault labels from producer records."""
+    pipeline = build_pipeline() if use_neo4j_runtime else build_pipeline(graph=graph)
+    cases_by_id: dict[str, dict[str, Any]] = {}
+    changed_case_ids: list[str] = []
+    audited_count = 0
+    for case in adapter_cases:
+        case_id = str(case.get("case_id") or "")
+        record = records_by_case.get(case_id)
+        if not record:
+            continue
+        original_top1 = _top1_candidate_id(case)
+        scrubbed_record = _scrub_explicit_fault_labels(record)
+        scrubbed_evidence = evidence_from_tep_record(scrubbed_record)
+        scrubbed_ranked = pipeline.analyze(scrubbed_evidence, top_k=top_k).ranked_root_causes
+        scrubbed_top1 = scrubbed_ranked[0].candidate_id if scrubbed_ranked else None
+        stable = original_top1 == scrubbed_top1
+        audited_count += 1
+        if not stable:
+            changed_case_ids.append(case_id)
+        cases_by_id[case_id] = {
+            "case_id": case_id,
+            "top1_candidate_id": scrubbed_top1,
+            "top1_stable": stable,
+        }
+    return {
+        "scope": "explicit_fault_number_and_fault_id_removed_before_rerunning_rca",
+        "case_count": audited_count,
+        "top1_stability": (
+            (audited_count - len(changed_case_ids)) / audited_count if audited_count else 0.0
+        ),
+        "changed_case_ids": changed_case_ids,
+        "cases_by_id": cases_by_id,
+    }
+
+
+def _top1_candidate_id(case: Mapping[str, Any]) -> str | None:
+    ranked = _list_of_dicts(case.get("ranked_root_causes"))
+    if not ranked:
+        return None
+    return str(ranked[0].get("candidate_id") or "") or None
+
+
+def _scrub_explicit_fault_labels(record: Mapping[str, Any]) -> dict[str, Any]:
+    scrubbed = json.loads(json.dumps(record))
+    for key in ("fault_number", "fault_id"):
+        scrubbed.pop(key, None)
+    for container_key in ("extra", "metadata"):
+        container = scrubbed.get(container_key)
+        if isinstance(container, dict):
+            for key in ("fault_number", "fault_id"):
+                container.pop(key, None)
+    return scrubbed
 
 
 def _aggregate_metrics(cases: Sequence[Mapping[str, Any]], *, top_k: int) -> dict[str, Any]:
@@ -303,6 +424,8 @@ def _write_case_table(cases: Sequence[Mapping[str, Any]], output_path: Path) -> 
         "fault_number",
         "expected_root_cause_id",
         "top1_candidate_id",
+        "explicit_fault_label_ablation_top1_candidate_id",
+        "explicit_fault_label_ablation_top1_stable",
         "rank",
         "hit_at_1",
         "hit_at_3",
