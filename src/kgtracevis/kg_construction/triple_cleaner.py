@@ -14,16 +14,12 @@ VALID_SCENARIOS = {"mvtec", "tep", "wafer", "shared"}
 VALID_REVIEW_STATUS = {"auto", "reviewed", "rejected"}
 
 
-def clean_candidate_nodes(candidates: Iterable[CandidateEntity | KGNode]) -> list[KGNode]:
-    """Trim, validate, and deduplicate candidate nodes."""
+def clean_kg_nodes(nodes: Iterable[KGNode]) -> list[KGNode]:
+    """Trim, validate, and deduplicate KG node rows."""
     by_id: dict[str, KGNode] = {}
     identity_to_id: dict[str, str] = {}
-    for candidate in candidates:
-        if isinstance(candidate, CandidateEntity):
-            candidate_node = candidate.to_kg_node()
-        else:
-            candidate_node = candidate
-        node = _normalize_node(candidate_node)
+    for node_row in nodes:
+        node = _normalize_node(node_row)
         existing = by_id.get(node.id)
         if existing is not None:
             by_id[node.id] = _merge_nodes(existing, node)
@@ -38,23 +34,29 @@ def clean_candidate_nodes(candidates: Iterable[CandidateEntity | KGNode]) -> lis
     return sorted(by_id.values(), key=lambda item: item.id)
 
 
-def clean_candidate_triples(
-    candidates: Iterable[CandidateTriple | KGEdge],
+def clean_candidate_nodes(candidates: Iterable[CandidateEntity | KGNode]) -> list[KGNode]:
+    """Trim, validate, and deduplicate legacy candidate nodes."""
+    return clean_kg_nodes(
+        candidate.to_kg_node() if isinstance(candidate, CandidateEntity) else candidate
+        for candidate in candidates
+    )
+
+
+def clean_kg_edges(
+    edges: Iterable[KGEdge],
     *,
     existing_edges: Iterable[KGEdge] = (),
     allow_reviewed_overwrite: bool = False,
 ) -> list[KGEdge]:
-    """Trim, validate, and deduplicate candidate triples.
+    """Trim, validate, and deduplicate KG edge rows.
 
     Existing reviewed edges are protected from conflicting candidate overwrites
     unless explicitly allowed.
     """
     protected = {edge.edge_id: edge for edge in existing_edges}
     cleaned: dict[str, KGEdge] = {}
-    for candidate in candidates:
-        edge = _normalize_edge(
-            candidate.to_kg_edge() if isinstance(candidate, CandidateTriple) else candidate
-        )
+    for edge_row in edges:
+        edge = _normalize_edge(edge_row)
         existing = protected.get(edge.edge_id)
         if existing is not None and existing != edge:
             if existing.review_status == "reviewed" and not allow_reviewed_overwrite:
@@ -70,6 +72,25 @@ def clean_candidate_triples(
         if edge.review_status == "reviewed" or merged_edge.review_status != "reviewed":
             cleaned[edge.edge_id] = edge
     return sorted(cleaned.values(), key=lambda item: item.edge_id)
+
+
+def clean_candidate_triples(
+    candidates: Iterable[CandidateTriple | KGEdge],
+    *,
+    existing_edges: Iterable[KGEdge] = (),
+    allow_reviewed_overwrite: bool = False,
+) -> list[KGEdge]:
+    """Trim, validate, and deduplicate legacy candidate triples."""
+    return clean_kg_edges(
+        (
+            candidate.to_kg_edge()
+            if isinstance(candidate, CandidateTriple)
+            else candidate
+            for candidate in candidates
+        ),
+        existing_edges=existing_edges,
+        allow_reviewed_overwrite=allow_reviewed_overwrite,
+    )
 
 
 def _normalize_node(node: KGNode) -> KGNode:

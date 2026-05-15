@@ -7,12 +7,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from io import StringIO
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from kgtracevis.kg.graph import KGEdge
-from kgtracevis.kg_construction.candidate_entity_extractor import CandidateEntity
-from kgtracevis.kg_construction.candidate_triple_extractor import CandidateTriple
+from kgtracevis.kg.graph import KGEdge, KGNode
 from kgtracevis.kg_construction.confidence_assigner import edge_weight
+
+if TYPE_CHECKING:
+    from kgtracevis.kg_construction.candidate_entity_extractor import CandidateEntity
+    from kgtracevis.kg_construction.candidate_triple_extractor import CandidateTriple
 
 DraftStatus = Literal["draft", "auto", "accepted", "rejected", "published"]
 
@@ -58,16 +60,23 @@ class DraftEntity:
     status: DraftStatus = "draft"
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
+    def to_kg_node(self) -> KGNode:
+        """Convert the draft entity directly to the KG node row contract."""
+        return draft_entity_to_kg_node(self)
+
     def to_candidate_entity(self) -> CandidateEntity:
         """Convert the draft entity to the existing candidate entity contract."""
+        from kgtracevis.kg_construction.candidate_entity_extractor import CandidateEntity
+
+        node = self.to_kg_node()
         evidence = self.evidence or self.evidence_span or self.draft_id
         return CandidateEntity(
-            id=self.canonical_id or self.entity_id_suggestion,
-            name=self.name,
-            label=self.label,
-            scenario=self.scenario,
-            aliases=self.aliases,
-            description=self.description,
+            id=node.id,
+            name=node.name,
+            label=node.label,
+            scenario=node.scenario,
+            aliases=node.aliases,
+            description=node.description,
             source=self.source_id,
             evidence=evidence,
         )
@@ -93,37 +102,41 @@ class DraftRelation:
 
     def to_candidate_triple(self) -> CandidateTriple:
         """Convert the draft relation to the existing candidate triple contract."""
+        from kgtracevis.kg_construction.candidate_triple_extractor import CandidateTriple
+
+        edge = self.to_kg_edge()
         return CandidateTriple(
-            head=self.head,
-            relation=self.relation,
-            tail=self.tail,
-            scenario=self.scenario,
-            source=self.source_id,
-            evidence=self.evidence or self.evidence_span or self.draft_id,
-            confidence=self.confidence,
-            weight=edge_weight(self.confidence),
-            review_status=_REVIEW_STATUS_BY_DRAFT_STATUS[self.status],
-            relation_family=_metadata_text(self.metadata, "relation_family"),
-            propagation_enabled=_metadata_bool(self.metadata, "propagation_enabled", False),
-            propagation_direction=_metadata_text(
-                self.metadata, "propagation_direction", default="forward"
-            ),
-            propagation_priority=_metadata_float(self.metadata, "propagation_priority", 0.0),
-            attenuation=_metadata_float(self.metadata, "attenuation", 1.0),
-            edge_weight=_metadata_optional_float(self.metadata, "edge_weight"),
-            root_candidate=_metadata_bool(self.metadata, "root_candidate", False),
-            observable=_metadata_bool(self.metadata, "observable", False),
-            event_anchor=_metadata_text(self.metadata, "event_anchor"),
-            fault_anchor=_metadata_text(self.metadata, "fault_anchor"),
-            task_view=_metadata_text(self.metadata, "task_view"),
-            confidence_policy=_metadata_text(self.metadata, "confidence_policy"),
-            external_edge_id=_metadata_text(self.metadata, "external_edge_id"),
-            kg_build_id=_metadata_text(self.metadata, "kg_build_id"),
+            head=edge.head,
+            relation=edge.relation,
+            tail=edge.tail,
+            scenario=edge.scenario,
+            source=edge.source,
+            evidence=edge.evidence,
+            confidence=edge.confidence,
+            weight=edge.weight,
+            review_status=edge.review_status,
+            feedback_count=edge.feedback_count,
+            accepted_count=edge.accepted_count,
+            rejected_count=edge.rejected_count,
+            relation_family=edge.relation_family,
+            propagation_enabled=edge.propagation_enabled,
+            propagation_direction=edge.propagation_direction,
+            propagation_priority=edge.propagation_priority,
+            attenuation=edge.attenuation,
+            edge_weight=edge.edge_weight,
+            root_candidate=edge.root_candidate,
+            observable=edge.observable,
+            event_anchor=edge.event_anchor,
+            fault_anchor=edge.fault_anchor,
+            task_view=edge.task_view,
+            confidence_policy=edge.confidence_policy,
+            external_edge_id=edge.external_edge_id,
+            kg_build_id=edge.kg_build_id,
         )
 
     def to_kg_edge(self) -> KGEdge:
         """Convert the draft relation to the extended KG edge contract."""
-        return self.to_candidate_triple().to_kg_edge()
+        return draft_relation_to_kg_edge(self)
 
 
 @dataclass(frozen=True)
@@ -145,6 +158,54 @@ class DraftKG:
 def draft_status_to_review_status(status: DraftStatus) -> str:
     """Return the KG edge review status corresponding to a draft status."""
     return _REVIEW_STATUS_BY_DRAFT_STATUS[status]
+
+
+def draft_entity_to_kg_node(entity: DraftEntity) -> KGNode:
+    """Convert a draft entity directly to a KG node row."""
+    return KGNode(
+        id=entity.canonical_id or entity.entity_id_suggestion,
+        name=entity.name,
+        label=entity.label,
+        scenario=entity.scenario,
+        aliases=entity.aliases,
+        description=entity.description,
+    )
+
+
+def draft_relation_to_kg_edge(relation: DraftRelation) -> KGEdge:
+    """Convert a draft relation directly to a KG edge row with RCA metadata."""
+    return KGEdge(
+        head=relation.head,
+        relation=relation.relation,
+        tail=relation.tail,
+        scenario=relation.scenario,
+        source=relation.source_id,
+        evidence=relation.evidence or relation.evidence_span or relation.draft_id,
+        confidence=relation.confidence,
+        weight=edge_weight(relation.confidence),
+        review_status=draft_status_to_review_status(relation.status),
+        feedback_count=0,
+        accepted_count=0,
+        rejected_count=0,
+        relation_family=_metadata_text(relation.metadata, "relation_family"),
+        propagation_enabled=_metadata_bool(relation.metadata, "propagation_enabled", False),
+        propagation_direction=_metadata_text(
+            relation.metadata,
+            "propagation_direction",
+            default="forward",
+        ),
+        propagation_priority=_metadata_float(relation.metadata, "propagation_priority", 0.0),
+        attenuation=_metadata_float(relation.metadata, "attenuation", 1.0),
+        edge_weight=_metadata_optional_float(relation.metadata, "edge_weight"),
+        root_candidate=_metadata_bool(relation.metadata, "root_candidate", False),
+        observable=_metadata_bool(relation.metadata, "observable", False),
+        event_anchor=_metadata_text(relation.metadata, "event_anchor"),
+        fault_anchor=_metadata_text(relation.metadata, "fault_anchor"),
+        task_view=_metadata_text(relation.metadata, "task_view"),
+        confidence_policy=_metadata_text(relation.metadata, "confidence_policy"),
+        external_edge_id=_metadata_text(relation.metadata, "external_edge_id"),
+        kg_build_id=_metadata_text(relation.metadata, "kg_build_id"),
+    )
 
 
 def _metadata_text(

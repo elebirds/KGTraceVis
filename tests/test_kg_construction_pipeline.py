@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 from kgtracevis.kg_construction import (
+    CandidateEntity,
+    CandidateTriple,
     DraftEntity,
     DraftKG,
     DraftRelation,
@@ -16,6 +18,10 @@ from kgtracevis.kg_construction import (
     TepRcaGraphExtractor,
     TepSemanticLiftExtractor,
     TepVariableMappingExtractor,
+    clean_candidate_nodes,
+    clean_candidate_triples,
+    clean_kg_edges,
+    clean_kg_nodes,
     draft_status_to_review_status,
     run_kg_construction,
     tep_external_id_to_kg_id,
@@ -132,6 +138,119 @@ def test_draft_status_maps_to_kg_review_status() -> None:
     assert draft_status_to_review_status("accepted") == "reviewed"
     assert draft_status_to_review_status("published") == "reviewed"
     assert draft_status_to_review_status("rejected") == "rejected"
+
+
+def test_draft_rows_convert_directly_to_kg_rows_with_rca_metadata() -> None:
+    """Draft-to-KG conversion should preserve RCA metadata without candidate bridge."""
+    entity = DraftEntity(
+        draft_id="entity-component-a",
+        source_id="unit_source",
+        extractor_name="unit",
+        extractor_version="v1",
+        scenario="tep",
+        entity_id_suggestion="component_a",
+        canonical_id="ComponentA",
+        name="Component A",
+        label="Component",
+        aliases=("component:a",),
+        description="RCA component anchor",
+        evidence="node evidence",
+    )
+    relation = DraftRelation(
+        draft_id="relation-component-fault",
+        source_id="unit_source",
+        extractor_name="unit",
+        extractor_version="v1",
+        scenario="tep",
+        head="component_a",
+        relation="causes",
+        tail="fault_06",
+        evidence="edge evidence",
+        confidence=0.71,
+        status="accepted",
+        metadata={
+            "relation_family": "FAULT_SOURCE",
+            "propagation_enabled": "true",
+            "propagation_direction": "reverse",
+            "propagation_priority": "0.8",
+            "attenuation": "0.6",
+            "edge_weight": "0.12",
+            "root_candidate": "true",
+            "observable": True,
+            "event_anchor": "event:fault_06",
+            "fault_anchor": "fault_anchor:fault_06",
+            "task_view": "root_kgd_view",
+            "confidence_policy": "curated_bridge",
+            "external_edge_id": "rca_edge_1",
+            "kg_build_id": "kgbuild_existing",
+        },
+    )
+
+    node = entity.to_kg_node()
+    edge = relation.to_kg_edge()
+    cleaned_nodes = clean_kg_nodes([node])
+    cleaned_edges = clean_kg_edges([edge])
+
+    assert node.id == "ComponentA"
+    assert cleaned_nodes[0].id == "ComponentA"
+    assert edge.relation_family == "FAULT_SOURCE"
+    assert edge.propagation_enabled is True
+    assert edge.propagation_direction == "reverse"
+    assert edge.propagation_priority == 0.8
+    assert edge.attenuation == 0.6
+    assert edge.edge_weight == 0.12
+    assert edge.root_candidate is True
+    assert edge.observable is True
+    assert edge.event_anchor == "event:fault_06"
+    assert edge.fault_anchor == "fault_anchor:fault_06"
+    assert edge.task_view == "root_kgd_view"
+    assert edge.confidence_policy == "curated_bridge"
+    assert edge.external_edge_id == "rca_edge_1"
+    assert edge.kg_build_id == "kgbuild_existing"
+    assert cleaned_edges[0].relation == "CAUSES"
+    assert cleaned_edges[0].weight == 0.29
+
+
+def test_legacy_candidate_api_matches_direct_draft_conversion() -> None:
+    """Candidate bridge methods should keep old callers compatible."""
+    entity = DraftEntity(
+        draft_id="entity-unit",
+        source_id="legacy_source",
+        extractor_name="unit",
+        extractor_version="v1",
+        scenario="tep",
+        entity_id_suggestion="UnitNode",
+        name="Unit node",
+        label="Variable",
+        aliases=("unit",),
+        evidence="node evidence",
+    )
+    relation = DraftRelation(
+        draft_id="relation-unit",
+        source_id="legacy_source",
+        extractor_name="unit",
+        extractor_version="v1",
+        scenario="tep",
+        head="UnitNode",
+        relation="OBSERVED_BY",
+        tail="SensorNode",
+        evidence="edge evidence",
+        confidence=0.82,
+        metadata={
+            "relation_family": "OBSERVATION",
+            "propagation_enabled": True,
+            "external_edge_id": "legacy_edge",
+        },
+    )
+
+    legacy_entity = entity.to_candidate_entity()
+    legacy_triple = relation.to_candidate_triple()
+
+    assert isinstance(legacy_entity, CandidateEntity)
+    assert isinstance(legacy_triple, CandidateTriple)
+    assert clean_candidate_nodes([legacy_entity]) == clean_kg_nodes([entity.to_kg_node()])
+    assert clean_candidate_triples([legacy_triple]) == clean_kg_edges([relation.to_kg_edge()])
+    assert legacy_triple.external_edge_id == "legacy_edge"
 
 
 def test_tep_external_id_to_kg_id_is_pascal_case() -> None:

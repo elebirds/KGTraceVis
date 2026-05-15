@@ -33,6 +33,8 @@ from kgtracevis.kg_construction.draft import (
     DraftKG,
     DraftRelation,
     KGConstructionSource,
+    draft_entity_to_kg_node,
+    draft_relation_to_kg_edge,
     draft_relations_from_source_text,
     draft_status_to_review_status,
 )
@@ -108,6 +110,8 @@ from kgtracevis.kg_construction.tep_import import tep_external_id_to_kg_id
 from kgtracevis.kg_construction.triple_cleaner import (
     clean_candidate_nodes,
     clean_candidate_triples,
+    clean_kg_edges,
+    clean_kg_nodes,
 )
 
 __all__ = [
@@ -162,9 +166,13 @@ __all__ = [
     "build_review_queue",
     "clean_candidate_nodes",
     "clean_candidate_triples",
+    "clean_kg_edges",
+    "clean_kg_nodes",
     "default_extractor_registry",
     "download_mvtec_source_bundle",
     "draft_relations_from_source_text",
+    "draft_entity_to_kg_node",
+    "draft_relation_to_kg_edge",
     "draft_rows_from_draft",
     "draft_status_to_review_status",
     "edge_weight",

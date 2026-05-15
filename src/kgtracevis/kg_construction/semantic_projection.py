@@ -8,8 +8,8 @@ from kgtracevis.kg.graph import KGEdge, KGNode
 from kgtracevis.kg_construction.draft import DraftKG, DraftRelation
 from kgtracevis.kg_construction.profiles import RcaProfile
 from kgtracevis.kg_construction.triple_cleaner import (
-    clean_candidate_nodes,
-    clean_candidate_triples,
+    clean_kg_edges,
+    clean_kg_nodes,
 )
 
 
@@ -25,11 +25,11 @@ class SemanticLayerResult:
 def project_semantic_layer(draft: DraftKG, profile: RcaProfile) -> SemanticLayerResult:
     """Project aligned draft knowledge into a task-relevant semantic layer."""
     entity_rows = [
-        entity.to_candidate_entity()
+        entity.to_kg_node()
         for entity in draft.entities
         if entity.label in profile.keep_labels
     ]
-    nodes = tuple(clean_candidate_nodes(entity_rows))
+    nodes = tuple(clean_kg_nodes(entity_rows))
     node_ids = {node.id for node in nodes}
     relation_rows: list[KGEdge] = []
     skipped_relations: list[str] = []
@@ -43,7 +43,7 @@ def project_semantic_layer(draft: DraftKG, profile: RcaProfile) -> SemanticLayer
             skipped_relations.append(relation.draft_id)
             continue
         relation_rows.append(edge)
-    edges = tuple(clean_candidate_triples(relation_rows))
+    edges = tuple(clean_kg_edges(relation_rows))
     manifest = {
         "artifact_type": "semantic_layer_manifest_v1",
         "profile": profile.domain_id,
