@@ -73,6 +73,10 @@ pending.
 * Added focused TEP RCA graph assertion: imported external
   `review_status=accept` stays in draft metadata, while the propagated
   FAULT_SOURCE edge remains pending in publish policy until KGTraceVis review.
+* Final verification: full pytest `310 passed`; `run_examples.py`, ruff, mypy,
+  and import dry-run passed. Real TEP smoke produced `285` candidate edges,
+  `33` policy-allowed published edges, and `252` pending review edges with TEP
+  relation families preserved.
 
 ## Definition of Done
 
