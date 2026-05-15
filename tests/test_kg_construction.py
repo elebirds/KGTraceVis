@@ -108,6 +108,40 @@ def test_source_library_loads_records_and_writes_safe_manifest(tmp_path: Path) -
     assert "Cooling alert can suggest pump seal wear" not in manifest_payload
 
 
+def test_source_library_resolves_relative_paths_from_manifest_dir(
+    tmp_path: Path,
+) -> None:
+    """Relative source paths should stay portable with the library manifest."""
+    library_dir = tmp_path / "library"
+    library_dir.mkdir()
+    source_file = library_dir / "docs" / "note.txt"
+    source_file.parent.mkdir()
+    source_file.write_text("Portable source note.", encoding="utf-8")
+    library_path = library_dir / "source_library.json"
+    library_path.write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {
+                        "source_id": "portable_note",
+                        "source_type": "txt",
+                        "scenario": "shared",
+                        "path": "docs/note.txt",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    records = load_source_library(library_path)
+    source = records[0].to_construction_source()
+
+    assert records[0].path == source_file
+    assert source.path == source_file
+    assert source.metadata["provenance_policy"] == "source_grounded_candidate"
+
+
 def test_candidate_entity_and_triple_extraction_from_structured_records() -> None:
     """Structured rows should produce explicit candidate nodes and triples."""
     records = [

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from kgtracevis.kg_construction import (
     KGConstructionSource,
+    load_source_library,
 )
 from kgtracevis.workflows.source_kg_construction import (
     SourceKGConstructionWorkflowConfig,
@@ -23,6 +24,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("runs/source_kg_build"),
         help="Directory for candidate nodes/edges and summary artifacts.",
+    )
+    parser.add_argument(
+        "--source-library",
+        type=Path,
+        help="CSV, JSON, or JSONL Source Library manifest to build from.",
     )
     parser.add_argument(
         "--tep-semantic-lift-dir",
@@ -91,8 +97,8 @@ def main() -> None:
         raise SystemExit(
             "No source inputs provided. Pass --tep-semantic-lift-dir, "
             "--tep-semantic-nodes/--tep-semantic-edges, --tep-variable-mapping, "
-            "--tep-rca-graph-dir, --toy-generic-structured-source, or "
-            "--toy-generic-document-source."
+            "--tep-rca-graph-dir, --source-library, --toy-generic-structured-source, "
+            "or --toy-generic-document-source."
         )
 
     try:
@@ -111,6 +117,11 @@ def main() -> None:
 
 def _build_sources(args: argparse.Namespace) -> list[KGConstructionSource]:
     sources: list[KGConstructionSource] = []
+    if args.source_library is not None:
+        sources.extend(
+            record.to_construction_source()
+            for record in load_source_library(args.source_library)
+        )
     if args.tep_semantic_lift_dir is not None:
         sources.append(
             KGConstructionSource(

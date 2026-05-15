@@ -1,0 +1,3 @@
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"verify CLI/artifact contract"}
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"verify script remains thin workflow client"}
+{"type":"spec","path":".trellis/spec/backend/quality-guidelines.md","reason":"verify focused and broad checks"}

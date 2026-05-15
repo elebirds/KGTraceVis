@@ -267,7 +267,7 @@ and RCA reasoning all consume these build artifacts.
 ### 2. Signatures
 
 - CLI:
-  `uv run python scripts/build_source_kg.py [--toy-generic-structured-source] [--toy-generic-document-source] [--tep-semantic-lift-dir DIR] [--tep-variable-mapping PATH] [--tep-rca-graph-dir DIR] [--run-id ID] --output-dir DIR`
+  `uv run python scripts/build_source_kg.py [--source-library PATH] [--toy-generic-structured-source] [--toy-generic-document-source] [--tep-semantic-lift-dir DIR] [--tep-variable-mapping PATH] [--tep-rca-graph-dir DIR] [--run-id ID] --output-dir DIR`
 - Review CLI:
   `uv run python scripts/review_source_kg.py --build-dir DIR --action accept|reject --target-key HEAD|RELATION|TAIL|SCENARIO`
 - Service build source types:
@@ -296,6 +296,9 @@ and RCA reasoning all consume these build artifacts.
 - Offline document IE may replay source-grounded fixtures for tests and local
   demos, but fixture/LLM output is still DraftKG candidate output with
   `review_status=auto`, not reviewed KG truth.
+- Source Library manifests passed by `--source-library` are loaded through
+  `load_source_library(...)`; relative source paths resolve from the manifest
+  directory before parsing or extraction.
 - `kg_construction_summary.json` and `kg_construction_manifest.json` must share
   the same stable artifact keys for all required outputs.
 - `review_decisions.jsonl` is the append-only review decision log.

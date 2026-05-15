@@ -1,0 +1,6 @@
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"script-to-workflow boundary and source-to-KG workflow contract"}
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"RCA KG construction artifact and CLI contract"}
+{"type":"spec","path":".trellis/spec/backend/error-handling.md","reason":"loader validation and path errors"}
+{"type":"spec","path":".trellis/spec/backend/quality-guidelines.md","reason":"verification commands"}
+{"type":"guide","path":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"source library data crosses CLI, loader, workflow, artifacts"}
+{"type":"guide","path":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"reuse existing source library loader and workflow"}

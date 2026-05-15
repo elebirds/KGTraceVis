@@ -177,9 +177,10 @@ values and document text stay out of the manifest.
 Source Library entries are represented by `SourceLibraryRecord` before parsing.
 They include `source_id`, `source_type`, `scenario`, `path`/`url`/`text`,
 metadata, `created_at`, and `provenance_policy`. JSON, JSONL, and CSV source
-library files can be loaded into construction sources, and source-library
-manifests record only safe descriptors such as IDs, paths, metadata, and
-`has_text`.
+library files can be loaded into construction sources. When a Source Library is
+loaded from a file, relative source paths resolve from the manifest directory so
+the library can move as a portable bundle. Source-library manifests record only
+safe descriptors such as IDs, paths, metadata, and `has_text`.
 
 `ParsedSourceContent` is the current `ParserOutput` contract. The pipeline
 resolves extractors first, parses each source once, and then prefers extractor
@@ -230,8 +231,23 @@ uv run python scripts/build_source_kg.py \
 ```
 
 The document source creates a high-risk root-cause candidate, so
-`published_edges.csv` remains empty until a reviewer accepts it. A local,
-service-free review can be applied with:
+`published_edges.csv` remains empty until a reviewer accepts it.
+
+User-provided Source Library manifests can drive the same build path:
+
+```bash
+uv run python scripts/build_source_kg.py \
+  --source-library configs/source_library.json \
+  --run-id kgbuild_source_library_demo \
+  --output-dir runs/source_kg_build/source_library_candidate \
+  --overwrite
+```
+
+The manifest may be JSON, JSONL, or CSV. Each entry becomes a
+`KGConstructionSource`, and any relative `path` is interpreted relative to the
+manifest file.
+
+A local, service-free review can be applied with:
 
 ```bash
 uv run python scripts/review_source_kg.py \

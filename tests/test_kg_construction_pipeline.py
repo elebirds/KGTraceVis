@@ -1183,6 +1183,113 @@ def test_build_source_kg_script_supports_offline_document_source(
     assert review_queue[0]["review_status"] == "auto"
 
 
+def test_build_source_kg_script_supports_source_library_document_source(
+    tmp_path: Path,
+) -> None:
+    """The CLI should build from a portable Source Library manifest."""
+    library_dir = tmp_path / "library"
+    library_dir.mkdir()
+    source_path = library_dir / "source_note.txt"
+    source_path.write_text(
+        "Cooling alert can suggest pump seal wear. "
+        "The pressure signal is observed by Pump A.",
+        encoding="utf-8",
+    )
+    library_path = library_dir / "source_library.json"
+    library_path.write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {
+                        "source_id": "library_document",
+                        "source_type": "txt",
+                        "scenario": "shared",
+                        "path": "source_note.txt",
+                        "metadata": {
+                            "source_format": "txt",
+                            "document_ie_payload": {
+                                "entities": [
+                                    {
+                                        "id": "CoolingAlert",
+                                        "name": "Cooling alert",
+                                        "label": "Event",
+                                        "evidence": (
+                                            "Cooling alert can suggest pump seal wear."
+                                        ),
+                                        "confidence": 0.56,
+                                    },
+                                    {
+                                        "id": "PumpSealWear",
+                                        "name": "Pump seal wear",
+                                        "label": "RootCause",
+                                        "evidence": "pump seal wear",
+                                        "confidence": 0.52,
+                                    },
+                                ],
+                                "relations": [
+                                    {
+                                        "head": "CoolingAlert",
+                                        "relation": "SUGGESTS_ROOT_CAUSE",
+                                        "tail": "PumpSealWear",
+                                        "evidence": (
+                                            "Cooling alert can suggest pump seal wear."
+                                        ),
+                                        "confidence": 0.5,
+                                    }
+                                ],
+                            },
+                        },
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "source_library_candidate"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_source_kg.py",
+            "--source-library",
+            str(library_path),
+            "--run-id",
+            "kgbuild_cli_source_library_document",
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    assert "source_to_kg_construction_result_v1" in completed.stdout
+    summary = json.loads((output_dir / "kg_construction_summary.json").read_text())
+    audit_manifest = json.loads(
+        (output_dir / "source_audit_graph_manifest.json").read_text()
+    )
+    review_queue = json.loads((output_dir / "review_queue.json").read_text())
+    publish_report = json.loads((output_dir / "publish_report.json").read_text())
+
+    assert summary["kg_build_id"] == "kgbuild_cli_source_library_document"
+    assert summary["source_ids"] == ["library_document"]
+    assert summary["extractor_versions"] == {"offline_document_ie": "v1"}
+    assert summary["draft_entity_count"] == 2
+    assert summary["draft_relation_count"] == 1
+    assert summary["edge_count"] == 1
+    assert set(_required_artifact_keys()) <= set(summary["output"])
+    parsed_source = audit_manifest["parsed_sources"][0]
+    parsed_payload = json.dumps(parsed_source, sort_keys=True)
+    assert parsed_source["kind"] == "text_chunks"
+    assert parsed_source["safe_source"]["path"] == str(source_path)
+    assert "Cooling alert can suggest pump seal wear" not in parsed_payload
+    assert review_queue[0]["target_key"] == (
+        "CoolingAlert|SUGGESTS_ROOT_CAUSE|PumpSealWear|shared"
+    )
+    assert publish_report["disposition_counts"] == {"pending_review": 1}
+
+
 def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
     path.write_text(
         "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",

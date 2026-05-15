@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -118,6 +118,7 @@ def load_source_library(path: str | Path) -> tuple[SourceLibraryRecord, ...]:
         for row in rows
         if isinstance(row, Mapping)
     )
+    records = _resolve_relative_paths(records, base_dir=source_path.parent)
     _validate_source_library(records, source_path=source_path)
     return records
 
@@ -165,6 +166,20 @@ def _validate_source_library(
             raise ValueError(
                 f"{source_path} source requires path, url, or text: {record.source_id}"
             )
+
+
+def _resolve_relative_paths(
+    records: Sequence[SourceLibraryRecord],
+    *,
+    base_dir: Path,
+) -> tuple[SourceLibraryRecord, ...]:
+    resolved: list[SourceLibraryRecord] = []
+    for record in records:
+        if record.path is not None and not record.path.is_absolute():
+            resolved.append(replace(record, path=base_dir / record.path))
+        else:
+            resolved.append(record)
+    return tuple(resolved)
 
 
 def _required_text(payload: Mapping[str, Any], key: str) -> str:
