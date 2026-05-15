@@ -162,6 +162,43 @@ Exposed candidate KG overlay validation through the construction service/API. Bu
 - Continue toward a final readiness pass: documentation consistency, acceptance matrix, and remaining sharp edges.
 
 
+## Session 44: M27 RCA-KG construction acceptance matrix
+
+**Date**: 2026-05-15
+**Task**: M27 RCA-KG construction acceptance matrix
+**Branch**: `main`
+
+### Summary
+
+Added a dedicated acceptance matrix documenting the implemented RCA-KG construction path, required artifacts, runtime overlay validation report, API/CLI entry points, commands, boundary checks, and remaining non-goals. Linked it from the main KG construction documentation.
+
+### Main Changes
+
+- Added `docs/rca_kg_construction_acceptance_matrix.md`.
+- Linked the matrix from `docs/kg_construction.md`.
+- Recorded the latest full acceptance gate and four passing smoke paths.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `77ddba9` | Document RCA KG construction acceptance matrix |
+
+### Testing
+
+- [OK] `uv run --extra dev ruff check .`
+- [OK] `uv run --extra dev mypy src tests scripts`
+- [OK] `uv run --extra dev pytest tests/test_kg_overlay_validation_workflow.py tests/test_service_api.py::test_kg_construction_overlay_validation_route_runs_runtime_report -q`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None for this acceptance-matrix slice.
+
+
 ## Session 2: PatchCore and model asset cleanup
 
 **Date**: 2026-05-12
