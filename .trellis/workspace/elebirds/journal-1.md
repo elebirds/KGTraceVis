@@ -812,3 +812,36 @@ Generalized construction review decisions beyond edges, added CLI/API support fo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 25: Review decision replay for RCA KG construction
+
+**Date**: 2026-05-15
+**Task**: Review decision replay for RCA KG construction
+**Branch**: `main`
+
+### Summary
+
+Added review decision replay through source-library reconstruction, alignment overrides, regenerated layer/publish artifacts, CLI support, and verified full pytest/run_examples/ruff/mypy.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c9395b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
