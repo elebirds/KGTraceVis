@@ -31,6 +31,17 @@ def test_kg_overlay_validation_writes_runtime_and_import_report(
     report = result.report
     assert report["artifact_type"] == "kg_overlay_validation_report_v1"
     assert report["kg_backend"] == "explicit_seed_overlay"
+    assert report["contract_validated"] is True
+    assert report["runtime_validated"] is True
+    assert report["overlay_contributed"] is True
+    assert report["overlay_contribution_case_count"] == 1
+    assert report["overlay_contribution_kg_build_ids"] == [
+        "kgbuild_overlay_validation"
+    ]
+    assert report["overlay_contribution_source_edge_ids"] == [
+        "OverlayCoolingAlert|CAUSES|OverlaySealWear|shared"
+    ]
+    assert report["missing_overlay_contribution_warning"] == ""
     assert report["validated"] is True
     assert report["example_count"] == 1
     assert report["import_dry_run"]["dry_run"] is True
@@ -41,6 +52,13 @@ def test_kg_overlay_validation_writes_runtime_and_import_report(
     assert example["top_k_path_count"] >= 1
     assert example["top_target_entity_id"] == "OverlaySealWear"
     assert example["kg_build_ids"] == ["kgbuild_overlay_validation"]
+    assert example["overlay_contributed"] is True
+    assert example["overlay_contribution_kg_build_ids"] == [
+        "kgbuild_overlay_validation"
+    ]
+    assert example["overlay_contribution_source_edge_ids"] == [
+        "OverlayCoolingAlert|CAUSES|OverlaySealWear|shared"
+    ]
     assert example["path_strengths"] == [0.77]
     assert example["rca_scores"] == [0.77]
     assert example["source_edge_ids"] == [
@@ -75,7 +93,35 @@ def test_validate_kg_overlay_cli_accepts_build_dir(tmp_path: Path) -> None:
     assert payload == saved_payload
     assert payload["kg_node_paths"] == [str(build_dir / "nodes.csv")]
     assert payload["kg_edge_paths"] == [str(build_dir / "edges.csv")]
+    assert payload["contract_validated"] is True
+    assert payload["runtime_validated"] is True
+    assert payload["overlay_contributed"] is True
     assert payload["examples"][0]["kg_build_ids"] == ["kgbuild_overlay_validation"]
+
+
+def test_kg_overlay_validation_distinguishes_loading_from_contribution(
+    tmp_path: Path,
+) -> None:
+    """Loading/import success should not imply that examples used the overlay."""
+    build_dir = _write_build_dir(tmp_path)
+    example_dir = _write_non_contributing_example_dir(tmp_path)
+
+    result = run_kg_overlay_validation(
+        KGOverlayValidationConfig(build_dir=build_dir, example_dir=example_dir)
+    )
+
+    report = result.report
+    assert report["contract_validated"] is True
+    assert report["runtime_validated"] is True
+    assert report["overlay_contributed"] is False
+    assert report["overlay_contribution_case_count"] == 0
+    assert report["overlay_contribution_kg_build_ids"] == []
+    assert report["overlay_contribution_source_edge_ids"] == []
+    assert report["missing_overlay_contribution_warning"].startswith(
+        "Candidate overlay loaded and runtime examples executed"
+    )
+    assert report["validated"] is False
+    assert report["examples"][0]["overlay_contributed"] is False
 
 
 def _write_build_dir(tmp_path: Path) -> Path:
@@ -168,6 +214,36 @@ def _write_example_dir(tmp_path: Path) -> Path:
         "kg_analysis": {},
     }
     (example_dir / "overlay_case.json").write_text(
+        json.dumps(payload),
+        encoding="utf-8",
+    )
+    return example_dir
+
+
+def _write_non_contributing_example_dir(tmp_path: Path) -> Path:
+    example_dir = tmp_path / "non_contributing_examples"
+    example_dir.mkdir()
+    payload = {
+        "case_id": "non_contributing_case_001",
+        "dataset": "mvtec",
+        "source": "unknown",
+        "object": "cable",
+        "anomaly_type": "scratch",
+        "location": None,
+        "morphology": None,
+        "severity": 0.4,
+        "confidence": 0.7,
+        "timestamp": None,
+        "raw_evidence": {
+            "variables": [],
+            "variable_contributions": {},
+            "log_events": [],
+            "description": "Uses default KG paths rather than the overlay fixture.",
+        },
+        "normalized_evidence": {},
+        "kg_analysis": {},
+    }
+    (example_dir / "non_contributing_case.json").write_text(
         json.dumps(payload),
         encoding="utf-8",
     )

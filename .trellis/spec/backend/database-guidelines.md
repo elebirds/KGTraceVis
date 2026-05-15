@@ -535,6 +535,11 @@ prepared for Neo4j publication.
   `kgtracevis.workflows.kg_overlay_validation`, run example evidence through
   `KGTracePipeline`, preserve RCA path metadata (`path_strength`, `rca_score`,
   `source_edge_ids`, `kg_build_ids`), and include Neo4j import dry-run counts.
+  The report must distinguish `contract_validated`, `runtime_validated`, and
+  `overlay_contributed`; aggregate `validated` must not be true unless at least
+  one example top-k RCA path references an overlay `kg_build_id` or candidate
+  edge ID. If the overlay is loadable but unused, write
+  `missing_overlay_contribution_warning`.
   It must not rebuild construction artifacts, mutate review decisions, or
   publish to Neo4j.
 - TEP semantic-lift `full_kg_entity_ids` are entity-resolution cluster members,
@@ -572,7 +577,8 @@ prepared for Neo4j publication.
   reports `explicit_seed_overlay`.
 - Workflow/CLI tests assert `validate_kg_overlay.py --build-dir ...` writes a
   report with example runtime metadata, `kg_build_ids`, and dry-run import
-  counts.
+  counts, and distinguishes load/runtime success from actual overlay
+  contribution.
 - Manifest tests assert source-to-KG builds write
   `kg_construction_manifest.json` with draft rows and artifact paths.
 - KG Studio tests assert both legacy candidate CSV names and source-to-KG build

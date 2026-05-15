@@ -513,9 +513,15 @@ def test_kg_construction_overlay_validation_route_runs_runtime_report(
     assert payload["build"]["run_id"] == "kgbuild_overlay_api_unit"
     assert Path(payload["report_path"]).is_file()
     assert payload["report"]["kg_backend"] == "explicit_seed_overlay"
+    assert payload["report"]["contract_validated"] is True
+    assert payload["report"]["runtime_validated"] is True
+    assert payload["report"]["overlay_contributed"] is True
+    assert payload["report"]["overlay_contribution_case_count"] == 1
+    assert payload["report"]["validated"] is True
     assert payload["report"]["import_dry_run"]["dry_run"] is True
     assert payload["report"]["import_dry_run"]["include_defaults"] is True
     assert payload["report"]["examples"][0]["case_id"] == "api_overlay_case"
+    assert payload["report"]["examples"][0]["overlay_contributed"] is True
     assert payload["report"]["examples"][0]["top_target_entity_id"] == (
         "ApiOverlayCause"
     )

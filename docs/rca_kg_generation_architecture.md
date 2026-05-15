@@ -122,6 +122,11 @@ The reusable validation workflow loads the candidate `nodes.csv` / `edges.csv`
 beside the default KG, runs example evidence through `KGTracePipeline`, records
 RCA path provenance (`path_strength`, `rca_score`, `source_edge_ids`,
 `kg_build_ids`), and performs a Neo4j import dry-run over the same overlay.
+The report distinguishes contract/import validity from actual RCA
+contribution: `overlay_contributed` is true only when a top-k path references a
+candidate overlay `kg_build_id` or candidate edge ID. Otherwise the report keeps
+`contract_validated=true` and `runtime_validated=true`, but sets
+`validated=false` with a `missing_overlay_contribution_warning`.
 The service exposes the same check at:
 
 ```http

@@ -48,6 +48,9 @@ def run_kg_overlay_validation(
         [*DEFAULT_EDGE_PATHS, *edge_paths],
         skip_missing=True,
     )
+    overlay_graph = KnowledgeGraph.from_paths(node_paths, edge_paths, skip_missing=True)
+    overlay_edge_ids = {edge.edge_id for edge in overlay_graph.edges}
+    overlay_kg_build_ids = {edge.kg_build_id for edge in overlay_graph.edges if edge.kg_build_id}
     pipeline = build_pipeline(graph=runtime_graph)
     example_reports = []
     for evidence_path in _example_files(config.example_dir):
@@ -59,6 +62,8 @@ def run_kg_overlay_validation(
                 case_id=evidence.case_id,
                 dataset=evidence.dataset,
                 result=result.model_dump(),
+                overlay_edge_ids=overlay_edge_ids,
+                overlay_kg_build_ids=overlay_kg_build_ids,
             )
         )
     if not example_reports:
@@ -75,12 +80,31 @@ def run_kg_overlay_validation(
         skip_missing=True,
     )
     import_summary = dry_run_import(import_graph)
+    contribution_case_count = sum(
+        1 for example in example_reports if example["overlay_contributed"]
+    )
+    contribution_edge_ids = _unique_values(
+        edge_id
+        for example in example_reports
+        for edge_id in list(example.get("overlay_contribution_source_edge_ids") or [])
+    )
+    contribution_kg_build_ids = _unique_values(
+        kg_build_id
+        for example in example_reports
+        for kg_build_id in list(example.get("overlay_contribution_kg_build_ids") or [])
+    )
+    contract_validated = import_summary.dry_run
+    runtime_validated = len(example_reports) > 0
+    overlay_contributed = contribution_case_count > 0
     report = {
         "artifact_type": "kg_overlay_validation_report_v1",
         "kg_backend": "explicit_seed_overlay",
         "build_dir": str(config.build_dir) if config.build_dir is not None else None,
         "kg_node_paths": [str(path) for path in node_paths],
         "kg_edge_paths": [str(path) for path in edge_paths],
+        "overlay_edge_count": len(overlay_graph.edges),
+        "overlay_edge_ids": sorted(overlay_edge_ids),
+        "overlay_kg_build_ids": sorted(overlay_kg_build_ids),
         "example_dir": str(config.example_dir),
         "example_count": len(example_reports),
         "examples": example_reports,
@@ -90,7 +114,21 @@ def run_kg_overlay_validation(
             "dry_run": import_summary.dry_run,
             "include_defaults": config.include_defaults_for_import,
         },
-        "validated": True,
+        "contract_validated": contract_validated,
+        "runtime_validated": runtime_validated,
+        "overlay_contributed": overlay_contributed,
+        "overlay_contribution_case_count": contribution_case_count,
+        "overlay_contribution_source_edge_ids": contribution_edge_ids,
+        "overlay_contribution_kg_build_ids": contribution_kg_build_ids,
+        "missing_overlay_contribution_warning": (
+            ""
+            if overlay_contributed
+            else (
+                "Candidate overlay loaded and runtime examples executed, but no "
+                "top-k RCA paths referenced overlay kg_build_ids or source_edge_ids."
+            )
+        ),
+        "validated": contract_validated and runtime_validated and overlay_contributed,
     }
     output_path = config.output_path
     if output_path is None and config.build_dir is not None:
@@ -139,9 +177,24 @@ def _example_report(
     case_id: str,
     dataset: str,
     result: dict[str, Any],
+    overlay_edge_ids: set[str],
+    overlay_kg_build_ids: set[str],
 ) -> dict[str, Any]:
     paths = list(result.get("top_k_paths") or [])
     ranked_root_causes = list(result.get("ranked_root_causes") or [])
+    path_kg_build_ids = _unique_values(
+        kg_build_id
+        for path in paths
+        for kg_build_id in list(path.get("kg_build_ids") or [])
+    )
+    path_source_edge_ids = _unique_values(
+        edge_id
+        for path in paths
+        for edge_id in list(path.get("source_edge_ids") or [])
+    )
+    contribution_kg_build_ids = sorted(set(path_kg_build_ids) & overlay_kg_build_ids)
+    contribution_source_edge_ids = sorted(set(path_source_edge_ids) & overlay_edge_ids)
+    overlay_contributed = bool(contribution_kg_build_ids or contribution_source_edge_ids)
     return {
         "path": str(evidence_path),
         "case_id": case_id,
@@ -150,11 +203,7 @@ def _example_report(
         "consistency_score": result.get("consistency_score"),
         "top_k_path_count": len(paths),
         "ranked_root_cause_count": len(ranked_root_causes),
-        "kg_build_ids": _unique_values(
-            kg_build_id
-            for path in paths
-            for kg_build_id in list(path.get("kg_build_ids") or [])
-        ),
+        "kg_build_ids": path_kg_build_ids,
         "path_strengths": [
             path.get("path_strength")
             for path in paths
@@ -163,11 +212,10 @@ def _example_report(
         "rca_scores": [
             path.get("rca_score") for path in paths if path.get("rca_score") is not None
         ],
-        "source_edge_ids": _unique_values(
-            edge_id
-            for path in paths
-            for edge_id in list(path.get("source_edge_ids") or [])
-        ),
+        "source_edge_ids": path_source_edge_ids,
+        "overlay_contributed": overlay_contributed,
+        "overlay_contribution_kg_build_ids": contribution_kg_build_ids,
+        "overlay_contribution_source_edge_ids": contribution_source_edge_ids,
         "top_path_id": str(paths[0].get("path_id") or "") if paths else "",
         "top_target_entity_id": (
             str(paths[0].get("target_entity_id") or "") if paths else ""

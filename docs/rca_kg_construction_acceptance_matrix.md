@@ -59,6 +59,9 @@ kg_overlay_validation_report.json
 
 This report is intentionally not a required construction artifact because it is
 a validation product over a build and an example set, not a construction stage.
+It separates `contract_validated`, `runtime_validated`, and
+`overlay_contributed`. A build that loads and runs but does not appear in any
+top-k RCA path is contract/runtime valid, but not overlay-contribution accepted.
 
 ## Acceptance Rows
 
@@ -68,8 +71,8 @@ a validation product over a build and an example set, not a construction stage.
 | Material direct construction | Accepted | smoke path `material_direct` |
 | TEP construction import | Accepted | smoke path `tep`; preserves `relation_family`, propagation flags, and fault anchors |
 | Runtime overlay RCA path | Accepted | smoke path `runtime_overlay`; checks `path_strength`, `rca_score`, `source_edge_ids`, `kg_build_ids` |
-| Overlay validation CLI | Accepted | `scripts/validate_kg_overlay.py --build-dir <build_dir>` |
-| Overlay validation API | Accepted | `POST /api/kg/construction/builds/{run_id}/validate-overlay` |
+| Overlay validation CLI | Accepted | `scripts/validate_kg_overlay.py --build-dir <build_dir>`; contribution accepted only when `overlay_contributed=true` |
+| Overlay validation API | Accepted | `POST /api/kg/construction/builds/{run_id}/validate-overlay`; same contribution semantics |
 | Review queue | Accepted | `review_queue.json`, review API, and replay workflow |
 | Review-controlled publish snapshot | Accepted | `published_nodes.csv`, `published_edges.csv`, `publish_report.json` |
 | Artifact diff | Accepted | fresh no-op and review replay `kg_construction_diff.json` |

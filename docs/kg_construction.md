@@ -90,8 +90,13 @@ uv run python scripts/validate_kg_overlay.py \
 This writes `kg_overlay_validation_report.json` beside the build. The report
 records example-level linking/path counts, RCA path metadata such as
 `path_strength`, `rca_score`, `source_edge_ids`, and `kg_build_ids`, plus the
-merged import dry-run counts. It does not rebuild KG artifacts, review
-candidates, or publish anything.
+merged import dry-run counts. It separates `contract_validated`,
+`runtime_validated`, and `overlay_contributed`, so loading a candidate overlay
+successfully is not confused with the overlay actually appearing in RCA paths.
+If no top-k RCA path references the overlay `kg_build_id` or candidate edge ID,
+the report sets `validated=false` and includes a
+`missing_overlay_contribution_warning`. It does not rebuild KG artifacts,
+review candidates, or publish anything.
 
 Before publishing to Neo4j, validate the merged default KG plus candidate layer:
 
@@ -153,9 +158,9 @@ validation runs, the same endpoint can serve `kg_overlay_validation_report`.
 `validate-overlay` runs the candidate build through the same reusable overlay
 validation workflow as `scripts/validate_kg_overlay.py`. It writes
 `kg_overlay_validation_report.json` beside the build and returns the report
-payload, including runtime RCA path metadata and import dry-run counts. It does
-not rebuild construction artifacts, record review decisions, or publish to
-Neo4j.
+payload, including runtime RCA path metadata, candidate contribution counts,
+and import dry-run counts. It does not rebuild construction artifacts, record
+review decisions, or publish to Neo4j.
 
 Alignment is exported as its own audit layer. `entity_alignment_manifest.json`
 contains canonical entity table rows, nontrivial deterministic `ALIGNS_TO`
