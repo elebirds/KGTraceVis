@@ -1241,3 +1241,36 @@ Added profile-driven two-hop semantic derived edge rules, JSON/manifest support,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 38: M21 review queue RCA impact prioritization
+
+**Date**: 2026-05-15
+**Task**: M21 review queue RCA impact prioritization
+**Branch**: `main`
+
+### Summary
+
+Used RCA scores and semantic-derived provenance in review queue priority, graph impact, and recommended actions. Added focused queue test and updated service expectations. Gates: ruff, mypy, pytest 339, run_examples, RCA-KG smoke with toy/material/TEP passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ac9d33a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

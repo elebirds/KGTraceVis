@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 37
+- **Total Sessions**: 38
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1243 | Active |
+| `journal-1.md` | ~1276 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 38 | 2026-05-15 | M21 review queue RCA impact prioritization | `ac9d33a` | `main` |
 | 37 | 2026-05-15 | M20 semantic projection derived edges | `0cf0270` | `main` |
 | 36 | 2026-05-15 | M19 RCA reasoning scoring schema | `17123d5` | `main` |
 | 35 | 2026-05-15 | M18 external RCA profile domain packs | `1bb2852` | `main` |
