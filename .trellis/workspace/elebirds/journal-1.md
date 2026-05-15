@@ -1109,3 +1109,36 @@ Added profile semantic projection rules, relation-family RCA policies, profile-d
 ### Next Steps
 
 - None - task complete
+
+
+## Session 34: M17 auditable alignment layer
+
+**Date**: 2026-05-15
+**Task**: M17 auditable alignment layer
+**Branch**: `main`
+
+### Summary
+
+Materialized audit-layer alignment relations, added entity_alignment_manifest artifact across workflows/services/diffs, preserved TEP explicit ALIGNS_TO runtime behavior, and validated full tests plus TEP smoke.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `36df9f2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
