@@ -647,3 +647,36 @@ Implemented the M3 review-to-publish loop for RCA-KG construction. Added append-
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: Artifact review workflow for RCA KG
+
+**Date**: 2026-05-15
+**Task**: Artifact review workflow for RCA KG
+**Branch**: `main`
+
+### Summary
+
+Added reusable artifact review workflow and CLI for RCA KG construction, delegated service review mutation to workflow, verified full pytest/run_examples/ruff/mypy/import dry-run plus CLI publish smoke.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `870ac62` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
