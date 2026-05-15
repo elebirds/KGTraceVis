@@ -276,6 +276,14 @@ projection rules, relation-family policies, root candidate labels, and
 observable labels. Built-in generic/TEP profiles remain the default when no
 profile pack is supplied.
 
+RCA reasoning views now also write deterministic edge scoring components. The
+profile relation-family policy controls the blend of confidence, propagation
+priority, attenuation, and source trust. These values are exported as optional
+RCA edge columns such as `rca_score`, `rca_score_confidence`,
+`rca_score_priority`, `rca_score_attenuation`, and
+`rca_score_source_trust`, while `rca_view_manifest.json` records the active
+scoring policy and score summary.
+
 The reusable orchestration entry point for this material-driven path is
 `kgtracevis.workflows.material_kg_construction.run_material_kg_construction_workflow`.
 It accepts selected material IDs, optionally extracts missing/selected materials

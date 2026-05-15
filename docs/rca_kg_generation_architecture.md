@@ -92,6 +92,12 @@ relation-family policy defines whether propagation is enabled plus the default
 direction, priority, attenuation, and edge-weight multiplier used by the RCA
 reasoning view.
 
+Profiles also define the RCA scoring blend for each relation family:
+confidence, propagation priority, attenuation, and source trust weights. The
+reasoning view exports these as per-edge score components and summarizes them
+in `rca_view_manifest.json`; this makes path ranking and visual explanations
+inspectable without turning candidate edges into reviewed facts.
+
 ## LLM Boundary
 
 LLMs may extract source-grounded candidate entities and relations from documents, propose aliases, summarize review items, explain conflicts, or generate RCA path explanation text.

@@ -705,6 +705,11 @@ head,relation,tail,scenario,source,evidence,confidence,weight,review_status,feed
 Every edge must be traceable to a source. If a relation is uncertain, mark it as
 `review_status=auto` and use a lower confidence.
 
+Source-to-KG construction exports additional optional RCA columns for reasoning
+views, including `relation_family`, propagation metadata, anchors,
+`source_trust`, `rca_score`, and `rca_score_*` components. These are
+explanatory/ranking metadata and do not change the required base edge contract.
+
 ## Source Registry
 
 KG source references should be centralized in:

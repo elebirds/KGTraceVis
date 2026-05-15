@@ -315,12 +315,17 @@ and RCA reasoning all consume these build artifacts.
 - Domain profiles own semantic projection and RCA relation-family policy.
   Projection rules may rewrite relations and swap endpoints before semantic
   layer export. Relation-family policies define propagation enablement,
-  direction, priority, attenuation, and edge-weight scaling for RCA views.
+  direction, priority, attenuation, edge-weight scaling, and RCA score-component
+  weights for RCA views.
   Source-backed extractor/import metadata can override those defaults, but
   hard-coded RCA defaults should not be added directly to `semantic_projection`
   or `rca_view`. Builds may load JSON Domain Packs via `profile_path`; every
   build writes `profile_manifest.json` so profile source, ontology, projection
   rules, and RCA policies are auditable.
+- RCA reasoning views export deterministic score components for confidence,
+  propagation priority, attenuation, and source trust. These optional RCA edge
+  columns (`rca_score*`, `source_trust`) are explanatory/ranking metadata only;
+  they do not upgrade candidate `review_status=auto` facts to reviewed facts.
 - Source Library manifests passed by `--source-library` are loaded through
   `load_source_library(...)`; relative source paths resolve from the manifest
   directory before parsing or extraction.

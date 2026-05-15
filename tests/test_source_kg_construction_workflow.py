@@ -198,6 +198,10 @@ def test_source_kg_construction_workflow_loads_external_profile_pack(
                         "propagation_priority": 0.42,
                         "attenuation": 0.73,
                         "edge_weight_multiplier": 0.5,
+                        "confidence_score_weight": 1.0,
+                        "priority_score_weight": 0.0,
+                        "attenuation_score_weight": 0.0,
+                        "source_trust_score_weight": 0.0,
                     }
                 },
                 "root_candidate_labels": ["Equipment"],
@@ -251,6 +255,10 @@ def test_source_kg_construction_workflow_loads_external_profile_pack(
     assert edge_rows[0]["tail"] == "PressureSignal"
     assert edge_rows[0]["propagation_priority"] == "0.42"
     assert edge_rows[0]["attenuation"] == "0.73"
+    assert edge_rows[0]["source_trust"] == "0.7"
+    assert edge_rows[0]["rca_score"] == "0.8"
+    assert edge_rows[0]["rca_score_confidence"] == "0.8"
+    assert edge_rows[0]["rca_score_priority"] == "0"
     assert artifact_diff["artifacts"]["profile_manifest"]["changed"] is False
 
 

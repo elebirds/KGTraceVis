@@ -46,6 +46,10 @@ def test_load_rca_profile_pack_from_json(tmp_path: Path) -> None:
                         "propagation_priority": 0.6,
                         "attenuation": 0.8,
                         "edge_weight_multiplier": 0.5,
+                        "confidence_score_weight": 1.0,
+                        "priority_score_weight": 0.0,
+                        "attenuation_score_weight": 0.0,
+                        "source_trust_score_weight": 0.0,
                     }
                 },
                 "root_candidate_labels": ["Equipment"],
@@ -64,6 +68,7 @@ def test_load_rca_profile_pack_from_json(tmp_path: Path) -> None:
     assert profile.relation_family_for("observed_by") == "OBSERVATION"
     assert profile.propagation_priority_for("OBSERVATION") == pytest.approx(0.6)
     assert profile.edge_weight_for("OBSERVATION", base_weight=0.4) == pytest.approx(0.2)
+    assert profile.relation_family_policy_for("OBSERVATION").confidence_score_weight == 1.0
     assert manifest["profile_source"] == str(profile_path)
     assert manifest["semantic_projection_rules"]["METRIC_OF"] == {
         "swap_endpoints": True,
@@ -151,6 +156,7 @@ def test_profile_projection_rule_can_rewrite_and_swap_relation_endpoints() -> No
     assert semantic_edge.propagation_priority == pytest.approx(0.65)
     assert semantic_edge.attenuation == pytest.approx(0.8)
     assert semantic_edge.edge_weight == pytest.approx(0.1)
+    assert semantic_edge.rca_score == pytest.approx(0.0)
 
     rca_view = build_rca_reasoning_view(
         semantic.nodes,
@@ -162,13 +168,20 @@ def test_profile_projection_rule_can_rewrite_and_swap_relation_endpoints() -> No
     assert rca_edge.root_candidate is True
     assert rca_edge.observable is True
     assert rca_edge.edge_weight == pytest.approx(0.1)
-    assert rca_view.manifest["relation_family_policies"]["OBSERVATION"] == {
-        "attenuation": 0.8,
-        "edge_weight_multiplier": 0.5,
-        "propagation_direction": "reverse",
-        "propagation_enabled": True,
-        "propagation_priority": 0.65,
-    }
+    assert rca_edge.source_trust == pytest.approx(0.7)
+    assert rca_edge.rca_score == pytest.approx(0.7525)
+    assert rca_edge.rca_score_confidence == pytest.approx(0.4)
+    assert rca_edge.rca_score_priority == pytest.approx(0.1625)
+    assert rca_edge.rca_score_attenuation == pytest.approx(0.12)
+    assert rca_edge.rca_score_source_trust == pytest.approx(0.07)
+    policy = rca_view.manifest["relation_family_policies"]["OBSERVATION"]
+    assert policy["attenuation"] == pytest.approx(0.8)
+    assert policy["edge_weight_multiplier"] == pytest.approx(0.5)
+    assert policy["propagation_direction"] == "reverse"
+    assert policy["propagation_enabled"] is True
+    assert policy["propagation_priority"] == pytest.approx(0.65)
+    assert policy["confidence_score_weight"] == pytest.approx(0.5)
+    assert rca_view.manifest["score_summary"]["mean_rca_score"] == pytest.approx(0.7525)
 
 
 def test_profile_rca_policy_does_not_override_explicit_candidate_metadata() -> None:
@@ -252,6 +265,7 @@ def test_profile_rca_policy_does_not_override_explicit_candidate_metadata() -> N
     assert rca_edge.propagation_priority == pytest.approx(0.0)
     assert rca_edge.attenuation == pytest.approx(0.6)
     assert rca_edge.edge_weight == pytest.approx(0.3)
+    assert rca_edge.rca_score == pytest.approx(0.56)
 
 
 def test_blank_candidate_metadata_does_not_override_profile_defaults() -> None:

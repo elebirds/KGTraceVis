@@ -49,6 +49,12 @@ OPTIONAL_RCA_EDGE_COLUMNS = {
     "fault_anchor",
     "task_view",
     "confidence_policy",
+    "source_trust",
+    "rca_score",
+    "rca_score_confidence",
+    "rca_score_priority",
+    "rca_score_attenuation",
+    "rca_score_source_trust",
     "external_edge_id",
     "kg_build_id",
 }
@@ -126,6 +132,12 @@ class KGEdge:
     fault_anchor: str = ""
     task_view: str = ""
     confidence_policy: str = ""
+    source_trust: float = 0.0
+    rca_score: float = 0.0
+    rca_score_confidence: float = 0.0
+    rca_score_priority: float = 0.0
+    rca_score_attenuation: float = 0.0
+    rca_score_source_trust: float = 0.0
     external_edge_id: str = ""
     kg_build_id: str = ""
 
@@ -162,6 +174,12 @@ class KGEdge:
             "fault_anchor": self.fault_anchor,
             "task_view": self.task_view,
             "confidence_policy": self.confidence_policy,
+            "source_trust": self.source_trust,
+            "rca_score": self.rca_score,
+            "rca_score_confidence": self.rca_score_confidence,
+            "rca_score_priority": self.rca_score_priority,
+            "rca_score_attenuation": self.rca_score_attenuation,
+            "rca_score_source_trust": self.rca_score_source_trust,
             "external_edge_id": self.external_edge_id,
             "kg_build_id": self.kg_build_id,
         }
@@ -406,6 +424,15 @@ def _load_edges(path: Path) -> list[KGEdge]:
                 fault_anchor=row.get("fault_anchor", "").strip(),
                 task_view=row.get("task_view", "").strip(),
                 confidence_policy=row.get("confidence_policy", "").strip(),
+                source_trust=_float_cell(row.get("source_trust"), 0.0),
+                rca_score=_float_cell(row.get("rca_score"), 0.0),
+                rca_score_confidence=_float_cell(row.get("rca_score_confidence"), 0.0),
+                rca_score_priority=_float_cell(row.get("rca_score_priority"), 0.0),
+                rca_score_attenuation=_float_cell(row.get("rca_score_attenuation"), 0.0),
+                rca_score_source_trust=_float_cell(
+                    row.get("rca_score_source_trust"),
+                    0.0,
+                ),
                 external_edge_id=row.get("external_edge_id", "").strip(),
                 kg_build_id=row.get("kg_build_id", "").strip(),
             )

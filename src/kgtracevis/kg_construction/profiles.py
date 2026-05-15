@@ -30,10 +30,26 @@ class RelationFamilyPolicy:
     propagation_priority: float = 0.0
     attenuation: float = 1.0
     edge_weight_multiplier: float = 1.0
+    confidence_score_weight: float = 0.5
+    priority_score_weight: float = 0.25
+    attenuation_score_weight: float = 0.15
+    source_trust_score_weight: float = 0.1
+    auto_source_trust: float = 0.7
+    reviewed_source_trust: float = 1.0
+    rejected_source_trust: float = 0.0
 
     def edge_weight_for(self, base_weight: float) -> float:
         """Return the family-adjusted RCA edge weight."""
         return max(0.0, min(1.0, base_weight * self.edge_weight_multiplier))
+
+    def source_trust_for(self, review_status: str) -> float:
+        """Return the source trust score for a construction review status."""
+        normalized = review_status.strip().lower()
+        if normalized == "reviewed":
+            return self.reviewed_source_trust
+        if normalized == "rejected":
+            return self.rejected_source_trust
+        return self.auto_source_trust
 
 
 @dataclass(frozen=True)
@@ -461,6 +477,13 @@ def profile_to_manifest(profile: RcaProfile) -> dict[str, object]:
                 "propagation_priority": policy.propagation_priority,
                 "attenuation": policy.attenuation,
                 "edge_weight_multiplier": policy.edge_weight_multiplier,
+                "confidence_score_weight": policy.confidence_score_weight,
+                "priority_score_weight": policy.priority_score_weight,
+                "attenuation_score_weight": policy.attenuation_score_weight,
+                "source_trust_score_weight": policy.source_trust_score_weight,
+                "auto_source_trust": policy.auto_source_trust,
+                "reviewed_source_trust": policy.reviewed_source_trust,
+                "rejected_source_trust": policy.rejected_source_trust,
             }
             for family, policy in sorted(profile.relation_family_policies.items())
         },
@@ -581,6 +604,41 @@ def _relation_family_policies(value: Any) -> dict[str, RelationFamilyPolicy]:
                 item,
                 "edge_weight_multiplier",
                 default=1.0,
+            ),
+            confidence_score_weight=_float_policy_value(
+                item,
+                "confidence_score_weight",
+                default=0.5,
+            ),
+            priority_score_weight=_float_policy_value(
+                item,
+                "priority_score_weight",
+                default=0.25,
+            ),
+            attenuation_score_weight=_float_policy_value(
+                item,
+                "attenuation_score_weight",
+                default=0.15,
+            ),
+            source_trust_score_weight=_float_policy_value(
+                item,
+                "source_trust_score_weight",
+                default=0.1,
+            ),
+            auto_source_trust=_float_policy_value(
+                item,
+                "auto_source_trust",
+                default=0.7,
+            ),
+            reviewed_source_trust=_float_policy_value(
+                item,
+                "reviewed_source_trust",
+                default=1.0,
+            ),
+            rejected_source_trust=_float_policy_value(
+                item,
+                "rejected_source_trust",
+                default=0.0,
             ),
         )
     return policies
