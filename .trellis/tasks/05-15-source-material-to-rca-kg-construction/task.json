@@ -18,7 +18,9 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [],
+  "children": [
+    "05-15-05-15-material-kg-construction-direct-api"
+  ],
   "parent": null,
   "relatedFiles": [],
   "notes": "",

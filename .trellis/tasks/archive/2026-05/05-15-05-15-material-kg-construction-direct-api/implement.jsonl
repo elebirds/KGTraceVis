@@ -1,0 +1,2 @@
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"direct material build should route through reusable workflow, not duplicate construction logic"}
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"material build artifacts must preserve construction artifact contract and claim boundaries"}

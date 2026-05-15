@@ -1,0 +1,2 @@
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"verify construction artifacts and material metadata contract"}
+{"type":"spec","path":".trellis/spec/backend/quality-guidelines.md","reason":"quality gate commands and test expectations"}
