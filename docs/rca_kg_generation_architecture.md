@@ -44,7 +44,7 @@ extractor inputs unchanged.
 
 `RCA Reasoning View` annotates the semantic layer with RCA metadata: `relation_family`, `propagation_enabled`, `propagation_direction`, `propagation_priority`, `attenuation`, `edge_weight`, root/observable flags, task view, confidence policy, and `kg_build_id`.
 
-`Review Queue` prioritizes candidates that need human attention, especially causal/root-cause edges, low-confidence propagation edges, new anchors, merge candidates, unresolved entities, alignment conflicts, and facts that can affect Top-K RCA paths. Every item carries `review_status`, `priority`, `reason`, and `recommended_action`.
+`Review Queue` prioritizes candidates that need human attention, especially causal/root-cause edges, low-confidence propagation edges, new anchors, merge candidates, unresolved entities, alignment conflicts, and facts that can affect Top-K RCA paths. Every item carries `review_status`, `priority`, `reason`, and `recommended_action`. Edge decisions can refresh the publish snapshot; non-edge alignment decisions are recorded and synchronized in the queue first, without automatically changing KG facts.
 
 `Versioned Publish` prepares build metadata for runtime publication. Neo4j remains the runtime KG target; CSV/JSON artifacts are reproducible experiment snapshots.
 
@@ -263,6 +263,22 @@ uv run python scripts/review_source_kg.py \
 This appends to `review_decisions.jsonl`, refreshes `review_queue.json`, and
 rewrites the review-controlled `published_nodes.csv`, `published_edges.csv`,
 and `publish_report.json` snapshot.
+
+Non-edge review queue items use the same CLI with `--item-type` and a
+`target_key` copied from `review_queue.json`:
+
+```bash
+uv run python scripts/review_source_kg.py \
+  --build-dir runs/source_kg_build/source_library_candidate \
+  --item-type entity_merge_candidate \
+  --action accept \
+  --target-key 'entity_merge_candidate:PumpB->PumpA' \
+  --reviewer reviewer-id \
+  --proposed-payload-json '{"reviewed_canonical_id":"PumpA"}'
+```
+
+This records the human decision and updates the queue item, but it does not
+silently publish an alignment merge as reviewed KG truth.
 
 ```bash
 uv run python scripts/build_source_kg.py \

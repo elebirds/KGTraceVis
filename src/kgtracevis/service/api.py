@@ -381,6 +381,7 @@ def create_app() -> FastAPI:
                 404
                 if "unknown construction build run_id" in str(exc)
                 or "unknown construction edge target_key" in str(exc)
+                or "unknown construction review target_key" in str(exc)
                 else 400
             )
             raise HTTPException(status_code=status_code, detail=str(exc)) from exc

@@ -15,6 +15,7 @@ from kgtracevis.kg_construction.models import (
     KGConstructionReviewDecision,
     kg_construction_artifact_paths,
     review_decision_for_edge,
+    review_decision_for_item,
 )
 from kgtracevis.kg_construction.publish import (
     append_review_decision,
@@ -24,6 +25,36 @@ from kgtracevis.kg_construction.publish import (
 )
 
 ReviewAction = Literal["accept", "reject"]
+
+
+@dataclass(frozen=True)
+class ReviewKGConstructionItemConfig:
+    """Configuration for one construction review queue item decision."""
+
+    output_dir: Path
+    action: ReviewAction
+    target_key: str
+    item_type: str = "edge"
+    reviewer: str | None = None
+    note: str | None = None
+    proposed_payload: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class ReviewKGConstructionItemResult:
+    """Result of applying one construction review queue item decision."""
+
+    run_id: str
+    output_dir: Path
+    decision: KGConstructionReviewDecision
+    item: dict[str, Any]
+    summary: dict[str, Any]
+    manifest: dict[str, Any]
+    review_decisions_path: Path
+    publish_report_path: Path
+    published_nodes_path: Path
+    published_edges_path: Path
 
 
 @dataclass(frozen=True)
@@ -90,6 +121,8 @@ def review_kg_construction_edge_artifact(
     )
     append_review_decision(artifact_paths["review_decisions"], decision)
     manifest.setdefault("review_decisions", []).append(decision.model_dump(mode="json"))
+    _refresh_decision_counts(summary, artifact_paths["review_decisions"])
+    _refresh_manifest_decision_counts(manifest, summary)
     _write_json_object(artifact_paths["summary"], summary)
     _write_json_object(artifact_paths["manifest"], manifest)
     _refresh_publish_snapshot_artifacts(
@@ -101,6 +134,96 @@ def review_kg_construction_edge_artifact(
         output_dir=config.output_dir,
         decision=decision,
         edge=updated_edge,
+        summary=summary,
+        manifest=manifest,
+        review_decisions_path=artifact_paths["review_decisions"],
+        publish_report_path=artifact_paths["publish_report"],
+        published_nodes_path=artifact_paths["published_nodes"],
+        published_edges_path=artifact_paths["published_edges"],
+    )
+
+
+def review_kg_construction_item_artifact(
+    config: ReviewKGConstructionItemConfig,
+) -> ReviewKGConstructionItemResult:
+    """Apply an accept/reject decision to any construction review queue item."""
+    if config.item_type == "edge":
+        edge_result = review_kg_construction_edge_artifact(
+            ReviewKGConstructionEdgeConfig(
+                output_dir=config.output_dir,
+                action=config.action,
+                target_key=config.target_key,
+                reviewer=config.reviewer,
+                note=config.note,
+                proposed_payload=config.proposed_payload,
+                metadata=config.metadata,
+            )
+        )
+        return ReviewKGConstructionItemResult(
+            run_id=edge_result.run_id,
+            output_dir=edge_result.output_dir,
+            decision=edge_result.decision,
+            item={
+                "target_key": edge_result.decision.target_key,
+                "item_type": "edge",
+                "review_status": edge_result.edge.get("review_status", ""),
+                "candidate_payload": edge_result.edge,
+            },
+            summary=edge_result.summary,
+            manifest=edge_result.manifest,
+            review_decisions_path=edge_result.review_decisions_path,
+            publish_report_path=edge_result.publish_report_path,
+            published_nodes_path=edge_result.published_nodes_path,
+            published_edges_path=edge_result.published_edges_path,
+        )
+
+    artifact_paths = kg_construction_artifact_paths(config.output_dir)
+    if not config.target_key.strip():
+        raise ValueError("review target_key cannot be empty")
+    if not config.item_type.strip():
+        raise ValueError("review item_type cannot be empty")
+
+    queue_items = _load_json_list(
+        artifact_paths["review_queue"],
+        object_name="construction review queue",
+    )
+    updated_item = _review_queue_item(
+        queue_items,
+        target_key=config.target_key.strip(),
+        item_type=config.item_type.strip(),
+        action=config.action,
+        proposed_payload=config.proposed_payload or {},
+    )
+    manifest = _load_json_object(artifact_paths["manifest"], object_name="construction manifest")
+    summary = _load_json_object(artifact_paths["summary"], object_name="construction summary")
+    run_id = _run_id_from_manifest(manifest)
+    decision = review_decision_for_item(
+        target_type=config.item_type.strip(),
+        target_id=config.target_key.strip(),
+        target_key=config.target_key.strip(),
+        action=config.action,
+        reviewer=config.reviewer,
+        note=config.note,
+        proposed_payload=config.proposed_payload or updated_item,
+        metadata={
+            "run_id": run_id,
+            "item_type": config.item_type.strip(),
+            "item": updated_item,
+            **dict(config.metadata or {}),
+        },
+    )
+    append_review_decision(artifact_paths["review_decisions"], decision)
+    manifest.setdefault("review_decisions", []).append(decision.model_dump(mode="json"))
+    _refresh_decision_counts(summary, artifact_paths["review_decisions"])
+    _refresh_manifest_decision_counts(manifest, summary)
+    _write_json_list(artifact_paths["review_queue"], queue_items)
+    _write_json_object(artifact_paths["summary"], summary)
+    _write_json_object(artifact_paths["manifest"], manifest)
+    return ReviewKGConstructionItemResult(
+        run_id=run_id,
+        output_dir=config.output_dir,
+        decision=decision,
+        item=updated_item,
         summary=summary,
         manifest=manifest,
         review_decisions_path=artifact_paths["review_decisions"],
@@ -250,6 +373,43 @@ def _refresh_review_queue_artifact(
         _write_json_list(queue_path, payload)
 
 
+def _review_queue_item(
+    items: list[Any],
+    *,
+    target_key: str,
+    item_type: str,
+    action: ReviewAction,
+    proposed_payload: dict[str, Any],
+) -> dict[str, Any]:
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("target_key") or "") != target_key:
+            continue
+        if str(item.get("item_type") or "") != item_type:
+            continue
+        status = "reviewed" if action == "accept" else "rejected"
+        candidate = item.get("candidate_payload")
+        if not isinstance(candidate, dict):
+            candidate = {}
+        candidate.update(proposed_payload)
+        candidate["review_status"] = status
+        candidate["review_action"] = action
+        candidate["target_key"] = target_key
+        candidate["item_type"] = item_type
+        item["candidate_payload"] = candidate
+        item["review_status"] = status
+        item["feedback_count"] = _int_value(item.get("feedback_count")) + 1
+        if action == "accept":
+            item["accepted_count"] = _int_value(item.get("accepted_count")) + 1
+        else:
+            item["rejected_count"] = _int_value(item.get("rejected_count")) + 1
+        return dict(item)
+    raise ValueError(
+        f"unknown construction review target_key for item_type={item_type}: {target_key}"
+    )
+
+
 def _refresh_review_summary(
     summary: dict[str, Any],
     edge_rows: list[dict[str, str]],
@@ -271,6 +431,32 @@ def _refresh_manifest_review_summary(
         statuses = set(_int_dict(summary.get("review_status_counts")))
         if statuses and "auto" not in statuses:
             run["status"] = "reviewed"
+
+
+def _refresh_decision_counts(summary: dict[str, Any], decisions_path: Path) -> None:
+    decisions = load_review_decisions(decisions_path)
+    summary["review_decision_counts"] = dict(
+        sorted(Counter(decision.action for decision in decisions).items())
+    )
+    summary["review_decision_target_type_counts"] = dict(
+        sorted(Counter(decision.target_type for decision in decisions).items())
+    )
+
+
+def _refresh_manifest_decision_counts(
+    manifest: dict[str, Any],
+    summary: dict[str, Any],
+) -> None:
+    manifest_summary = manifest.get("summary")
+    if isinstance(manifest_summary, dict):
+        manifest_summary["review_decision_counts"] = summary.get(
+            "review_decision_counts",
+            {},
+        )
+        manifest_summary["review_decision_target_type_counts"] = summary.get(
+            "review_decision_target_type_counts",
+            {},
+        )
 
 
 def _refresh_publish_snapshot_artifacts(

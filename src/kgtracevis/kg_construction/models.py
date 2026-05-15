@@ -303,6 +303,34 @@ def review_decision_for_edge(
     )
 
 
+def review_decision_for_item(
+    *,
+    target_type: str,
+    target_id: str,
+    target_key: str,
+    action: KGConstructionReviewAction,
+    reviewer: str | None = None,
+    note: str | None = None,
+    source: str = "kg-construction-review",
+    proposed_payload: Mapping[str, Any] | None = None,
+    metadata: Mapping[str, Any] | None = None,
+) -> KGConstructionReviewDecision:
+    """Create a construction review decision for any review queue target."""
+    return KGConstructionReviewDecision(
+        decision_id=build_review_decision_id(),
+        created_at=current_utc_iso(),
+        target_type=target_type,
+        target_id=target_id,
+        target_key=target_key,
+        action=action,
+        reviewer=reviewer,
+        note=note,
+        source=source,
+        proposed_payload=_jsonable(dict(proposed_payload or {})),
+        metadata=_jsonable(dict(metadata or {})),
+    )
+
+
 def _draft_entity_row(entity: DraftEntity) -> KGConstructionDraftRow:
     evidence = entity.evidence or entity.evidence_span or entity.draft_id
     return KGConstructionDraftRow(

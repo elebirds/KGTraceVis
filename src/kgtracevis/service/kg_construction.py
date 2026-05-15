@@ -34,7 +34,9 @@ from kgtracevis.kg_construction.models import (
 from kgtracevis.kg_construction.qa import run_kg_qa
 from kgtracevis.workflows.kg_construction_review import (
     ReviewKGConstructionEdgeConfig,
+    ReviewKGConstructionItemConfig,
     review_kg_construction_edge_artifact,
+    review_kg_construction_item_artifact,
 )
 from kgtracevis.workflows.source_kg_construction import (
     DEFAULT_SOURCE_KG_BUILD_DIR,
@@ -334,11 +336,12 @@ class KGConstructionPublishResponse(BaseModel):
 
 
 class KGConstructionEdgeReviewRequest(BaseModel):
-    """Request to review one candidate construction KG edge."""
+    """Request to review one candidate construction queue item."""
 
     model_config = ConfigDict(extra="forbid")
 
     action: Literal["accept", "reject"]
+    item_type: str = "edge"
     target_key: str | None = None
     head: str | None = None
     relation: str | None = None
@@ -351,12 +354,20 @@ class KGConstructionEdgeReviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_target(self) -> KGConstructionEdgeReviewRequest:
-        """Require exactly one stable edge target shape."""
+        """Require a stable target shape for edge or non-edge review items."""
         has_key = self.target_key is not None
         has_parts = all((self.head, self.relation, self.tail, self.scenario))
-        if has_key == bool(has_parts):
+        if self.item_type == "edge":
+            if has_key == bool(has_parts):
+                raise ValueError(
+                    "pass either target_key or head/relation/tail/scenario for edge review"
+                )
+            return self
+        if not has_key:
+            raise ValueError("target_key is required for non-edge review items")
+        if has_parts or any((self.head, self.relation, self.tail, self.scenario)):
             raise ValueError(
-                "pass either target_key or head/relation/tail/scenario for edge review"
+                "head/relation/tail/scenario are only supported for edge review"
             )
         return self
 
@@ -370,18 +381,19 @@ class KGConstructionEdgeReviewRequest(BaseModel):
 
 
 class KGConstructionEdgeReviewResponse(BaseModel):
-    """Response envelope for one construction edge review action."""
+    """Response envelope for one construction review action."""
 
     model_config = ConfigDict(extra="forbid")
 
     build: KGConstructionBuildRecord
     decision: KGConstructionReviewDecision
     edge: dict[str, Any]
+    item: dict[str, Any] = Field(default_factory=dict)
     summary: dict[str, Any]
     manifest_path: str
     edges_path: str
     claim_boundary: str = (
-        "edge review updates only the selected construction build artifacts; "
+        "review updates only the selected construction build artifacts; "
         "Neo4j publication remains a separate explicit step"
     )
 
@@ -674,9 +686,33 @@ def review_kg_construction_edge(
     *,
     build_root: Path | None = None,
 ) -> KGConstructionEdgeReviewResponse:
-    """Record an accept/reject decision for one candidate construction edge."""
+    """Record an accept/reject decision for one candidate construction item."""
     build = _find_build_record(run_id, build_root=build_root)
     _require_build_artifacts(build)
+    if request.item_type != "edge":
+        item_result = review_kg_construction_item_artifact(
+            ReviewKGConstructionItemConfig(
+                output_dir=Path(build.output_dir),
+                target_key=request.target_key or "",
+                item_type=request.item_type,
+                action=request.action,
+                reviewer=request.reviewer,
+                note=request.note,
+                proposed_payload=request.proposed_payload,
+                metadata=request.metadata,
+            )
+        )
+        refreshed_build = _build_record_from_manifest_path(Path(build.manifest_path))
+        return KGConstructionEdgeReviewResponse(
+            build=refreshed_build,
+            decision=item_result.decision,
+            edge={},
+            item=item_result.item,
+            summary=item_result.summary,
+            manifest_path=build.manifest_path,
+            edges_path=build.edges_path,
+        )
+
     result = review_kg_construction_edge_artifact(
         ReviewKGConstructionEdgeConfig(
             output_dir=Path(build.output_dir),

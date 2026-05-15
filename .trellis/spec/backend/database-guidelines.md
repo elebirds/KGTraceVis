@@ -269,7 +269,7 @@ and RCA reasoning all consume these build artifacts.
 - CLI:
   `uv run python scripts/build_source_kg.py [--source-library PATH] [--toy-generic-structured-source] [--toy-generic-document-source] [--tep-semantic-lift-dir DIR] [--tep-variable-mapping PATH] [--tep-rca-graph-dir DIR] [--run-id ID] --output-dir DIR`
 - Review CLI:
-  `uv run python scripts/review_source_kg.py --build-dir DIR --action accept|reject --target-key HEAD|RELATION|TAIL|SCENARIO`
+  `uv run python scripts/review_source_kg.py --build-dir DIR --action accept|reject [--item-type edge|ITEM_TYPE] --target-key TARGET_KEY`
 - Acceptance smoke CLI:
   `uv run python scripts/smoke_rca_kg_construction.py --output-dir DIR [--tep-kg-root TEP_KG_ROOT] [--require-tep] [--overwrite]`
 - Service build source types:
@@ -325,10 +325,13 @@ and RCA reasoning all consume these build artifacts.
   and `recommended_action`.
 - Service review queues prefer `review_queue.json` when present and fall back
   to `edges.csv` for legacy builds.
-- `POST /review` updates `edges.csv` review status/counters and refreshes the
-  matching `review_queue.json` candidate payload when that artifact exists.
-  It must also append the review decision to `review_decisions.jsonl` and
-  refresh the published snapshot artifacts.
+- `POST /review` and `scripts/review_source_kg.py` accept edge and non-edge
+  review queue items. Edge decisions update `edges.csv` status/counters,
+  refresh the matching `review_queue.json` candidate payload, append the
+  decision to `review_decisions.jsonl`, and refresh published snapshot
+  artifacts. Non-edge decisions append the same decision log and synchronize the
+  matching `review_queue.json` item without publishing alignment decisions as KG
+  facts.
 - API and CLI review actions must delegate to a reusable workflow under
   `src/kgtracevis/workflows/`, not duplicate artifact mutation logic.
 - TEP RCA graph imports are source-backed candidates. TEP_KG `accept` does not
@@ -352,6 +355,7 @@ and RCA reasoning all consume these build artifacts.
 | Legacy `edges.csv` lacks optional RCA columns | service review code fills optional columns as blanks |
 | `review_queue.json` contains alignment items | service DTO parses them and keeps `review_status=auto` filters working |
 | Candidate edge is accepted/rejected | edge CSV and queue payload counters stay synchronized |
+| Non-edge review item is accepted/rejected | queue payload and decision log update, but KG CSV rows are not republished as reviewed facts |
 
 ### 5. Good/Base/Bad Cases
 

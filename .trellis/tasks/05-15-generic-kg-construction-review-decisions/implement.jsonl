@@ -1,0 +1,6 @@
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"generic review workflow and CLI boundary"}
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"KG construction review artifact contract"}
+{"type":"spec","path":".trellis/spec/backend/error-handling.md","reason":"deterministic review validation errors"}
+{"type":"spec","path":".trellis/spec/backend/quality-guidelines.md","reason":"verification commands"}
+{"type":"guide","path":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"review decisions cross CLI, workflow, service, artifacts"}
+{"type":"guide","path":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"reuse edge workflow and artifact helpers"}

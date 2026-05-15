@@ -77,6 +77,7 @@ from kgtracevis.kg_construction.models import (
     build_review_decision_id,
     draft_rows_from_draft,
     review_decision_for_edge,
+    review_decision_for_item,
 )
 from kgtracevis.kg_construction.mvtec_source_bundle import (
     DEFAULT_MVTEC_SOURCE_DIR,
@@ -219,6 +220,7 @@ __all__ = [
     "profile_for_scenario",
     "project_semantic_layer",
     "review_decision_for_edge",
+    "review_decision_for_item",
     "review_queue_payload",
     "run_kg_construction",
     "run_entity_alignment",

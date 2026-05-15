@@ -811,6 +811,76 @@ def test_alignment_review_queue_items_parse_as_service_dtos() -> None:
     assert all(row.recommended_action for row in rows)
 
 
+def test_kg_construction_review_route_accepts_alignment_item(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review route should handle non-edge review queue items."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    client = TestClient(app)
+    build_response = client.post(
+        "/api/kg/construction/build",
+        json={
+            "output_name": "alignment_review_runtime",
+            "overwrite": True,
+            "run_id": "kgbuild_alignment_review_unit",
+            "sources": [
+                {
+                    "source_id": "alignment_api_source",
+                    "source_type": "manual_table",
+                    "scenario": "shared",
+                    "source_format": "csv",
+                    "source_text": _manual_alignment_source_csv(),
+                }
+            ],
+        },
+    )
+    assert build_response.status_code == 200
+
+    queue_response = client.get(
+        "/api/kg/construction/builds/kgbuild_alignment_review_unit/review-queue",
+        params={"review_status": "auto", "query": "canonical merge"},
+    )
+    assert queue_response.status_code == 200
+    queue_item = next(
+        item
+        for item in queue_response.json()["edges"]
+        if item["item_type"] == "entity_merge_candidate"
+    )
+
+    review_response = client.post(
+        "/api/kg/construction/builds/kgbuild_alignment_review_unit/review",
+        json={
+            "item_type": "entity_merge_candidate",
+            "target_key": queue_item["target_key"],
+            "action": "accept",
+            "reviewer": "unit-test",
+            "proposed_payload": {"reviewed_canonical_id": "PumpA"},
+        },
+    )
+
+    assert review_response.status_code == 200
+    reviewed = review_response.json()
+    assert reviewed["edge"] == {}
+    assert reviewed["item"]["review_status"] == "reviewed"
+    assert reviewed["item"]["candidate_payload"]["reviewed_canonical_id"] == "PumpA"
+    assert reviewed["decision"]["target_type"] == "entity_merge_candidate"
+    assert reviewed["summary"]["review_decision_counts"] == {"accept": 1}
+
+    reviewed_queue_response = client.get(
+        "/api/kg/construction/builds/kgbuild_alignment_review_unit/review-queue",
+        params={"review_status": "reviewed"},
+    )
+    reviewed_queue = reviewed_queue_response.json()
+    assert reviewed_queue["total_count"] == 1
+    assert reviewed_queue["edges"][0]["item_type"] == "entity_merge_candidate"
+    assert reviewed_queue["edges"][0]["accepted_count"] == 1
+
+
 def test_kg_construction_build_route_accepts_tep_rca_graph_artifacts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1741,6 +1811,17 @@ def _manual_rca_source_csv() -> str:
                 ",,,ApiManualFault,SUGGESTS_ROOT_CAUSE,ApiManualCause,tep,"
                 "root cause API row,0.71"
             ),
+            "",
+        ]
+    )
+
+
+def _manual_alignment_source_csv() -> str:
+    return "\n".join(
+        [
+            "id,name,label,scenario,evidence,confidence",
+            "PumpA,Feed pump,Equipment,shared,pump A source row,0.90",
+            "PumpB,Feed pump,Equipment,shared,pump B duplicate row,0.87",
             "",
         ]
     )
