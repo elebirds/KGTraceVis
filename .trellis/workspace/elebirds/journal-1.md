@@ -1307,3 +1307,36 @@ Runtime generic path ranking now uses RCA view scores/path_strength when candida
 ### Next Steps
 
 - None - task complete
+
+
+## Session 40: M23 RCA output KG build provenance
+
+**Date**: 2026-05-15
+**Task**: M23 RCA output KG build provenance
+**Branch**: `main`
+
+### Summary
+
+Carried kg_build_ids from supporting construction edges into top-k paths, ranked root-cause scoring_details, and generic reasoner metadata. Added backward-compatible tests and docs/spec notes. Gates: ruff, mypy, pytest 341, run_examples, RCA-KG smoke with toy/material/TEP passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `af414a8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
