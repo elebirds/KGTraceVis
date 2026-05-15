@@ -1,0 +1,277 @@
+"""Tests for material-library service DTOs and handlers."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+from pydantic import ValidationError
+
+from kgtracevis.kg_construction.document_extraction import SourceTextChunk
+from kgtracevis.service.kg_materials import (
+    KGMaterialExtractionRunRequest,
+    KGMaterialExtractionState,
+    KGMaterialRegisterRequest,
+    KGMaterialSelectedBuildRequest,
+    extract_kg_material_to_structured_records,
+    get_kg_material,
+    list_kg_materials,
+    prepare_kg_material_construction_build,
+    register_kg_material,
+    save_kg_material_upload,
+)
+
+
+def test_material_upload_persists_listable_record(tmp_path: Path) -> None:
+    """Uploaded source materials should be stored without running extraction."""
+    record = save_kg_material_upload(
+        material_id="manual_pdf",
+        title="Manual PDF",
+        filename="manual.pdf",
+        content=b"%PDF fixture",
+        scenario="tep",
+        material_type="pdf",
+        content_type="application/pdf",
+        material_root=tmp_path,
+    )
+
+    assert record.status == "uploaded"
+    assert record.source_kind == "uploaded_file"
+    assert record.extraction.status == "not_started"
+    assert Path(record.source_uri).read_bytes() == b"%PDF fixture"
+    assert Path(record.metadata_path).is_file()
+
+    listing = list_kg_materials(material_root=tmp_path)
+    assert [material.material_id for material in listing.materials] == ["manual_pdf"]
+
+    detail = get_kg_material("manual_pdf", material_root=tmp_path)
+    assert detail.material.title == "Manual PDF"
+    assert detail.material.content_type == "application/pdf"
+
+
+def test_material_register_stores_url_without_fetching(tmp_path: Path) -> None:
+    """URL registration records provenance but does not create fetched content."""
+    record = register_kg_material(
+        KGMaterialRegisterRequest(
+            material_id="paper_url",
+            title="Reference paper",
+            source_kind="url",
+            source_uri="https://example.com/paper.pdf",
+            material_type="webpage",
+            metadata={"doi": "10.0000/example"},
+        ),
+        material_root=tmp_path,
+    )
+
+    assert record.status == "registered"
+    assert record.source_uri == "https://example.com/paper.pdf"
+    assert record.metadata["doi"] == "10.0000/example"
+    assert not (tmp_path / "paper_url" / "paper.pdf").exists()
+
+
+def test_material_extraction_writes_structured_records_with_fake_ie(
+    tmp_path: Path,
+) -> None:
+    """Material extraction should update metadata and write build-ready JSONL."""
+    source_path = tmp_path / "pump_note.txt"
+    source_text = "Pump cavitation indicates seal wear."
+    save_kg_material_upload(
+        material_id="pump_note",
+        title="Pump note",
+        filename=source_path.name,
+        content=source_text.encode(),
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+
+    response = extract_kg_material_to_structured_records(
+        "pump_note",
+        KGMaterialExtractionRunRequest(overwrite=True),
+        client=FakeIEClient(),
+        material_root=tmp_path,
+    )
+
+    assert response.status == "extracted"
+    assert response.record_count == 3
+    assert response.material.extraction.status == "extracted"
+    records_path = Path(response.structured_records_path)
+    rows = [json.loads(line) for line in records_path.read_text().splitlines()]
+    assert {row["record_type"] for row in rows} == {"entity", "relation"}
+    assert rows[-1]["relation"] == "SUGGESTS_ROOT_CAUSE"
+
+    build_sources = prepare_kg_material_construction_build(
+        KGMaterialSelectedBuildRequest(material_ids=["pump_note"]),
+        material_root=tmp_path,
+    )
+    assert build_sources.sources[0].path == str(records_path)
+
+
+def test_selected_materials_prepare_build_ready_construction_sources(
+    tmp_path: Path,
+) -> None:
+    """Extracted structured records should become source-to-KG build inputs."""
+    records_path = tmp_path / "extracted_records.jsonl"
+    records_path.write_text(
+        json.dumps(
+            {
+                "id": "FeedTemperature",
+                "name": "Feed temperature",
+                "label": "Variable",
+                "scenario": "tep",
+                "evidence": "manual source row",
+                "confidence": 0.7,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    register_kg_material(
+        KGMaterialRegisterRequest(
+            material_id="tep_manual",
+            title="TEP manual",
+            source_kind="local_path",
+            source_uri=str(tmp_path / "tep_manual.pdf"),
+            scenario="tep",
+            material_type="pdf",
+            extraction=KGMaterialExtractionState(
+                status="extracted",
+                structured_records_path=str(records_path),
+                source_format="jsonl",
+                source_id="tep_manual_records",
+                extractor_name="fake_extractor",
+                extractor_version="v0",
+                record_count=1,
+            ),
+        ),
+        material_root=tmp_path,
+    )
+
+    response = prepare_kg_material_construction_build(
+        KGMaterialSelectedBuildRequest(
+            material_ids=["tep_manual"],
+            output_name="selected_material_build",
+            overwrite=True,
+            run_id="kgbuild_material_unit",
+        ),
+        material_root=tmp_path,
+    )
+
+    assert response.status == "ready"
+    assert response.construction_request.output_name == "selected_material_build"
+    assert response.construction_request.overwrite is True
+    assert response.construction_request.run_id == "kgbuild_material_unit"
+    assert len(response.sources) == 1
+    source = response.sources[0]
+    assert source.source_id == "tep_manual_records"
+    assert source.source_type == "structured_records"
+    assert source.scenario == "tep"
+    assert source.path == str(records_path)
+    assert source.metadata["material_id"] == "tep_manual"
+    assert source.metadata["extractor_name"] == "fake_extractor"
+
+
+def test_selected_material_build_rejects_unextracted_material(tmp_path: Path) -> None:
+    """Build preparation should fail with a concrete 4xx-friendly message."""
+    register_kg_material(
+        KGMaterialRegisterRequest(
+            material_id="unparsed_manual",
+            title="Unparsed manual",
+            source_kind="url",
+            source_uri="https://example.com/manual.pdf",
+            material_type="pdf",
+        ),
+        material_root=tmp_path,
+    )
+
+    with pytest.raises(ValueError, match="extraction.status must be extracted"):
+        prepare_kg_material_construction_build(
+            KGMaterialSelectedBuildRequest(material_ids=["unparsed_manual"]),
+            material_root=tmp_path,
+        )
+
+
+def test_selected_material_build_rejects_missing_structured_records(
+    tmp_path: Path,
+) -> None:
+    """Extracted metadata must point at an existing local records file."""
+    missing_path = tmp_path / "missing.jsonl"
+    register_kg_material(
+        KGMaterialRegisterRequest(
+            material_id="missing_records",
+            title="Missing records",
+            source_kind="local_path",
+            source_uri=str(tmp_path / "source.pdf"),
+            extraction=KGMaterialExtractionState(
+                status="extracted",
+                structured_records_path=str(missing_path),
+            ),
+        ),
+        material_root=tmp_path,
+    )
+
+    with pytest.raises(ValueError, match="structured records not found"):
+        prepare_kg_material_construction_build(
+            KGMaterialSelectedBuildRequest(material_ids=["missing_records"]),
+            material_root=tmp_path,
+        )
+
+
+def test_material_dtos_reject_unsafe_or_ambiguous_inputs() -> None:
+    """DTO validation should produce deterministic service-boundary errors."""
+    with pytest.raises(ValidationError, match="material_id must be a single path component"):
+        KGMaterialSelectedBuildRequest(material_ids=["../bad"])
+
+    with pytest.raises(ValidationError, match="source_kind=url requires source_uri"):
+        KGMaterialRegisterRequest(
+            material_id="bad_url",
+            title="Bad URL",
+            source_kind="url",
+            source_uri="/local/path.pdf",
+        )
+
+    with pytest.raises(ValidationError, match="material_ids contains duplicates"):
+        KGMaterialSelectedBuildRequest(material_ids=["same", "same"])
+
+    with pytest.raises(ValidationError, match="source_format must be jsonl"):
+        KGMaterialExtractionRunRequest(source_format="csv")
+
+
+class FakeIEClient:
+    """Fake document IE client for material extraction service tests."""
+
+    def extract_candidates(
+        self,
+        chunk: SourceTextChunk,
+        *,
+        prompt: str,
+        response_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        del prompt, response_schema
+        return {
+            "entities": [
+                {
+                    "id": "PumpCavitation",
+                    "name": "Pump cavitation",
+                    "label": "FaultEvent",
+                    "evidence": "Pump cavitation",
+                },
+                {
+                    "id": "SealWear",
+                    "name": "Seal wear",
+                    "label": "RootCause",
+                    "evidence": "seal wear",
+                },
+            ],
+            "relations": [
+                {
+                    "head": "PumpCavitation",
+                    "relation": "SUGGESTS_ROOT_CAUSE",
+                    "tail": "SealWear",
+                    "evidence": chunk.text,
+                    "confidence": 0.55,
+                }
+            ],
+        }

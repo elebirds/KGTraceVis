@@ -58,5 +58,11 @@ def test_load_postgres_schema_contains_core_tables() -> None:
     assert "CREATE TABLE IF NOT EXISTS run_evidence_cases" in schema_sql
     assert "CREATE TABLE IF NOT EXISTS feedback_records" in schema_sql
     assert "CREATE TABLE IF NOT EXISTS kg_versions" in schema_sql
+    assert "CREATE TABLE IF NOT EXISTS source_materials" in schema_sql
+    assert "CREATE TABLE IF NOT EXISTS source_material_chunks" in schema_sql
+    assert "CREATE TABLE IF NOT EXISTS material_extraction_runs" in schema_sql
+    assert "CREATE TABLE IF NOT EXISTS material_extraction_artifacts" in schema_sql
+    assert "idx_source_materials_scenario_updated" in schema_sql
+    assert "idx_material_extraction_runs_material" in schema_sql
     assert "external_run_id" not in schema_sql
     assert "run_details" not in schema_sql

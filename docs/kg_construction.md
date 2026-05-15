@@ -190,6 +190,60 @@ resulting artifact paths and summary manifest, and refreshes KG Studio so the
 candidate graph can be inspected in the existing `Graph`, `Review`, and
 `Draft Lab` tabs.
 
+## Material Library And Document IE
+
+The first material-library layer is available for source-grounded KG
+construction inputs:
+
+```http
+GET /api/kg/materials
+POST /api/kg/materials/upload
+POST /api/kg/materials/register-url
+POST /api/kg/materials/{material_id}/extract
+POST /api/kg/materials/build-sources
+```
+
+Uploads and URL registrations are stored under `runs/source_kg_materials/`.
+They are provenance records only; registering a material does not mutate KG
+artifacts and does not publish anything to Neo4j.
+
+The extraction endpoint parses supported local material content into text
+chunks, calls an OpenAI-compatible IE client, writes
+`structured_records.jsonl`, and updates the material's extraction metadata.
+These records can then be converted into an ordinary
+`KGConstructionBuildRequest` through `POST /api/kg/materials/build-sources` and
+passed to the existing source-to-KG build endpoint.
+
+The extractor is intentionally candidate-only. Each extracted relation keeps
+source evidence, confidence, and `review_status=auto` after it enters the KG
+CSV contract. Missing API keys, unavailable optional parsers such as `pypdf`,
+ungrounded model evidence, invalid scenarios, or relation names outside the
+RCA-oriented KG construction whitelist fail before a candidate build is
+produced. Document IE also coerces model-returned entity references into the
+same PascalCase-ish node ID style used by KG CSV validation.
+
+The reusable orchestration entry point for this material-driven path is
+`kgtracevis.workflows.material_kg_construction.run_material_kg_construction_workflow`.
+It accepts selected material IDs, optionally extracts missing/selected materials
+with an injected IE client, prepares build-ready construction sources, and then
+calls the existing source-to-KG construction workflow.
+
+### Storage Boundary
+
+Use the three storage layers for different jobs:
+
+- Postgres stores workbench state: material metadata, source chunks, extraction
+  runs, extraction artifacts, review/feedback records, and build history.
+- Neo4j stores the published runtime KG used for graph queries and RCA path
+  traversal.
+- CSV/JSON/JSONL stores reproducible build artifacts such as `nodes.csv`,
+  `edges.csv`, `structured_records.jsonl`, and construction manifests.
+
+The current API remains file-backed for local v0 material operations, while the
+Postgres schema and `PostgresMaterialStore` define the runtime persistence path
+for productionizing the same material records, chunks, extraction runs, and
+candidate artifacts.
+
 For TEP-specific graph construction, the external `TEP_KG` implementation should
 be merged through extractor/import adapters rather than copied directly. See
 [`tep_kg_merge_assessment.md`](tep_kg_merge_assessment.md) for the recommended

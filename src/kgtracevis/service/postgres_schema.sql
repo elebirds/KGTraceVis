@@ -64,6 +64,84 @@ CREATE TABLE IF NOT EXISTS source_documents (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS source_materials (
+    material_id text PRIMARY KEY,
+    title text NOT NULL,
+    scenario text NOT NULL DEFAULT 'shared'
+        CHECK (scenario IN ('mvtec', 'wafer', 'tep', 'shared')),
+    material_type text NOT NULL DEFAULT 'other'
+        CHECK (
+            material_type IN (
+                'pdf',
+                'webpage',
+                'text',
+                'markdown',
+                'csv',
+                'json',
+                'jsonl',
+                'other'
+            )
+        ),
+    source_kind text NOT NULL
+        CHECK (source_kind IN ('uploaded_file', 'url', 'local_path', 'citation')),
+    source_uri text NOT NULL,
+    metadata_path text NOT NULL,
+    status text NOT NULL
+        CHECK (status IN ('registered', 'uploaded', 'extracted', 'failed')),
+    registered_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    original_filename text,
+    content_type text,
+    size_bytes bigint NOT NULL DEFAULT 0 CHECK (size_bytes >= 0),
+    metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+    extraction jsonb NOT NULL DEFAULT '{}'::jsonb,
+    claim_boundary text NOT NULL DEFAULT 'source materials are provenance inputs for candidate KG construction; registration or upload does not verify industrial facts or publish KG rows'
+);
+
+CREATE TABLE IF NOT EXISTS source_material_chunks (
+    chunk_id text PRIMARY KEY,
+    material_id text NOT NULL REFERENCES source_materials(material_id) ON DELETE CASCADE,
+    chunk_index integer NOT NULL CHECK (chunk_index >= 0),
+    source_locator text,
+    text_content text NOT NULL,
+    char_start integer CHECK (char_start IS NULL OR char_start >= 0),
+    char_end integer CHECK (char_end IS NULL OR char_end >= 0),
+    metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (material_id, chunk_index)
+);
+
+CREATE TABLE IF NOT EXISTS material_extraction_runs (
+    extraction_run_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    material_id text NOT NULL REFERENCES source_materials(material_id) ON DELETE CASCADE,
+    status text NOT NULL DEFAULT 'not_started'
+        CHECK (status IN ('not_started', 'running', 'extracted', 'failed')),
+    provider text,
+    source_format text NOT NULL DEFAULT 'jsonl',
+    structured_records_path text,
+    source_id text,
+    extractor_name text,
+    extractor_version text,
+    record_count integer CHECK (record_count IS NULL OR record_count >= 0),
+    error_message text,
+    started_at timestamptz NOT NULL DEFAULT now(),
+    completed_at timestamptz,
+    parameters jsonb NOT NULL DEFAULT '{}'::jsonb,
+    result_summary jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE IF NOT EXISTS material_extraction_artifacts (
+    artifact_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    extraction_run_id uuid REFERENCES material_extraction_runs(extraction_run_id)
+        ON DELETE CASCADE,
+    material_id text NOT NULL REFERENCES source_materials(material_id) ON DELETE CASCADE,
+    artifact_type text NOT NULL,
+    uri text,
+    media_type text,
+    payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS kg_versions (
     kg_version text PRIMARY KEY,
     imported_at timestamptz NOT NULL DEFAULT now(),
@@ -349,3 +427,19 @@ CREATE INDEX IF NOT EXISTS idx_evidence_raw_gin
     ON evidence_cases USING gin(raw_evidence);
 CREATE INDEX IF NOT EXISTS idx_evidence_normalized_gin
     ON evidence_cases USING gin(normalized_evidence);
+CREATE INDEX IF NOT EXISTS idx_source_materials_scenario_updated
+    ON source_materials(scenario, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_source_materials_status
+    ON source_materials(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_source_material_chunks_material
+    ON source_material_chunks(material_id, chunk_index);
+CREATE INDEX IF NOT EXISTS idx_source_material_chunks_metadata_gin
+    ON source_material_chunks USING gin(metadata);
+CREATE INDEX IF NOT EXISTS idx_material_extraction_runs_material
+    ON material_extraction_runs(material_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_material_extraction_runs_status
+    ON material_extraction_runs(status, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_material_extraction_artifacts_material
+    ON material_extraction_artifacts(material_id, artifact_type);
+CREATE INDEX IF NOT EXISTS idx_material_extraction_artifacts_run
+    ON material_extraction_artifacts(extraction_run_id);

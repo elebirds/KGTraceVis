@@ -217,6 +217,115 @@ export interface KGStudioPayload {
   note: string;
 }
 
+export interface KGMaterialRecord {
+  material_id: string;
+  title: string;
+  source_type: string;
+  source_format?: string | null;
+  scenario?: string | null;
+  path?: string | null;
+  url?: string | null;
+  uri?: string | null;
+  filename?: string | null;
+  content_type?: string | null;
+  size_bytes?: number | null;
+  status?: string | null;
+  processing_status?: string | null;
+  extraction_status?: string | null;
+  chunk_count?: number | null;
+  page_count?: number | null;
+  source_id?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  metadata?: Record<string, unknown>;
+  extraction?: KGMaterialExtractionState;
+}
+
+export interface KGMaterialExtractionState {
+  status?: string | null;
+  structured_records_path?: string | null;
+  source_format?: KGConstructionSourceFormat | null;
+  source_id?: string | null;
+  extractor_name?: string | null;
+  extractor_version?: string | null;
+  extracted_at?: string | null;
+  record_count?: number | null;
+  error_message?: string | null;
+}
+
+export interface KGMaterialListResponse {
+  status: string;
+  materials: KGMaterialRecord[];
+  count?: number;
+  material_dir?: string | null;
+  note?: string | null;
+}
+
+export interface KGMaterialUploadRequest {
+  file: File;
+  title?: string;
+  scenario?: string;
+  source_type?: string;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface KGMaterialUploadResponse {
+  status: string;
+  material: KGMaterialRecord;
+  note?: string | null;
+}
+
+export interface KGMaterialRegisterUrlRequest {
+  url: string;
+  title?: string;
+  scenario?: string;
+  source_type?: string;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface KGMaterialRegisterUrlResponse {
+  status: string;
+  material: KGMaterialRecord;
+  note?: string | null;
+}
+
+export interface KGMaterialExtractionRequest {
+  provider?: "openai";
+  max_chars?: number;
+  overlap_chars?: number;
+  source_format?: Extract<KGConstructionSourceFormat, "jsonl">;
+  overwrite?: boolean;
+}
+
+export interface KGMaterialExtractionResponse {
+  status: string;
+  material: KGMaterialRecord;
+  structured_records_path: string;
+  record_count: number;
+  claim_boundary: string;
+}
+
+export interface KGMaterialBuildSourcesRequest {
+  material_ids: string[];
+  output_name?: string;
+  overwrite?: boolean;
+  run_id?: string;
+  source_type?: Extract<KGConstructionSourceType, "structured_records" | "manual_table">;
+}
+
+export interface KGMaterialBuildSourcesResponse {
+  status: "ready" | string;
+  material_root: string;
+  request: KGMaterialBuildSourcesRequest;
+  materials: KGMaterialRecord[];
+  sources: KGConstructionSourceInput[];
+  construction_request: KGConstructionBuildRequest;
+  claim_boundary: string;
+}
+
 export interface UploadRequest {
   file: File;
   mode: UploadMode;

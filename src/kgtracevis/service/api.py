@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, cast
+import json
+import re
+import uuid
+from pathlib import Path
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,6 +44,18 @@ from kgtracevis.service.kg_construction import (
     validate_kg_construction_build,
 )
 from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
+from kgtracevis.service.kg_materials import (
+    KGMaterialExtractionRunRequest,
+    KGMaterialRegisterRequest,
+    KGMaterialSelectedBuildRequest,
+    MaterialType,
+    extract_kg_material_to_structured_records,
+    get_kg_material,
+    list_kg_materials,
+    prepare_kg_material_construction_build,
+    register_kg_material,
+    save_kg_material_upload,
+)
 from kgtracevis.service.kg_source_drafts import (
     KGSourceDraftRequest,
     generate_source_kg_draft,
@@ -66,14 +82,26 @@ class ModelAssetDownloadRequest(BaseModel):
     force: bool = False
 
 
+class KGMaterialRegisterUrlRequest(BaseModel):
+    """Frontend-friendly request to register one remote source material URL."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str
+    title: str | None = None
+    scenario: str = "shared"
+    source_type: str = "webpage"
+    notes: str | None = None
+    metadata: dict[str, Any] | None = None
+    material_id: str | None = None
+
+
 def create_app() -> FastAPI:
     """Create the FastAPI application used by dashboard/API clients."""
     app = FastAPI(
         title="KGTraceVis Web API",
         version="0.1.0",
-        description=(
-            "API for evidence inspection and candidate/plausible KG explanation paths."
-        ),
+        description=("API for evidence inspection and candidate/plausible KG explanation paths."),
     )
     app.add_middleware(
         CORSMiddleware,
@@ -155,6 +183,144 @@ def create_app() -> FastAPI:
     def kg_source_draft(request: KGSourceDraftRequest) -> dict[str, object]:
         return generate_source_kg_draft(request).model_dump(mode="json")
 
+    @app.get("/api/kg/materials")
+    def kg_materials() -> dict[str, object]:
+        try:
+            response = list_kg_materials()
+            materials = [_material_api_record(material) for material in response.materials]
+            return {
+                "status": "ok",
+                "material_dir": response.material_root,
+                "material_root": response.material_root,
+                "count": len(materials),
+                "materials": materials,
+                "note": "registered source materials for source-grounded KG construction",
+            }
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/kg/materials/{material_id}")
+    def kg_material_detail(material_id: str) -> dict[str, object]:
+        try:
+            material = get_kg_material(material_id).material
+            return {"status": "ok", "material": _material_api_record(material)}
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/kg/materials/upload")
+    async def kg_material_upload(
+        file: Annotated[UploadFile, File()],
+        title: Annotated[str | None, Form()] = None,
+        scenario: Annotated[str, Form()] = "shared",
+        source_type: Annotated[str, Form()] = "other",
+        notes: Annotated[str | None, Form()] = None,
+        metadata: Annotated[str | None, Form()] = None,
+        material_id: Annotated[str | None, Form()] = None,
+        overwrite: Annotated[bool, Form()] = False,
+    ) -> dict[str, object]:
+        try:
+            content = await file.read()
+            parsed_metadata = _metadata_from_form(metadata)
+            if notes:
+                parsed_metadata["notes"] = notes
+            record = save_kg_material_upload(
+                material_id=material_id
+                or _generated_material_id(title or file.filename or "material"),
+                title=title or Path(file.filename or "material").stem,
+                filename=file.filename or "material.txt",
+                content=content,
+                scenario=scenario,
+                material_type=cast(
+                    MaterialType,
+                    _material_type_from_source_type(
+                        source_type,
+                        filename=file.filename or "",
+                        content_type=file.content_type,
+                    ),
+                ),
+                content_type=file.content_type,
+                metadata=parsed_metadata,
+                overwrite=overwrite,
+            )
+            return {
+                "status": "uploaded",
+                "material": _material_api_record(record),
+                "note": record.claim_boundary,
+            }
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/kg/materials/register-url")
+    def kg_material_register_url(request: KGMaterialRegisterUrlRequest) -> dict[str, object]:
+        try:
+            metadata = dict(request.metadata or {})
+            if request.notes:
+                metadata["notes"] = request.notes
+            record = register_kg_material(
+                KGMaterialRegisterRequest(
+                    material_id=request.material_id
+                    or _generated_material_id(request.title or request.url),
+                    title=request.title or request.url,
+                    source_uri=request.url,
+                    source_kind="url",
+                    scenario=request.scenario,
+                    material_type=cast(
+                        MaterialType,
+                        _material_type_from_source_type(request.source_type),
+                    ),
+                    metadata=metadata,
+                )
+            )
+            return {
+                "status": "registered",
+                "material": _material_api_record(record),
+                "note": record.claim_boundary,
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/kg/materials/register")
+    def kg_material_register(request: KGMaterialRegisterRequest) -> dict[str, object]:
+        try:
+            record = register_kg_material(request)
+            return {
+                "status": record.status,
+                "material": _material_api_record(record),
+                "note": record.claim_boundary,
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/kg/materials/{material_id}/extract")
+    def kg_material_extract(
+        material_id: str,
+        request: KGMaterialExtractionRunRequest | None = None,
+    ) -> dict[str, object]:
+        try:
+            response = extract_kg_material_to_structured_records(
+                material_id,
+                request or KGMaterialExtractionRunRequest(),
+            )
+            payload = response.model_dump(mode="json")
+            payload["material"] = _material_api_record(response.material)
+            return payload
+        except ImportError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError as exc:
+            status_code = 404 if "unknown material_id" in str(exc) else 400
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    @app.post("/api/kg/materials/build-sources")
+    def kg_material_build_sources(
+        request: KGMaterialSelectedBuildRequest,
+    ) -> dict[str, object]:
+        try:
+            response = prepare_kg_material_construction_build(request)
+            return response.model_dump(mode="json")
+        except ValueError as exc:
+            status_code = 404 if "unknown material_id" in str(exc) else 400
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
     @app.post("/api/kg/construction/build")
     def kg_construction_build(request: KGConstructionBuildRequest) -> dict[str, object]:
         try:
@@ -200,9 +366,7 @@ def create_app() -> FastAPI:
         except Neo4jImportError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ValueError as exc:
-            status_code = (
-                404 if "unknown construction build run_id" in str(exc) else 400
-            )
+            status_code = 404 if "unknown construction build run_id" in str(exc) else 400
             raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
     @app.post("/api/kg/construction/builds/{run_id}/review")
@@ -247,9 +411,7 @@ def create_app() -> FastAPI:
                 request,
             ).model_dump(mode="json")
         except ValueError as exc:
-            status_code = (
-                404 if "unknown construction build run_id" in str(exc) else 400
-            )
+            status_code = 404 if "unknown construction build run_id" in str(exc) else 400
             raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
     @app.get("/api/kg/construction/sources")
@@ -332,3 +494,64 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+def _metadata_from_form(value: str | None) -> dict[str, Any]:
+    if not value:
+        return {}
+    payload = json.loads(value)
+    if not isinstance(payload, dict):
+        raise ValueError("metadata must be a JSON object")
+    return payload
+
+
+def _generated_material_id(seed: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", seed.strip()).strip("._").lower()
+    slug = slug[:40].strip("._") or "material"
+    return f"{slug}_{uuid.uuid4().hex[:8]}"
+
+
+def _material_type_from_source_type(
+    source_type: str,
+    *,
+    filename: str = "",
+    content_type: str | None = None,
+) -> str:
+    lowered = " ".join([source_type, filename, content_type or ""]).lower()
+    if "pdf" in lowered:
+        return "pdf"
+    if "web" in lowered or lowered.startswith("url"):
+        return "webpage"
+    if "jsonl" in lowered:
+        return "jsonl"
+    if "json" in lowered:
+        return "json"
+    if "csv" in lowered:
+        return "csv"
+    if "markdown" in lowered or filename.lower().endswith(".md"):
+        return "markdown"
+    if "text" in lowered or filename.lower().endswith(".txt"):
+        return "text"
+    return "other"
+
+
+def _material_api_record(material: Any) -> dict[str, object]:
+    payload = material.model_dump(mode="json")
+    extraction = payload.get("extraction") if isinstance(payload.get("extraction"), dict) else {}
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    return {
+        **payload,
+        "source_type": payload.get("material_type"),
+        "source_format": extraction.get("source_format"),
+        "path": payload.get("source_uri") if payload.get("source_kind") != "url" else None,
+        "url": payload.get("source_uri") if payload.get("source_kind") == "url" else None,
+        "uri": payload.get("source_uri"),
+        "filename": payload.get("original_filename"),
+        "processing_status": payload.get("status"),
+        "extraction_status": extraction.get("status"),
+        "chunk_count": metadata.get("chunk_count"),
+        "page_count": metadata.get("page_count"),
+        "source_id": extraction.get("source_id"),
+        "notes": metadata.get("notes"),
+        "created_at": payload.get("registered_at"),
+    }

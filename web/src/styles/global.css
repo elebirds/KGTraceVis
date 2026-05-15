@@ -566,6 +566,59 @@ code {
   padding-bottom: 5px;
 }
 
+.material-workspace {
+  align-items: start;
+}
+
+.material-actions,
+.selected-material-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.material-selection-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.material-workflow-panel {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fbfdff;
+}
+
+.material-workflow-panel > strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.material-artifact-list {
+  max-height: 190px;
+  overflow: auto;
+}
+
+.material-artifact-list span {
+  overflow-wrap: anywhere;
+}
+
+.material-url-form {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.hidden-file-input {
+  display: none;
+}
+
 .kg-status-strip {
   display: flex;
   flex-wrap: wrap;

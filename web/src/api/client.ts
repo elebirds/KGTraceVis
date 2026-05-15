@@ -3,6 +3,15 @@ import type {
   KGConstructionBuildRequest,
   KGConstructionBuildResponse,
   KGDraftRequest,
+  KGMaterialBuildSourcesRequest,
+  KGMaterialBuildSourcesResponse,
+  KGMaterialExtractionRequest,
+  KGMaterialExtractionResponse,
+  KGMaterialListResponse,
+  KGMaterialRegisterUrlRequest,
+  KGMaterialRegisterUrlResponse,
+  KGMaterialUploadRequest,
+  KGMaterialUploadResponse,
   KGSourceDraftRequest,
   KGSourceDraftResponse,
   KGStudioPayload,
@@ -26,6 +35,38 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   bootstrap: () => requestJson<DashboardBootstrap>("/api/dashboard/bootstrap"),
   kgStudio: () => requestJson<KGStudioPayload>("/api/kg/studio"),
+  listKGMaterials: () => requestJson<KGMaterialListResponse>("/api/kg/materials"),
+  uploadKGMaterial: (request: KGMaterialUploadRequest) => {
+    const form = new FormData();
+    form.append("file", request.file);
+    if (request.title) form.append("title", request.title);
+    if (request.scenario) form.append("scenario", request.scenario);
+    if (request.source_type) form.append("source_type", request.source_type);
+    if (request.notes) form.append("notes", request.notes);
+    if (request.metadata) form.append("metadata", JSON.stringify(request.metadata));
+    return requestJson<KGMaterialUploadResponse>("/api/kg/materials/upload", {
+      method: "POST",
+      body: form
+    });
+  },
+  registerKGMaterialUrl: (request: KGMaterialRegisterUrlRequest) =>
+    requestJson<KGMaterialRegisterUrlResponse>("/api/kg/materials/register-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request)
+    }),
+  extractKGMaterial: (materialId: string, request: KGMaterialExtractionRequest = {}) =>
+    requestJson<KGMaterialExtractionResponse>(`/api/kg/materials/${materialId}/extract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request)
+    }),
+  buildKGMaterialSources: (request: KGMaterialBuildSourcesRequest) =>
+    requestJson<KGMaterialBuildSourcesResponse>("/api/kg/materials/build-sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request)
+    }),
   listRuns: () => requestJson<RunSummary[]>("/api/runs"),
   getRun: (runId: string) => requestJson<RunDetail>(`/api/runs/${runId}`),
   uploadRun: (request: UploadRequest) => {

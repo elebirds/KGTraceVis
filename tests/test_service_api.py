@@ -16,6 +16,7 @@ from kgtracevis.producers.backends import AMAZON_PATCHCORE_BACKEND, ANOMALIB_ENG
 from kgtracevis.service import api as service_api
 from kgtracevis.service import dashboard as service_dashboard
 from kgtracevis.service import kg_construction as service_kg_construction
+from kgtracevis.service import kg_materials as service_kg_materials
 from kgtracevis.service import runs as service_runs
 from kgtracevis.service.api import app
 from kgtracevis.service.handlers import (
@@ -295,9 +296,7 @@ def test_kg_construction_build_registry_lists_details_and_validates(
     assert detail["summary"]["node_count"] == 2
     assert detail["manifest"]["run"]["run_id"] == "kgbuild_registry_unit"
 
-    validation_response = client.post(
-        "/api/kg/construction/builds/kgbuild_registry_unit/validate"
-    )
+    validation_response = client.post("/api/kg/construction/builds/kgbuild_registry_unit/validate")
     assert validation_response.status_code == 200
     validation = validation_response.json()
     assert validation["build"]["run_id"] == "kgbuild_registry_unit"
@@ -583,9 +582,7 @@ def test_kg_construction_review_queue_filters_edges(
     assert initial["returned_count"] == 1
     assert initial["summary"]["review_status_counts"] == {"auto": 1}
     assert initial["summary"]["relation_counts"] == {"BELONGS_TO": 1}
-    assert initial["edges"][0]["target_key"] == (
-        "ApiManualSource|BELONGS_TO|ApiManualTarget|tep"
-    )
+    assert initial["edges"][0]["target_key"] == ("ApiManualSource|BELONGS_TO|ApiManualTarget|tep")
     assert initial["edges"][0]["confidence"] == 0.71
 
     review_response = client.post(
@@ -634,9 +631,7 @@ def test_kg_construction_build_registry_rejects_unknown_run(
     client = TestClient(app)
 
     detail_response = client.get("/api/kg/construction/builds/missing_build")
-    validation_response = client.post(
-        "/api/kg/construction/builds/missing_build/validate"
-    )
+    validation_response = client.post("/api/kg/construction/builds/missing_build/validate")
 
     assert detail_response.status_code == 404
     assert validation_response.status_code == 404
@@ -725,6 +720,158 @@ def test_kg_construction_source_upload_route_rejects_invalid_file(
     assert not (tmp_path / "source_uploads").exists()
 
 
+def test_kg_material_routes_upload_register_and_list(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Material library routes should expose upload and URL registration."""
+    monkeypatch.setattr(
+        service_kg_materials,
+        "DEFAULT_SOURCE_KG_MATERIAL_DIR",
+        tmp_path / "materials",
+    )
+    client = TestClient(app)
+
+    upload = client.post(
+        "/api/kg/materials/upload",
+        files={"file": ("manual.txt", "A,CAUSES,B", "text/plain")},
+        data={
+            "title": "Manual note",
+            "scenario": "tep",
+            "source_type": "text",
+            "material_id": "manual_note",
+        },
+    )
+
+    assert upload.status_code == 200
+    uploaded = upload.json()["material"]
+    assert uploaded["material_id"] == "manual_note"
+    assert uploaded["status"] == "uploaded"
+    assert uploaded["source_type"] == "text"
+    assert Path(uploaded["path"]).is_file()
+
+    registered = client.post(
+        "/api/kg/materials/register-url",
+        json={
+            "material_id": "paper_url",
+            "title": "Paper URL",
+            "url": "https://example.com/paper",
+            "scenario": "shared",
+            "source_type": "webpage",
+        },
+    )
+
+    assert registered.status_code == 200
+    assert registered.json()["material"]["url"] == "https://example.com/paper"
+
+    listing = client.get("/api/kg/materials")
+    assert listing.status_code == 200
+    payload = listing.json()
+    assert payload["status"] == "ok"
+    assert payload["count"] == 2
+    assert {material["material_id"] for material in payload["materials"]} == {
+        "manual_note",
+        "paper_url",
+    }
+
+
+def test_kg_material_build_sources_feed_existing_construction_pipeline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Selected extracted materials should run through the existing KG builder."""
+    material_root = tmp_path / "materials"
+    build_root = tmp_path / "builds"
+    records_path = tmp_path / "records.jsonl"
+    records_path.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "id": "PumpFault",
+                        "name": "Pump fault",
+                        "label": "FaultEvent",
+                        "scenario": "tep",
+                        "evidence": "Pump fault can indicate seal wear.",
+                        "confidence": 0.62,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "id": "SealWear",
+                        "name": "Seal wear",
+                        "label": "RootCause",
+                        "scenario": "tep",
+                        "evidence": "Pump fault can indicate seal wear.",
+                        "confidence": 0.62,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "head": "PumpFault",
+                        "relation": "SUGGESTS_ROOT_CAUSE",
+                        "tail": "SealWear",
+                        "scenario": "tep",
+                        "source": "pump_manual",
+                        "evidence": "Pump fault can indicate seal wear.",
+                        "confidence": 0.55,
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        service_kg_materials,
+        "DEFAULT_SOURCE_KG_MATERIAL_DIR",
+        material_root,
+    )
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        build_root,
+    )
+    service_kg_materials.register_kg_material(
+        service_kg_materials.KGMaterialRegisterRequest(
+            material_id="pump_manual",
+            title="Pump manual",
+            source_uri=str(tmp_path / "pump_manual.txt"),
+            source_kind="local_path",
+            scenario="tep",
+            material_type="text",
+            extraction=service_kg_materials.KGMaterialExtractionState(
+                status="extracted",
+                structured_records_path=str(records_path),
+                source_id="pump_manual",
+                record_count=3,
+            ),
+        )
+    )
+    client = TestClient(app)
+
+    sources_response = client.post(
+        "/api/kg/materials/build-sources",
+        json={
+            "material_ids": ["pump_manual"],
+            "output_name": "pump_manual_build",
+            "overwrite": True,
+            "run_id": "kgbuild_pump_manual",
+        },
+    )
+
+    assert sources_response.status_code == 200
+    construction_request = sources_response.json()["construction_request"]
+    build_response = client.post("/api/kg/construction/build", json=construction_request)
+
+    assert build_response.status_code == 200
+    build_payload = build_response.json()
+    assert build_payload["run_id"] == "kgbuild_pump_manual"
+    assert Path(build_payload["nodes_path"]).is_file()
+    assert Path(build_payload["edges_path"]).is_file()
+    assert build_payload["summary"]["edge_count"] == 1
+
+
 def test_upload_run_prepares_visual_evidence_artifacts(
     tmp_path: Path,
     monkeypatch,
@@ -751,8 +898,7 @@ def test_upload_run_prepares_visual_evidence_artifacts(
         "object": "capsule",
         "defect_type": "crack",
         "source_label": "crack",
-        "image_path": "runs/real_model_pipeline/assets/mvtec/input_root/capsule/test/"
-        "crack/000.png",
+        "image_path": "runs/real_model_pipeline/assets/mvtec/input_root/capsule/test/crack/000.png",
         "source_path": "runs/real_model_pipeline/assets/mvtec/input_root/capsule/test/"
         "crack/000.png",
         "mask_path": "runs/real_model_pipeline/assets/mvtec/generated_records/"
@@ -997,9 +1143,7 @@ def test_mvtec_model_preset_route_ignores_amazon_patchcore_lfs_pointers(
     monkeypatch.delenv("KGTRACEVIS_MVTEC_EFFICIENTAD_CHECKPOINT", raising=False)
     monkeypatch.delenv("KGTRACEVIS_MVTEC_STFPM_CHECKPOINT", raising=False)
     pointer = (
-        b"version https://git-lfs.github.com/spec/v1\n"
-        b"oid sha256:0123456789abcdef\n"
-        b"size 123456\n"
+        b"version https://git-lfs.github.com/spec/v1\noid sha256:0123456789abcdef\nsize 123456\n"
     )
     root = tmp_path / "models"
     checkpoint = root / "mvtec_bottle"
