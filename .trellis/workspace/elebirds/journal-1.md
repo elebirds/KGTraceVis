@@ -1274,3 +1274,36 @@ Used RCA scores and semantic-derived provenance in review queue priority, graph 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 39: M22 consume RCA view scores in path ranking
+
+**Date**: 2026-05-15
+**Task**: M22 consume RCA view scores in path ranking
+**Branch**: `main`
+
+### Summary
+
+Runtime generic path ranking now uses RCA view scores/path_strength when candidate KG overlays provide them, while legacy seed KG falls back to confidence. Added path payload fields, docs/spec notes, and tests. Gates: ruff, mypy, pytest 340, run_examples, RCA-KG smoke with toy/material/TEP passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d6b2acc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
