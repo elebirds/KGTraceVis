@@ -47,6 +47,10 @@ KG and path views should make the graph the primary canvas.
   to tables or provenance text.
 - Tables and provenance panels are auxiliary inspection tools; they should not
   visually overpower the graph.
+- KG Studio construction review controls should use the construction API
+  contracts directly: list builds, read the build review queue, submit
+  accept/reject decisions, and run overlay validation. Do not duplicate CSV
+  parsing or review artifact mutation in frontend code.
 - RCA Explorer should default to a focused selected path. Put ranking controls,
   the focused graph, and provenance/evidence in one workbench surface instead
   of stacking them as unrelated cards.

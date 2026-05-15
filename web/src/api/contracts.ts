@@ -423,3 +423,103 @@ export interface KGConstructionBuildResponse {
   summary: Record<string, unknown>;
   claim_boundary: string;
 }
+
+export interface KGConstructionBuildRecord {
+  run_id: string;
+  status: string;
+  created_at?: string | null;
+  output_dir: string;
+  nodes_path: string;
+  edges_path: string;
+  summary_path: string;
+  manifest_path: string;
+  review_queue_path?: string | null;
+  publish_report_path?: string | null;
+  diff_path?: string | null;
+  source_ids: string[];
+  source_count: number;
+  node_count: number;
+  edge_count: number;
+  scenarios: Record<string, number>;
+  review_status_counts: Record<string, number>;
+  claim_boundary: string;
+}
+
+export interface KGConstructionBuildListResponse {
+  build_root: string;
+  builds: KGConstructionBuildRecord[];
+}
+
+export interface KGConstructionReviewQueueEdge {
+  target_key: string;
+  head: string;
+  relation: string;
+  tail: string;
+  scenario: string;
+  source: string;
+  evidence: string;
+  confidence: number;
+  weight: number;
+  review_status: string;
+  feedback_count: number;
+  accepted_count: number;
+  rejected_count: number;
+  item_type: string;
+  priority?: number | null;
+  reason: string;
+  relation_family: string;
+  graph_impact: string;
+  recommended_action: string;
+  candidate_payload: Record<string, unknown>;
+}
+
+export interface KGConstructionReviewQueueResponse {
+  build: KGConstructionBuildRecord;
+  filters: Record<string, unknown>;
+  total_count: number;
+  returned_count: number;
+  offset: number;
+  limit: number;
+  edges: KGConstructionReviewQueueEdge[];
+  summary: {
+    review_status_counts: Record<string, number>;
+    relation_counts: Record<string, number>;
+    scenario_counts: Record<string, number>;
+    source_counts: Record<string, number>;
+  };
+  claim_boundary: string;
+}
+
+export interface KGConstructionReviewRequest {
+  action: Extract<ReviewAction, "accept" | "reject">;
+  item_type?: string;
+  target_key: string;
+  reviewer?: string;
+  note?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface KGConstructionReviewResponse {
+  build: KGConstructionBuildRecord;
+  decision: Record<string, unknown>;
+  edge: Record<string, unknown>;
+  item: Record<string, unknown>;
+  summary: Record<string, unknown>;
+  manifest_path: string;
+  edges_path: string;
+  claim_boundary: string;
+}
+
+export interface KGConstructionOverlayValidationRequest {
+  example_dir?: string;
+  overlay_only_runtime?: boolean;
+  overlay_only_import?: boolean;
+  top_k?: number;
+}
+
+export interface KGConstructionOverlayValidationResponse {
+  build: KGConstructionBuildRecord;
+  report: Record<string, unknown>;
+  report_path?: string | null;
+  claim_boundary: string;
+}

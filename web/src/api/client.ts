@@ -1,7 +1,13 @@
 import type {
   DashboardBootstrap,
+  KGConstructionBuildListResponse,
   KGConstructionBuildRequest,
   KGConstructionBuildResponse,
+  KGConstructionOverlayValidationRequest,
+  KGConstructionOverlayValidationResponse,
+  KGConstructionReviewQueueResponse,
+  KGConstructionReviewRequest,
+  KGConstructionReviewResponse,
   KGDraftRequest,
   KGMaterialBuildSourcesRequest,
   KGMaterialBuildSourcesResponse,
@@ -106,5 +112,32 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request)
-    })
+    }),
+  listKGConstructionBuilds: () =>
+    requestJson<KGConstructionBuildListResponse>("/api/kg/construction/builds"),
+  getKGConstructionReviewQueue: (runId: string) =>
+    requestJson<KGConstructionReviewQueueResponse>(
+      `/api/kg/construction/builds/${encodeURIComponent(runId)}/review-queue?review_status=auto&limit=100`
+    ),
+  reviewKGConstructionItem: (runId: string, request: KGConstructionReviewRequest) =>
+    requestJson<KGConstructionReviewResponse>(
+      `/api/kg/construction/builds/${encodeURIComponent(runId)}/review`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request)
+      }
+    ),
+  validateKGConstructionOverlay: (
+    runId: string,
+    request: KGConstructionOverlayValidationRequest = {}
+  ) =>
+    requestJson<KGConstructionOverlayValidationResponse>(
+      `/api/kg/construction/builds/${encodeURIComponent(runId)}/validate-overlay`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request)
+      }
+    )
 };

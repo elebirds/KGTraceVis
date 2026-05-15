@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/workbench-ui-guidelines.md", "reason": "KG Studio workbench UI density and frontend module boundaries"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "frontend API contract and build quality checklist"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "construction review queue API and claim boundaries"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "service/workflow boundary for construction review actions"}

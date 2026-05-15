@@ -75,6 +75,7 @@ top-k RCA path is contract/runtime valid, but not overlay-contribution accepted.
 | Overlay validation CLI | Accepted | `scripts/validate_kg_overlay.py --build-dir <build_dir>`; contribution accepted only when `overlay_contributed=true` |
 | Overlay validation API | Accepted | `POST /api/kg/construction/builds/{run_id}/validate-overlay`; same contribution semantics |
 | Review queue | Accepted | `review_queue.json`, review API, and replay workflow |
+| KG Studio construction review UI | Accepted | `web` build page lists construction builds, reads review queues, submits accept/reject decisions, and runs overlay validation |
 | Review-controlled publish snapshot | Accepted | `published_nodes.csv`, `published_edges.csv`, `publish_report.json` |
 | Artifact diff | Accepted | fresh no-op and review replay `kg_construction_diff.json` |
 | External profile packs | Accepted | `--profile-path` / `profile_path`, recorded in `profile_manifest.json` |
@@ -153,6 +154,8 @@ The latest acceptance pass in this thread ran:
 uv run --extra dev ruff check .
 uv run --extra dev mypy src tests scripts
 uv run --extra dev pytest -q
+cd web && npm run typecheck
+cd web && npm run build
 uv run python scripts/run_examples.py
 uv run python scripts/smoke_rca_kg_construction.py --tep-kg-root /Users/hhm/code/TEP_KG --require-tep --overwrite
 uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_smoke/material_direct --example-dir data/examples --output-path runs/source_kg_smoke/material_direct/kg_overlay_validation_report.json
@@ -169,5 +172,3 @@ smoke reported five passing paths: `toy_generic`, `material_direct`,
   The productized part is the source-grounded draft, audit, review, and publish
   control loop around it.
 - Neo4j real import is not run automatically in tests.
-- UI review pages can consume the API/report contracts, but this matrix does
-  not claim a complete human review frontend.

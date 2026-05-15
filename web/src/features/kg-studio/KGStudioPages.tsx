@@ -21,7 +21,12 @@ import { useNavigate } from "react-router-dom";
 import { KG_STUDIO_TABS } from "../../app/routes";
 import { api } from "../../api/client";
 import type {
+  KGConstructionBuildRecord,
+  KGConstructionBuildListResponse,
   KGConstructionBuildResponse,
+  KGConstructionOverlayValidationResponse,
+  KGConstructionReviewQueueEdge,
+  KGConstructionReviewQueueResponse,
   KGConstructionSourceFormat,
   KGConstructionSourceType,
   KGDraftAction,
@@ -983,6 +988,120 @@ function KGConstructionBuild({
   const usesSemanticLift = form.sourceType === "tep_semantic_lift";
   const usesVariableMapping = form.sourceType === "tep_variable_mapping";
   const canBuild = constructionBuildReady(form);
+  const [builds, setBuilds] = useState<KGConstructionBuildRecord[]>([]);
+  const [selectedBuildRunId, setSelectedBuildRunId] = useState(result?.run_id ?? "");
+  const [reviewQueue, setReviewQueue] = useState<KGConstructionReviewQueueResponse | null>(null);
+  const [selectedReviewKey, setSelectedReviewKey] = useState("");
+  const [reviewNote, setReviewNote] = useState("");
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewWorkspaceStatus, setReviewWorkspaceStatus] = useState<string | null>(null);
+  const [reviewWorkspaceError, setReviewWorkspaceError] = useState<string | null>(null);
+  const [overlayValidation, setOverlayValidation] =
+    useState<KGConstructionOverlayValidationResponse | null>(null);
+  const selectedReviewEdge = reviewQueue?.edges.find(
+    (edge) => edge.target_key === selectedReviewKey
+  );
+
+  const loadConstructionBuilds = useCallback(async (preferredRunId?: string) => {
+    setReviewBusy(true);
+    try {
+      const response = await api.listKGConstructionBuilds();
+      setBuilds(response.builds);
+      setSelectedBuildRunId((current) => {
+        if (preferredRunId && response.builds.some((build) => build.run_id === preferredRunId)) {
+          return preferredRunId;
+        }
+        if (current && response.builds.some((build) => build.run_id === current)) return current;
+        return response.builds[0]?.run_id ?? "";
+      });
+      setReviewWorkspaceError(null);
+    } catch (error) {
+      setReviewWorkspaceError((error as Error).message);
+    } finally {
+      setReviewBusy(false);
+    }
+  }, []);
+
+  const loadConstructionReviewQueue = useCallback(async (runId: string) => {
+    if (!runId) {
+      setReviewQueue(null);
+      setSelectedReviewKey("");
+      return;
+    }
+    setReviewBusy(true);
+    try {
+      const response = await api.getKGConstructionReviewQueue(runId);
+      setReviewQueue(response);
+      setSelectedReviewKey((current) =>
+        current && response.edges.some((edge) => edge.target_key === current)
+          ? current
+          : response.edges[0]?.target_key ?? ""
+      );
+      setReviewWorkspaceError(null);
+    } catch (error) {
+      setReviewWorkspaceError((error as Error).message);
+    } finally {
+      setReviewBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadConstructionBuilds(result?.run_id);
+  }, [loadConstructionBuilds, result?.run_id]);
+
+  useEffect(() => {
+    void loadConstructionReviewQueue(selectedBuildRunId);
+  }, [loadConstructionReviewQueue, selectedBuildRunId]);
+
+  async function submitConstructionReview(action: "accept" | "reject") {
+    if (!selectedBuildRunId || !selectedReviewEdge) return;
+    setReviewBusy(true);
+    try {
+      const response = await api.reviewKGConstructionItem(selectedBuildRunId, {
+        action,
+        item_type: selectedReviewEdge.item_type,
+        target_key: selectedReviewEdge.target_key,
+        reviewer: "kgtracevis-workbench",
+        note: reviewNote.trim() || undefined,
+        metadata: { submitted_from: "kg-studio-construction-review" }
+      });
+      setReviewWorkspaceStatus(`${response.decision.action ?? action}: ${selectedReviewEdge.target_key}`);
+      setReviewNote("");
+      setOverlayValidation(null);
+      await loadConstructionBuilds(selectedBuildRunId);
+      await loadConstructionReviewQueue(selectedBuildRunId);
+    } catch (error) {
+      setReviewWorkspaceError((error as Error).message);
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
+  async function validateConstructionOverlay() {
+    if (!selectedBuildRunId) return;
+    setReviewBusy(true);
+    try {
+      const selectedBuild = builds.find((build) => build.run_id === selectedBuildRunId);
+      const isTepOnly =
+        selectedBuild?.source_ids.some((sourceId) => sourceId.startsWith("tep_")) ?? false;
+      const response = await api.validateKGConstructionOverlay(selectedBuildRunId, {
+        example_dir: "data/examples",
+        overlay_only_runtime: isTepOnly,
+        overlay_only_import: isTepOnly,
+        top_k: 5
+      });
+      setOverlayValidation(response);
+      setReviewWorkspaceStatus(
+        `overlay validation ${Boolean(response.report.validated) ? "accepted" : "needs attention"}`
+      );
+      setReviewWorkspaceError(null);
+    } catch (error) {
+      setReviewWorkspaceError((error as Error).message);
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
   return (
     <section className="two-column wide-left">
       <Card title="Construction Run">
@@ -1122,52 +1241,251 @@ function KGConstructionBuild({
         {status && <Alert type="success" title={status} />}
       </Card>
 
-      <Card title="Build Output">
-        {!result ? (
-          <div className="compact-list">
-            <div>
-              <strong>current candidate layer</strong>
-              <span>{payload.candidate_dir ? shortId(payload.candidate_dir, 72) : "none discovered"}</span>
-            </div>
-            <div>
-              <strong>claim boundary</strong>
-              <span>{payload.claim_boundary}</span>
-            </div>
-          </div>
-        ) : (
-          <div className="page-stack">
-            <section className="metric-grid build-metrics">
-              <MetricCard label="status" value={result.status} hint={shortId(result.run_id, 20)} />
-              <MetricCard
-                label="nodes"
-                value={summaryMetric(result.summary, "node_count")}
-                hint="candidate"
-              />
-              <MetricCard
-                label="edges"
-                value={summaryMetric(result.summary, "edge_count")}
-                hint="candidate"
-              />
-              <MetricCard
-                label="sources"
-                value={summaryMetric(result.summary, "source_count")}
-                hint="input"
-              />
-            </section>
+      <div className="page-stack">
+        <Card title="Build Output">
+          {!result ? (
             <div className="compact-list">
-              {constructionArtifacts(result).map((item) => (
-                <div key={item.label}>
-                  <strong>{item.label}</strong>
-                  <span>{item.value}</span>
-                </div>
+              <div>
+                <strong>current candidate layer</strong>
+                <span>{payload.candidate_dir ? shortId(payload.candidate_dir, 72) : "none discovered"}</span>
+              </div>
+              <div>
+                <strong>claim boundary</strong>
+                <span>{payload.claim_boundary}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="page-stack">
+              <section className="metric-grid build-metrics">
+                <MetricCard label="status" value={result.status} hint={shortId(result.run_id, 20)} />
+                <MetricCard
+                  label="nodes"
+                  value={summaryMetric(result.summary, "node_count")}
+                  hint="candidate"
+                />
+                <MetricCard
+                  label="edges"
+                  value={summaryMetric(result.summary, "edge_count")}
+                  hint="candidate"
+                />
+                <MetricCard
+                  label="sources"
+                  value={summaryMetric(result.summary, "source_count")}
+                  hint="input"
+                />
+              </section>
+              <div className="compact-list">
+                {constructionArtifacts(result).map((item) => (
+                  <div key={item.label}>
+                    <strong>{item.label}</strong>
+                    <span>{item.value}</span>
+                  </div>
+                ))}
+              </div>
+              <JsonBlock value={result.summary} />
+              <Alert type="info" title={result.claim_boundary} />
+            </div>
+          )}
+        </Card>
+        <ConstructionReviewWorkspace
+          builds={builds}
+          selectedBuildRunId={selectedBuildRunId}
+          queue={reviewQueue}
+          selectedEdge={selectedReviewEdge}
+          selectedReviewKey={selectedReviewKey}
+          reviewNote={reviewNote}
+          overlayValidation={overlayValidation}
+          busy={reviewBusy}
+          status={reviewWorkspaceStatus}
+          error={reviewWorkspaceError}
+          onBuildSelected={(runId) => {
+            setSelectedBuildRunId(runId);
+            setOverlayValidation(null);
+            setReviewWorkspaceStatus(null);
+            setReviewWorkspaceError(null);
+          }}
+          onReviewSelected={setSelectedReviewKey}
+          onReviewNoteChanged={setReviewNote}
+          onSubmitReview={submitConstructionReview}
+          onValidateOverlay={validateConstructionOverlay}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ConstructionReviewWorkspace({
+  builds,
+  selectedBuildRunId,
+  queue,
+  selectedEdge,
+  selectedReviewKey,
+  reviewNote,
+  overlayValidation,
+  busy,
+  status,
+  error,
+  onBuildSelected,
+  onReviewSelected,
+  onReviewNoteChanged,
+  onSubmitReview,
+  onValidateOverlay
+}: {
+  builds: KGConstructionBuildRecord[];
+  selectedBuildRunId: string;
+  queue: KGConstructionReviewQueueResponse | null;
+  selectedEdge: KGConstructionReviewQueueEdge | undefined;
+  selectedReviewKey: string;
+  reviewNote: string;
+  overlayValidation: KGConstructionOverlayValidationResponse | null;
+  busy: boolean;
+  status: string | null;
+  error: string | null;
+  onBuildSelected: (runId: string) => void;
+  onReviewSelected: (targetKey: string) => void;
+  onReviewNoteChanged: (note: string) => void;
+  onSubmitReview: (action: "accept" | "reject") => void;
+  onValidateOverlay: () => void;
+}) {
+  const columns: TableColumnProps<KGConstructionReviewQueueEdge>[] = [
+    {
+      title: "Priority",
+      dataIndex: "priority",
+      width: 92,
+      render: (value) => valueText(value)
+    },
+    {
+      title: "Candidate",
+      dataIndex: "target_key",
+      render: (_, edge) => (
+        <Button type="text" onClick={() => onReviewSelected(edge.target_key)}>
+          {shortId(`${edge.head} ${edge.relation} ${edge.tail}`, 54)}
+        </Button>
+      )
+    },
+    { title: "Family", dataIndex: "relation_family", width: 130, render: (value) => valueText(value) },
+    {
+      title: "Confidence",
+      dataIndex: "confidence",
+      width: 110,
+      render: (value) => valueText(value)
+    }
+  ];
+  const report = overlayValidation?.report;
+  return (
+    <Card title="Construction Review">
+      <div className="page-stack construction-review-workspace">
+        <div className="form-grid">
+          <label className="form-field">
+            <span>Build</span>
+            <Select
+              value={selectedBuildRunId}
+              onChange={(value) => onBuildSelected(String(value))}
+              loading={busy}
+              options={builds.map((build) => ({
+                label: `${shortId(build.run_id, 28)} · ${build.edge_count} edges`,
+                value: build.run_id
+              }))}
+            />
+          </label>
+          <label className="form-field">
+            <span>Review item</span>
+            <Select
+              value={selectedReviewKey}
+              onChange={(value) => onReviewSelected(String(value))}
+              disabled={!queue?.edges.length}
+              options={(queue?.edges ?? []).map((edge) => ({
+                label: shortId(edge.target_key, 64),
+                value: edge.target_key
+              }))}
+            />
+          </label>
+        </div>
+
+        {queue ? (
+          <>
+            <div className="tag-cloud">
+              <Tag color="arcoblue">{queue.total_count} pending item(s)</Tag>
+              {Object.entries(queue.summary.relation_counts).slice(0, 4).map(([relation, count]) => (
+                <Tag key={relation}>{relation}: {count}</Tag>
               ))}
             </div>
-            <JsonBlock value={result.summary} />
-            <Alert type="info" title={result.claim_boundary} />
+            <Table
+              rowKey="target_key"
+              size="small"
+              pagination={false}
+              columns={columns}
+              data={queue.edges.slice(0, 8)}
+            />
+          </>
+        ) : (
+          <Empty description="Select a construction build to inspect its review queue." />
+        )}
+
+        {selectedEdge && (
+          <div className="compact-list">
+            <div>
+              <strong>selected</strong>
+              <span>{selectedEdge.target_key}</span>
+            </div>
+            <div>
+              <strong>reason</strong>
+              <span>{selectedEdge.reason || selectedEdge.recommended_action}</span>
+            </div>
+            <div>
+              <strong>evidence</strong>
+              <span>{selectedEdge.evidence}</span>
+            </div>
           </div>
         )}
-      </Card>
-    </section>
+
+        <Input.TextArea
+          value={reviewNote}
+          onChange={onReviewNoteChanged}
+          placeholder="optional construction review note"
+          disabled={!selectedEdge || busy}
+          autoSize={{ minRows: 2, maxRows: 5 }}
+        />
+        <Space wrap>
+          <Button disabled={!selectedEdge || busy} onClick={() => onSubmitReview("accept")}>
+            Accept candidate
+          </Button>
+          <Button disabled={!selectedEdge || busy} onClick={() => onSubmitReview("reject")}>
+            Reject candidate
+          </Button>
+          <Button disabled={!selectedBuildRunId || busy} onClick={onValidateOverlay}>
+            Validate overlay
+          </Button>
+        </Space>
+
+        {report && (
+          <div className="compact-list">
+            <div>
+              <strong>overlay validation</strong>
+              <span>
+                validated={String(Boolean(report.validated))} · contributed={String(Boolean(report.overlay_contributed))}
+              </span>
+            </div>
+            <div>
+              <strong>contribution cases</strong>
+              <span>{valueText(report.overlay_contribution_case_count)}</span>
+            </div>
+            <div>
+              <strong>report</strong>
+              <span>{valueText(overlayValidation?.report_path)}</span>
+            </div>
+            {Boolean(report.missing_overlay_contribution_warning) && (
+              <div>
+                <strong>warning</strong>
+                <span>{String(report.missing_overlay_contribution_warning)}</span>
+              </div>
+            )}
+          </div>
+        )}
+        {status && <Alert type="success" title={status} />}
+        {error && <Alert type="error" title={error} />}
+      </div>
+    </Card>
   );
 }
 

@@ -59,7 +59,7 @@ task view, confidence policy, and `kg_build_id`. Relation-family defaults now
 come from the profile policy; extractor/import metadata may still override
 those defaults when it is source-backed.
 
-`Review Queue` prioritizes candidates that need human attention, especially causal/root-cause edges, low-confidence propagation edges, new anchors, merge candidates, unresolved entities, alignment conflicts, and facts that can affect Top-K RCA paths. Every item carries `review_status`, `priority`, `reason`, and `recommended_action`. Edge decisions can refresh the publish snapshot; non-edge alignment decisions are recorded and synchronized in the queue first, without automatically changing KG facts.
+`Review Queue` prioritizes candidates that need human attention, especially causal/root-cause edges, low-confidence propagation edges, new anchors, merge candidates, unresolved entities, alignment conflicts, and facts that can affect Top-K RCA paths. Every item carries `review_status`, `priority`, `reason`, and `recommended_action`. Edge decisions can refresh the publish snapshot; non-edge alignment decisions are recorded and synchronized in the queue first, without automatically changing KG facts. KG Studio consumes the same build registry, review queue, review action, and overlay validation APIs so the UI is an artifact client rather than a separate review system.
 
 `Versioned Publish` prepares build metadata for runtime publication. Neo4j remains the runtime KG target; CSV/JSON artifacts are reproducible experiment snapshots.
 

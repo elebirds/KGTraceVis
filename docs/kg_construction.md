@@ -204,8 +204,12 @@ and `limit` pagination:
 GET /api/kg/construction/builds/kgbuild_demo/review-queue?review_status=auto&scenario=tep
 ```
 
-The queue is read-only and exists to support backend review workflows and later
-UI review pages without requiring clients to parse construction CSV files.
+The queue is read-only and exists to support backend workflows and the KG Studio
+construction review panel without requiring clients to parse construction CSV
+files. The maintained web workbench can select a construction build, inspect
+pending queue items, submit accept/reject decisions through the same review
+endpoint, and run overlay validation to show `validated`,
+`overlay_contributed`, and the saved report path.
 
 The publish endpoint is also safe-by-default. Calling it with an empty JSON body
 performs a dry-run import count over the default seed KG plus the selected
