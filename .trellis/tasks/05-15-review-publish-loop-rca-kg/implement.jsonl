@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "RCA-oriented KG construction artifact, review queue, candidate KG, and publish contract rules."}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Reusable workflow boundary and script/service dependency direction for publish-loop artifacts."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Deterministic validation errors and ambiguity handling for review decisions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required test, lint, typecheck, and KG quality gates."}

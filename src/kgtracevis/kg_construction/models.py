@@ -35,12 +35,16 @@ KGConstructionReviewAction = Literal[
 KG_CONSTRUCTION_ARTIFACT_FILENAMES: dict[str, str] = {
     "nodes": "nodes.csv",
     "edges": "edges.csv",
+    "published_nodes": "published_nodes.csv",
+    "published_edges": "published_edges.csv",
     "draft_manifest": "draft_manifest.json",
     "source_audit_graph_manifest": "source_audit_graph_manifest.json",
     "semantic_layer_manifest": "semantic_layer_manifest.json",
     "rca_view_manifest": "rca_view_manifest.json",
     "review_queue": "review_queue.json",
+    "review_decisions": "review_decisions.jsonl",
     "publish_manifest": "publish_manifest.json",
+    "publish_report": "publish_report.json",
     "summary": "kg_construction_summary.json",
     "manifest": "kg_construction_manifest.json",
 }

@@ -125,12 +125,16 @@ The workflow writes:
 ```text
 nodes.csv
 edges.csv
+published_nodes.csv
+published_edges.csv
 draft_manifest.json
 source_audit_graph_manifest.json
 semantic_layer_manifest.json
 rca_view_manifest.json
 review_queue.json
+review_decisions.jsonl
 publish_manifest.json
+publish_report.json
 kg_construction_summary.json
 kg_construction_manifest.json
 ```
@@ -141,12 +145,16 @@ artifact path contract. The required artifact keys are:
 ```text
 nodes
 edges
+published_nodes
+published_edges
 draft_manifest
 source_audit_graph_manifest
 semantic_layer_manifest
 rca_view_manifest
 review_queue
+review_decisions
 publish_manifest
+publish_report
 summary
 manifest
 ```
@@ -155,6 +163,10 @@ The summary explicitly records `kg_build_id`, `source_ids`,
 `extractor_versions`, `profile_version`, and `review_policy`. The publish
 manifest records the same version boundary plus counts so downstream Neo4j
 publication and RCA reasoning runs can reference a reproducible build snapshot.
+`review_decisions.jsonl` is the append-only human review log. `published_nodes.csv`,
+`published_edges.csv`, and `publish_report.json` are the review-policy-controlled
+runtime snapshot; high-risk causal, propagation, LLM/document, and low-confidence
+edges stay out of that snapshot until accepted.
 The source audit graph manifest additionally records `parsed_sources` entries
 with `kind`, `parser_kind`, `row_count`, `chunk_count`, `source_reference`,
 `safe_source`, and `parser_metadata`. These entries are summaries only; row

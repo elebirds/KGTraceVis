@@ -32,6 +32,12 @@ from kgtracevis.kg_construction.models import (
     kg_construction_artifact_paths,
     review_decision_for_edge,
 )
+from kgtracevis.kg_construction.publish import (
+    append_review_decision,
+    build_publish_snapshot,
+    load_review_decisions,
+    write_publish_snapshot,
+)
 from kgtracevis.kg_construction.qa import run_kg_qa
 from kgtracevis.workflows.source_kg_construction import (
     DEFAULT_SOURCE_KG_BUILD_DIR,
@@ -694,9 +700,12 @@ def review_kg_construction_edge(
             **request.metadata,
         },
     )
+    decision_path = kg_construction_artifact_paths(build.output_dir)["review_decisions"]
+    append_review_decision(decision_path, decision)
     manifest.setdefault("review_decisions", []).append(decision.model_dump(mode="json"))
     _write_json_object(Path(build.summary_path), summary)
     _write_json_object(Path(build.manifest_path), manifest)
+    _refresh_publish_snapshot_artifacts(build)
     refreshed_build = _build_record_from_manifest_path(Path(build.manifest_path))
     return KGConstructionEdgeReviewResponse(
         build=refreshed_build,
@@ -877,8 +886,11 @@ def _publish_paths(
     *,
     include_defaults: bool,
 ) -> tuple[list[Path], list[Path]]:
-    node_paths = [Path(build.nodes_path)]
-    edge_paths = [Path(build.edges_path)]
+    artifact_paths = kg_construction_artifact_paths(build.output_dir)
+    published_nodes = artifact_paths["published_nodes"]
+    published_edges = artifact_paths["published_edges"]
+    node_paths = [published_nodes if published_nodes.is_file() else Path(build.nodes_path)]
+    edge_paths = [published_edges if published_edges.is_file() else Path(build.edges_path)]
     if include_defaults:
         node_paths = [*DEFAULT_NODE_PATHS, *node_paths]
         edge_paths = [*DEFAULT_EDGE_PATHS, *edge_paths]
@@ -1172,6 +1184,24 @@ def _refresh_review_queue_artifact(
         updated = True
     if updated:
         _write_json_list(queue_path, payload)
+
+
+def _refresh_publish_snapshot_artifacts(build: KGConstructionBuildRecord) -> None:
+    artifact_paths = kg_construction_artifact_paths(build.output_dir)
+    graph = KnowledgeGraph.from_csv(build.nodes_path, build.edges_path)
+    decisions = load_review_decisions(artifact_paths["review_decisions"])
+    snapshot = build_publish_snapshot(
+        kg_build_id=build.run_id,
+        nodes=tuple(graph.nodes.values()),
+        edges=tuple(graph.edges),
+        review_decisions=decisions,
+    )
+    write_publish_snapshot(
+        snapshot,
+        nodes_path=artifact_paths["published_nodes"],
+        edges_path=artifact_paths["published_edges"],
+        report_path=artifact_paths["publish_report"],
+    )
 
 
 def _refresh_review_summary(

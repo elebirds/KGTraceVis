@@ -449,16 +449,16 @@ def test_kg_construction_publish_route_dry_runs_merged_build(
     assert payload["import_summary"]["dry_run"] is True
     assert payload["import_summary"]["node_count"] > 2
     assert payload["import_summary"]["edge_count"] > 1
-    assert payload["node_paths"][-1].endswith("nodes.csv")
-    assert payload["edge_paths"][-1].endswith("edges.csv")
+    assert payload["node_paths"][-1].endswith("published_nodes.csv")
+    assert payload["edge_paths"][-1].endswith("published_edges.csv")
     assert "candidate/reviewable" in payload["claim_boundary"]
 
     assert candidate_only_response.status_code == 200
     candidate_only = candidate_only_response.json()
     assert candidate_only["include_defaults"] is False
     assert candidate_only["import_summary"] == {
-        "node_count": 2,
-        "edge_count": 1,
+        "node_count": 0,
+        "edge_count": 0,
         "dry_run": True,
     }
 
@@ -581,12 +581,27 @@ def test_kg_construction_review_route_updates_edge_and_manifest(
     assert edge_rows[0]["review_status"] == "rejected"
     assert edge_rows[0]["feedback_count"] == "2"
     manifest = json.loads(Path(build_payload["manifest_path"]).read_text(encoding="utf-8"))
+    decisions_path = Path(build_payload["output_dir"]) / "review_decisions.jsonl"
+    decisions = [
+        json.loads(line)
+        for line in decisions_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    publish_report = json.loads(
+        (Path(build_payload["output_dir"]) / "publish_report.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    published_edges = _read_csv_rows(Path(build_payload["output_dir"]) / "published_edges.csv")
     assert [item["action"] for item in manifest["review_decisions"]] == [
         "accept",
         "reject",
     ]
+    assert [item["action"] for item in decisions] == ["accept", "reject"]
     assert manifest["summary"]["review_status_counts"] == {"rejected": 1}
     assert manifest["run"]["status"] == "reviewed"
+    assert publish_report["disposition_counts"] == {"rejected": 1}
+    assert published_edges == []
 
 
 def test_kg_construction_review_route_rejects_unknown_edge(

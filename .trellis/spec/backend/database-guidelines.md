@@ -276,9 +276,10 @@ and RCA reasoning all consume these build artifacts.
 - Service review action:
   `POST /api/kg/construction/builds/{run_id}/review`
 - Required artifact keys:
-  `nodes`, `edges`, `draft_manifest`, `source_audit_graph_manifest`,
-  `semantic_layer_manifest`, `rca_view_manifest`, `review_queue`,
-  `publish_manifest`, `summary`, `manifest`
+  `nodes`, `edges`, `published_nodes`, `published_edges`, `draft_manifest`,
+  `source_audit_graph_manifest`, `semantic_layer_manifest`,
+  `rca_view_manifest`, `review_queue`, `review_decisions`,
+  `publish_manifest`, `publish_report`, `summary`, `manifest`
 
 ### 3. Contracts
 
@@ -295,6 +296,13 @@ and RCA reasoning all consume these build artifacts.
   `review_status=auto`, not reviewed KG truth.
 - `kg_construction_summary.json` and `kg_construction_manifest.json` must share
   the same stable artifact keys for all required outputs.
+- `review_decisions.jsonl` is the append-only review decision log.
+- `published_nodes.csv`, `published_edges.csv`, and `publish_report.json` are
+  derived from candidate rows plus review decisions and publish policy.
+- High-risk causal/root-cause, propagation, LLM/document, and low-confidence
+  edges stay pending unless accepted. Rejected edges are excluded from published
+  snapshots. Low-risk structured support edges may publish only with an explicit
+  `policy_allowed` disposition in `publish_report.json`.
 - The summary must include `kg_build_id`, `source_ids`,
   `extractor_versions`, `profile_version`, and `review_policy`.
 - `source_audit_graph_manifest.json` must include `parsed_sources` summaries
@@ -308,6 +316,8 @@ and RCA reasoning all consume these build artifacts.
   to `edges.csv` for legacy builds.
 - `POST /review` updates `edges.csv` review status/counters and refreshes the
   matching `review_queue.json` candidate payload when that artifact exists.
+  It must also append the review decision to `review_decisions.jsonl` and
+  refresh the published snapshot artifacts.
 - TEP RCA graph imports are source-backed candidates. TEP_KG `accept` does not
   become KGTraceVis `reviewed` automatically.
 - External IDs belong in the alignment manifest canonical table by default.

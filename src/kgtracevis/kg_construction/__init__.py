@@ -91,6 +91,15 @@ from kgtracevis.kg_construction.profiles import (
     RcaProfile,
     profile_for_scenario,
 )
+from kgtracevis.kg_construction.publish import (
+    PublishManifest,
+    PublishReportItem,
+    PublishSnapshot,
+    append_review_decision,
+    build_publish_snapshot,
+    load_review_decisions,
+    write_publish_snapshot,
+)
 from kgtracevis.kg_construction.qa import KGQAFinding, KGQAReport, run_kg_qa
 from kgtracevis.kg_construction.rca_view import (
     RcaReasoningView,
@@ -162,12 +171,16 @@ __all__ = [
     "SourceAuditGraph",
     "SourceLibraryRecord",
     "SourceRecord",
+    "PublishManifest",
+    "PublishReportItem",
+    "PublishSnapshot",
     "StructuredRecordExtractor",
     "TEP_PROFILE",
     "TepRcaGraphExtractor",
     "TepSemanticLiftExtractor",
     "TepVariableMappingExtractor",
     "assign_confidence",
+    "append_review_decision",
     "audit_mvtec_cases",
     "audit_wm811k_cases",
     "build_construction_manifest",
@@ -177,6 +190,7 @@ __all__ = [
     "build_review_decision_id",
     "build_coverage_report",
     "build_rca_reasoning_view",
+    "build_publish_snapshot",
     "build_review_queue",
     "clean_candidate_nodes",
     "clean_candidate_triples",
@@ -200,6 +214,7 @@ __all__ = [
     "load_source_text",
     "load_structured_records",
     "load_source_library",
+    "load_review_decisions",
     "profile_for_scenario",
     "project_semantic_layer",
     "review_decision_for_edge",
@@ -218,4 +233,5 @@ __all__ = [
     "write_end_to_end_interpretability_audit",
     "write_edge_review_queue",
     "write_source_library_manifest",
+    "write_publish_snapshot",
 ]

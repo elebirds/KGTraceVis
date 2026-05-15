@@ -1182,12 +1182,16 @@ def _required_artifact_keys() -> set[str]:
     return {
         "nodes",
         "edges",
+        "published_nodes",
+        "published_edges",
         "draft_manifest",
         "source_audit_graph_manifest",
         "semantic_layer_manifest",
         "rca_view_manifest",
         "review_queue",
+        "review_decisions",
         "publish_manifest",
+        "publish_report",
         "summary",
         "manifest",
     }

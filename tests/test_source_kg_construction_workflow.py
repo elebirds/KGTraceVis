@@ -101,6 +101,10 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
         result.rca_view_manifest_path,
         result.review_queue_path,
         result.publish_manifest_path,
+        output_dir / "published_nodes.csv",
+        output_dir / "published_edges.csv",
+        output_dir / "review_decisions.jsonl",
+        output_dir / "publish_report.json",
         output_dir / "kg_construction_summary.json",
         output_dir / "kg_construction_manifest.json",
     ]
@@ -111,7 +115,9 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
     publish_manifest = json.loads(result.publish_manifest_path.read_text())
     manifest = json.loads(result.manifest_path.read_text())
     review_queue = json.loads(result.review_queue_path.read_text())
+    publish_report = json.loads((output_dir / "publish_report.json").read_text())
     edge_rows = _read_csv_rows(result.edges_path)
+    published_edge_rows = _read_csv_rows(output_dir / "published_edges.csv")
 
     assert summary["kg_build_id"] == "kgbuild_toy_generic"
     assert summary["source_ids"] == ["toy_generic_source"]
@@ -130,6 +136,8 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
     assert edge_rows[0]["relation"] == "OBSERVED_BY"
     assert edge_rows[0]["relation_family"] == "OBSERVATION"
     assert edge_rows[0]["propagation_enabled"] == "true"
+    assert published_edge_rows == []
+    assert publish_report["disposition_counts"] == {"pending_review": 1}
     assert review_queue[0]["target_key"].endswith("|shared")
 
 
@@ -191,12 +199,16 @@ def _required_artifact_keys() -> set[str]:
     return {
         "nodes",
         "edges",
+        "published_nodes",
+        "published_edges",
         "draft_manifest",
         "source_audit_graph_manifest",
         "semantic_layer_manifest",
         "rca_view_manifest",
         "review_queue",
+        "review_decisions",
         "publish_manifest",
+        "publish_report",
         "summary",
         "manifest",
     }

@@ -23,6 +23,10 @@ from kgtracevis.kg_construction.models import (
     construction_output_path_payload,
     kg_construction_artifact_paths,
 )
+from kgtracevis.kg_construction.publish import (
+    build_publish_snapshot,
+    write_publish_snapshot,
+)
 
 DEFAULT_SOURCE_KG_BUILD_DIR = Path("runs/source_kg_build")
 SOURCE_TEXT_FORMATS = ("csv", "json", "jsonl", "txt", "md", "html")
@@ -83,10 +87,26 @@ def run_source_kg_construction_workflow(
     artifact_paths = kg_construction_artifact_paths(config.output_dir)
     nodes_path, edges_path = result.export_csv(config.output_dir)
     layer_artifacts = result.write_layer_artifacts(config.output_dir)
+    artifact_paths["review_decisions"].parent.mkdir(parents=True, exist_ok=True)
+    artifact_paths["review_decisions"].touch(exist_ok=True)
+    publish_snapshot = build_publish_snapshot(
+        kg_build_id=result.run_id,
+        nodes=result.nodes,
+        edges=result.edges,
+    )
+    published_nodes_path, published_edges_path, publish_report_path = write_publish_snapshot(
+        publish_snapshot,
+        nodes_path=artifact_paths["published_nodes"],
+        edges_path=artifact_paths["published_edges"],
+        report_path=artifact_paths["publish_report"],
+    )
     artifact_paths.update(
         {
             "nodes": nodes_path,
             "edges": edges_path,
+            "published_nodes": published_nodes_path,
+            "published_edges": published_edges_path,
+            "publish_report": publish_report_path,
             **layer_artifacts,
         }
     )

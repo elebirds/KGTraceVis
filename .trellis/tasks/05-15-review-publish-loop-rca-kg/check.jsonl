@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Verify publish-loop artifact, review decision, and candidate claim-boundary behavior."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Run full pytest, examples, ruff, and mypy quality gates."}
