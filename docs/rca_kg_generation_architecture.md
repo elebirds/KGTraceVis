@@ -136,6 +136,7 @@ review_queue.json
 review_decisions.jsonl
 publish_manifest.json
 publish_report.json
+kg_construction_diff.json
 kg_construction_summary.json
 kg_construction_manifest.json
 ```
@@ -157,6 +158,7 @@ review_queue
 review_decisions
 publish_manifest
 publish_report
+kg_construction_diff
 summary
 manifest
 ```
@@ -169,6 +171,10 @@ publication and RCA reasoning runs can reference a reproducible build snapshot.
 `published_edges.csv`, and `publish_report.json` are the review-policy-controlled
 runtime snapshot; high-risk causal, propagation, LLM/document, and low-confidence
 edges stay out of that snapshot until accepted.
+`kg_construction_diff.json` is a deterministic artifact-level diff. Fresh builds
+write a no-op diff; review replay writes before/after changes for nodes, edges,
+review queue items, semantic and RCA layer manifests, publish report, and summary
+counts, including provenance from `review_decisions.jsonl`.
 The source audit graph manifest additionally records `parsed_sources` entries
 with `kind`, `parser_kind`, `row_count`, `chunk_count`, `source_reference`,
 `safe_source`, and `parser_metadata`. These entries are summaries only; row

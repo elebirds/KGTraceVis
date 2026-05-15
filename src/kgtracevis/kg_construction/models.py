@@ -38,6 +38,7 @@ KG_CONSTRUCTION_ARTIFACT_FILENAMES: dict[str, str] = {
     "edges": "edges.csv",
     "published_nodes": "published_nodes.csv",
     "published_edges": "published_edges.csv",
+    "kg_construction_diff": "kg_construction_diff.json",
     "draft_manifest": "draft_manifest.json",
     "source_audit_graph_manifest": "source_audit_graph_manifest.json",
     "semantic_layer_manifest": "semantic_layer_manifest.json",

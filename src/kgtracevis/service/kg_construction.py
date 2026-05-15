@@ -155,6 +155,7 @@ class KGConstructionBuildResponse(BaseModel):
     rca_view_manifest_path: str | None = None
     review_queue_path: str | None = None
     publish_manifest_path: str | None = None
+    diff_path: str | None = None
     summary: dict[str, object]
     claim_boundary: str = (
         "source-to-KG outputs are candidate/reviewable KG rows; they are not "
@@ -249,6 +250,7 @@ class KGConstructionBuildRecord(BaseModel):
     rca_view_manifest_path: str | None = None
     review_queue_path: str | None = None
     publish_manifest_path: str | None = None
+    diff_path: str | None = None
     source_ids: list[str] = Field(default_factory=list)
     source_count: int = 0
     node_count: int = 0
@@ -502,6 +504,7 @@ def run_kg_construction_build(
         rca_view_manifest_path=str(result.rca_view_manifest_path),
         review_queue_path=str(result.review_queue_path),
         publish_manifest_path=str(result.publish_manifest_path),
+        diff_path=str(result.diff_path),
         summary=result.summary,
     )
 
@@ -883,6 +886,11 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
             artifacts,
             "publish_manifest",
             fallback=default_artifacts["publish_manifest"],
+        ),
+        diff_path=_artifact_path(
+            artifacts,
+            "kg_construction_diff",
+            fallback=default_artifacts["kg_construction_diff"],
         ),
         source_ids=[str(item) for item in summary.get("source_ids", [])],
         source_count=_int_value(summary.get("source_count")),

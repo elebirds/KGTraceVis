@@ -1307,6 +1307,7 @@ def _required_artifact_keys() -> set[str]:
         "edges",
         "published_nodes",
         "published_edges",
+        "kg_construction_diff",
         "source_library_manifest",
         "draft_manifest",
         "source_audit_graph_manifest",

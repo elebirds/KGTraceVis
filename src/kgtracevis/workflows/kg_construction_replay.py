@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from kgtracevis.kg_construction import load_source_library
+from kgtracevis.kg_construction.artifact_diff import (
+    build_kg_construction_artifact_snapshot,
+    build_kg_construction_diff,
+    write_kg_construction_diff,
+)
 from kgtracevis.kg_construction.models import (
     KGConstructionReviewDecision,
     kg_construction_artifact_paths,
@@ -36,6 +41,7 @@ class ReplayKGConstructionReviewsResult:
     output_dir: Path
     decision_count: int
     replayed_target_type_counts: dict[str, int]
+    diff_path: Path
     build_result: SourceKGConstructionWorkflowResult
     summary: dict[str, Any]
 
@@ -55,6 +61,7 @@ def replay_kg_construction_reviews(
         record.to_construction_source()
         for record in load_source_library(artifact_paths["source_library_manifest"])
     )
+    before_snapshot = build_kg_construction_artifact_snapshot(config.output_dir)
     decisions = load_review_decisions(artifact_paths["review_decisions"])
     run_id = config.run_id or _run_id_from_manifest(artifact_paths["manifest"])
     build_result = run_source_kg_construction_workflow(
@@ -71,6 +78,7 @@ def replay_kg_construction_reviews(
     summary["review_replay"] = {
         "decision_count": len(decisions),
         "target_type_counts": counts,
+        "diff_path": str(artifact_paths["kg_construction_diff"]),
     }
     build_result.summary_path.write_text(
         json.dumps(summary, indent=2, sort_keys=True),
@@ -82,11 +90,40 @@ def replay_kg_construction_reviews(
         json.dumps(manifest, indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    after_snapshot = build_kg_construction_artifact_snapshot(config.output_dir)
+    diff_path = write_kg_construction_diff(
+        artifact_paths["kg_construction_diff"],
+        build_kg_construction_diff(
+            run_id=build_result.run_id,
+            before=before_snapshot,
+            after=after_snapshot,
+            decision_provenance=decisions,
+            scope="review_replay",
+        ),
+    )
+    summary["review_replay"]["diff_path"] = str(diff_path)
+    summary["artifact_diff"] = {
+        "path": str(diff_path),
+        "has_changes": bool(
+            json.loads(diff_path.read_text(encoding="utf-8")).get("has_changes")
+        ),
+    }
+    build_result.summary_path.write_text(
+        json.dumps(summary, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    manifest["summary"]["review_replay"] = summary["review_replay"]
+    manifest["summary"]["artifact_diff"] = summary["artifact_diff"]
+    build_result.manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     return ReplayKGConstructionReviewsResult(
         run_id=build_result.run_id,
         output_dir=build_result.output_dir,
         decision_count=len(decisions),
         replayed_target_type_counts=counts,
+        diff_path=diff_path,
         build_result=build_result,
         summary=summary,
     )

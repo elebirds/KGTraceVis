@@ -118,6 +118,7 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
         output_dir / "source_library_manifest.json",
         output_dir / "review_decisions.jsonl",
         output_dir / "publish_report.json",
+        output_dir / "kg_construction_diff.json",
         output_dir / "kg_construction_summary.json",
         output_dir / "kg_construction_manifest.json",
     ]
@@ -129,6 +130,7 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
     manifest = json.loads(result.manifest_path.read_text())
     review_queue = json.loads(result.review_queue_path.read_text())
     publish_report = json.loads((output_dir / "publish_report.json").read_text())
+    artifact_diff = json.loads((output_dir / "kg_construction_diff.json").read_text())
     edge_rows = _read_csv_rows(result.edges_path)
     published_edge_rows = _read_csv_rows(output_dir / "published_edges.csv")
 
@@ -139,6 +141,10 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
     assert summary["review_policy"] == publish_manifest["review_policy"]
     assert _required_artifact_keys() <= set(summary["output"])
     assert _required_artifact_keys() <= set(manifest["artifacts"])
+    assert result.diff_path == output_dir / "kg_construction_diff.json"
+    assert artifact_diff["artifact_type"] == "kg_construction_diff_v1"
+    assert artifact_diff["scope"] == "fresh_build"
+    assert artifact_diff["has_changes"] is False
     assert publish_manifest["kg_build_id"] == "kgbuild_toy_generic"
     assert publish_manifest["source_ids"] == ["toy_generic_source"]
     assert publish_manifest["extractor_versions"] == {"structured_record": "v1"}
@@ -214,6 +220,7 @@ def _required_artifact_keys() -> set[str]:
         "edges",
         "published_nodes",
         "published_edges",
+        "kg_construction_diff",
         "source_library_manifest",
         "draft_manifest",
         "source_audit_graph_manifest",

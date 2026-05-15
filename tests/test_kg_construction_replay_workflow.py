@@ -49,6 +49,7 @@ def test_replay_accepts_entity_merge_and_regenerates_layers(
     review_queue = json.loads(result.build_result.review_queue_path.read_text())
     decisions = _read_jsonl(result.build_result.output_dir / "review_decisions.jsonl")
     summary = json.loads(result.build_result.summary_path.read_text())
+    artifact_diff = json.loads(result.diff_path.read_text(encoding="utf-8"))
 
     assert [row["id"] for row in node_rows] == ["PumpA"]
     assert not any(item["item_type"] == "entity_merge_candidate" for item in review_queue)
@@ -57,6 +58,10 @@ def test_replay_accepts_entity_merge_and_regenerates_layers(
     assert summary["review_replay"]["target_type_counts"] == {
         "entity_merge_candidate": 1
     }
+    assert summary["review_replay"]["diff_path"] == str(result.diff_path)
+    assert artifact_diff["scope"] == "review_replay"
+    assert artifact_diff["decision_provenance"][0]["target_key"] == target_key
+    assert artifact_diff["artifacts"]["review_queue"]["removed_count"] == 1
     assert result.decision_count == 1
 
 
@@ -82,10 +87,14 @@ def test_replay_rejects_entity_merge_and_splits_duplicate(
     node_rows = _read_csv_rows(result.build_result.nodes_path)
     review_queue = json.loads(result.build_result.review_queue_path.read_text())
     decisions = _read_jsonl(result.build_result.output_dir / "review_decisions.jsonl")
+    artifact_diff = json.loads(result.diff_path.read_text(encoding="utf-8"))
 
     assert [row["id"] for row in node_rows] == ["PumpA", "PumpB"]
     assert not any(item["item_type"] == "entity_merge_candidate" for item in review_queue)
     assert decisions[0]["action"] == "reject"
+    assert artifact_diff["artifacts"]["nodes"]["added_count"] == 1
+    assert artifact_diff["artifacts"]["nodes"]["added"][0]["key"] == "PumpB"
+    assert artifact_diff["artifacts"]["review_queue"]["removed_count"] == 1
     assert result.replayed_target_type_counts == {"entity_merge_candidate": 1}
 
 
@@ -122,6 +131,7 @@ def test_replay_source_kg_reviews_cli_rebuilds_reviewed_alignment(
     node_rows = _read_csv_rows(output_dir / "nodes.csv")
     assert payload["decision_count"] == 1
     assert payload["replayed_target_type_counts"] == {"entity_merge_candidate": 1}
+    assert payload["diff_path"] == str(output_dir / "kg_construction_diff.json")
     assert [row["id"] for row in node_rows] == ["PumpA", "PumpB"]
 
 

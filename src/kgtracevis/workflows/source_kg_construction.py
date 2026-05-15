@@ -22,6 +22,11 @@ from kgtracevis.kg_construction import (
     source_library_records_from_construction_sources,
     write_source_library_manifest,
 )
+from kgtracevis.kg_construction.artifact_diff import (
+    build_kg_construction_artifact_snapshot,
+    build_noop_kg_construction_diff,
+    write_kg_construction_diff,
+)
 from kgtracevis.kg_construction.models import (
     construction_output_path_payload,
     kg_construction_artifact_paths,
@@ -66,6 +71,7 @@ class SourceKGConstructionWorkflowResult:
     rca_view_manifest_path: Path
     review_queue_path: Path
     publish_manifest_path: Path
+    diff_path: Path
     summary: dict[str, object]
     manifest: KGConstructionManifest
 
@@ -162,6 +168,13 @@ def run_source_kg_construction_workflow(
         json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    diff_path = write_kg_construction_diff(
+        artifact_paths["kg_construction_diff"],
+        build_noop_kg_construction_diff(
+            run_id=result.run_id,
+            snapshot=build_kg_construction_artifact_snapshot(config.output_dir),
+        ),
+    )
     return SourceKGConstructionWorkflowResult(
         run_id=result.run_id,
         output_dir=config.output_dir,
@@ -176,6 +189,7 @@ def run_source_kg_construction_workflow(
         rca_view_manifest_path=layer_artifacts["rca_view_manifest"],
         review_queue_path=layer_artifacts["review_queue"],
         publish_manifest_path=layer_artifacts["publish_manifest"],
+        diff_path=diff_path,
         summary=summary,
         manifest=manifest,
     )

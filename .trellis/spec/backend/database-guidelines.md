@@ -285,8 +285,8 @@ and RCA reasoning all consume these build artifacts.
   `nodes`, `edges`, `published_nodes`, `published_edges`,
   `source_library_manifest`, `draft_manifest`, `source_audit_graph_manifest`,
   `semantic_layer_manifest`, `rca_view_manifest`, `review_queue`,
-  `review_decisions`, `publish_manifest`, `publish_report`, `summary`,
-  `manifest`
+  `review_decisions`, `publish_manifest`, `publish_report`,
+  `kg_construction_diff`, `summary`, `manifest`
 
 ### 3. Contracts
 
@@ -340,8 +340,14 @@ and RCA reasoning all consume these build artifacts.
   `review_decisions.jsonl` rather than patching stale CSV rows. Accepted
   alignment decisions may override canonical IDs; rejected merge decisions keep
   the source entity split from the proposed canonical. Replay refreshes layer,
-  queue, publish, summary, and construction manifest artifacts while preserving
-  the append-only decision log.
+  queue, publish, summary, construction manifest, and
+  `kg_construction_diff.json` artifacts while preserving the append-only
+  decision log.
+- Fresh construction builds write a no-op `kg_construction_diff.json`. Review
+  replay snapshots current artifacts before rebuild, snapshots regenerated
+  artifacts after rebuild, and writes structured before/after changes for
+  nodes, edges, review queue items, semantic/RCA layer manifests, publish
+  report, and summary counts with decision provenance.
 - TEP RCA graph imports are source-backed candidates. TEP_KG `accept` does not
   become KGTraceVis `reviewed` automatically.
 - Acceptance smoke must build the toy generic path from a Source Library

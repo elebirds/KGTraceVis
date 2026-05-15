@@ -89,9 +89,12 @@ uv run python scripts/import_kg.py \
 
 The same build writes `kg_construction_manifest.json`, which ties together the
 construction run ID, source records, draft rows, reviewable KG payloads, summary
-counts, and artifact paths. KG Studio can inspect both legacy candidate
-directories (`nodes_candidate.csv` / `edges_candidate.csv`) and these newer
-source-to-KG build directories (`nodes.csv` / `edges.csv` plus the manifest).
+counts, and artifact paths. Each fresh build also writes a no-op
+`kg_construction_diff.json`; replaying review decisions refreshes that file with
+before/after row and manifest changes plus the decision provenance. KG Studio
+can inspect both legacy candidate directories (`nodes_candidate.csv` /
+`edges_candidate.csv`) and these newer source-to-KG build directories
+(`nodes.csv` / `edges.csv` plus the manifest).
 
 The reusable runtime workflow lives in
 `kgtracevis.workflows.source_kg_construction`. It is also exposed through the

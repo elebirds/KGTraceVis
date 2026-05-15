@@ -46,6 +46,7 @@ def main() -> None:
                 "replayed_target_type_counts": result.replayed_target_type_counts,
                 "summary_path": str(result.build_result.summary_path),
                 "manifest_path": str(result.build_result.manifest_path),
+                "diff_path": str(result.diff_path),
                 "nodes_path": str(result.build_result.nodes_path),
                 "edges_path": str(result.build_result.edges_path),
                 "review_queue_path": str(result.build_result.review_queue_path),

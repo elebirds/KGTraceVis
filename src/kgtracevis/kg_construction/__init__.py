@@ -7,6 +7,13 @@ from kgtracevis.kg_construction.alignment import (
     CanonicalEntityEntry,
     run_entity_alignment,
 )
+from kgtracevis.kg_construction.artifact_diff import (
+    KG_CONSTRUCTION_DIFF_ARTIFACT_TYPE,
+    build_kg_construction_artifact_snapshot,
+    build_kg_construction_diff,
+    build_noop_kg_construction_diff,
+    write_kg_construction_diff,
+)
 from kgtracevis.kg_construction.audit_graph import SourceAuditGraph
 from kgtracevis.kg_construction.candidate_entity_extractor import (
     CandidateEntity,
@@ -155,6 +162,7 @@ __all__ = [
     "CanonicalEntityEntry",
     "KGConstructionResult",
     "KGConstructionBuildSummary",
+    "KG_CONSTRUCTION_DIFF_ARTIFACT_TYPE",
     "KGConstructionDraftRow",
     "KGConstructionManifest",
     "KGConstructionReviewDecision",
@@ -187,6 +195,8 @@ __all__ = [
     "audit_wm811k_cases",
     "build_construction_manifest",
     "build_construction_summary",
+    "build_kg_construction_artifact_snapshot",
+    "build_kg_construction_diff",
     "build_candidate_kg",
     "build_kg_construction_run_id",
     "build_review_decision_id",
@@ -194,6 +204,7 @@ __all__ = [
     "build_rca_reasoning_view",
     "build_publish_snapshot",
     "build_review_queue",
+    "build_noop_kg_construction_diff",
     "clean_candidate_nodes",
     "clean_candidate_triples",
     "clean_kg_edges",
@@ -236,6 +247,7 @@ __all__ = [
     "write_case_audit_artifacts",
     "write_end_to_end_interpretability_audit",
     "write_edge_review_queue",
+    "write_kg_construction_diff",
     "write_source_library_manifest",
     "write_publish_snapshot",
 ]
