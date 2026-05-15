@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 41
+- **Total Sessions**: 42
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1613 | Active |
+| `journal-1.md` | ~1646 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 42 | 2026-05-15 | M31 KG Studio construction review acceptance | `1b4a7f8` | `main` |
 | 41 | 2026-05-15 | M30 TEP runtime overlay provenance acceptance | `2fc0baa` | `main` |
 | 40 | 2026-05-15 | M23 RCA output KG build provenance | `af414a8` | `main` |
 | 39 | 2026-05-15 | M22 consume RCA view scores in path ranking | `d6b2acc` | `main` |

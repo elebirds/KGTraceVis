@@ -1611,3 +1611,36 @@ Added TEP Root-KGD runtime overlay provenance enrichment via external_edge_id ma
 ### Next Steps
 
 - None - task complete
+
+
+## Session 42: M31 KG Studio construction review acceptance
+
+**Date**: 2026-05-15
+**Task**: M31 KG Studio construction review acceptance
+**Branch**: `main`
+
+### Summary
+
+Added KG Studio construction review UI/API contracts for listing construction builds, reading review queues, submitting accept/reject decisions, and running overlay validation. Updated docs/spec and verified ruff, mypy, pytest 348 passed, web typecheck/build, run_examples, construction smoke, local API/Vite sanity, and TEP overlay-only contribution validation.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1b4a7f8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
