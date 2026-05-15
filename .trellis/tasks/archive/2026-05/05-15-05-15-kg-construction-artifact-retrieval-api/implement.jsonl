@@ -1,0 +1,2 @@
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"API route should delegate to service helper, not duplicate artifact resolution"}
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"construction artifact keys and file contracts"}
