@@ -878,3 +878,36 @@ Added deterministic kg_construction_diff artifacts for fresh builds and review r
 ### Next Steps
 
 - None - task complete
+
+
+## Session 27: M11 direct material KG construction API
+
+**Date**: 2026-05-15
+**Task**: M11 direct material KG construction API
+**Branch**: `main`
+
+### Summary
+
+Added a direct material-library KG build route and artifact-complete material workflow envelope, preserving candidate-only claim boundaries.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3ba5feb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
