@@ -276,6 +276,12 @@ projection rules, relation-family policies, root candidate labels, and
 observable labels. Built-in generic/TEP profiles remain the default when no
 profile pack is supplied.
 
+Profiles may also opt into conservative two-hop semantic derived-edge rules.
+For example, a domain pack can derive `A -OBSERVED_BY-> C` from
+`A -HAS_COMPONENT-> B` and `B -OBSERVED_BY-> C`. The derived edge remains
+`review_status=auto`, cites both source-backed edge IDs in its evidence, and is
+counted in `semantic_layer_manifest.json`.
+
 RCA reasoning views now also write deterministic edge scoring components. The
 profile relation-family policy controls the blend of confidence, propagation
 priority, attenuation, and source trust. These values are exported as optional

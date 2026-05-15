@@ -92,6 +92,12 @@ relation-family policy defines whether propagation is enabled plus the default
 direction, priority, attenuation, and edge-weight multiplier used by the RCA
 reasoning view.
 
+Profiles can opt into a deliberately small semantic derivation DSL: two-hop
+rules that derive one relation from two existing semantic relations. Derived
+edges are still source-backed candidates because their evidence cites the
+source edge IDs used by the rule, and they are recorded in the semantic layer
+manifest for audit.
+
 Profiles also define the RCA scoring blend for each relation family:
 confidence, propagation priority, attenuation, and source trust weights. The
 reasoning view exports these as per-edge score components and summarizes them

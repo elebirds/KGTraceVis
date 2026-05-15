@@ -150,6 +150,12 @@ def _normalize_edge(edge: KGEdge) -> KGEdge:
         fault_anchor=edge.fault_anchor.strip(),
         task_view=edge.task_view.strip(),
         confidence_policy=edge.confidence_policy.strip(),
+        source_trust=float(edge.source_trust),
+        rca_score=float(edge.rca_score),
+        rca_score_confidence=float(edge.rca_score_confidence),
+        rca_score_priority=float(edge.rca_score_priority),
+        rca_score_attenuation=float(edge.rca_score_attenuation),
+        rca_score_source_trust=float(edge.rca_score_source_trust),
         external_edge_id=edge.external_edge_id.strip(),
         kg_build_id=edge.kg_build_id.strip(),
     )

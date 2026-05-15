@@ -22,6 +22,30 @@ class SemanticProjectionRule:
 
 
 @dataclass(frozen=True)
+class SemanticDerivedRelationRule:
+    """Profile rule for deriving a semantic edge from a two-hop edge pattern."""
+
+    rule_id: str
+    left_relation: str
+    right_relation: str
+    target_relation: str
+    relation_family: str = ""
+    confidence_policy: str = "min"
+
+    def normalized_left(self) -> str:
+        """Return the normalized first-hop relation."""
+        return self.left_relation.strip().upper()
+
+    def normalized_right(self) -> str:
+        """Return the normalized second-hop relation."""
+        return self.right_relation.strip().upper()
+
+    def normalized_target(self) -> str:
+        """Return the normalized derived relation."""
+        return self.target_relation.strip().upper()
+
+
+@dataclass(frozen=True)
 class RelationFamilyPolicy:
     """RCA defaults for one semantic relation family."""
 
@@ -63,6 +87,7 @@ class RcaProfile:
     relation_whitelist: frozenset[str]
     relation_rewrites: dict[str, str] = field(default_factory=dict)
     semantic_projection_rules: dict[str, SemanticProjectionRule] = field(default_factory=dict)
+    semantic_derived_relation_rules: tuple[SemanticDerivedRelationRule, ...] = ()
     relation_families: dict[str, str] = field(default_factory=dict)
     propagation_families: frozenset[str] = frozenset()
     relation_family_policies: dict[str, RelationFamilyPolicy] = field(default_factory=dict)
@@ -426,6 +451,9 @@ def profile_from_mapping(
         semantic_projection_rules=_semantic_projection_rules(
             payload.get("semantic_projection_rules", {})
         ),
+        semantic_derived_relation_rules=_semantic_derived_relation_rules(
+            payload.get("semantic_derived_relation_rules", ())
+        ),
         relation_families=_string_map(
             payload.get("relation_families", {}),
             field_name="relation_families",
@@ -468,6 +496,17 @@ def profile_to_manifest(profile: RcaProfile) -> dict[str, object]:
             }
             for relation, rule in sorted(profile.semantic_projection_rules.items())
         },
+        "semantic_derived_relation_rules": [
+            {
+                "rule_id": rule.rule_id,
+                "left_relation": rule.normalized_left(),
+                "right_relation": rule.normalized_right(),
+                "target_relation": rule.normalized_target(),
+                "relation_family": rule.relation_family.strip().upper(),
+                "confidence_policy": rule.confidence_policy,
+            }
+            for rule in profile.semantic_derived_relation_rules
+        ],
         "relation_families": dict(sorted(profile.relation_families.items())),
         "propagation_families": sorted(profile.propagation_families),
         "relation_family_policies": {
@@ -573,6 +612,50 @@ def _semantic_projection_rules(value: Any) -> dict[str, SemanticProjectionRule]:
             ),
         )
     return rules
+
+
+def _semantic_derived_relation_rules(value: Any) -> tuple[SemanticDerivedRelationRule, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise ValueError("RCA profile semantic_derived_relation_rules must be an array")
+    rules: list[SemanticDerivedRelationRule] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, Mapping):
+            raise ValueError("RCA profile derived relation rules must be objects")
+        rule_id = str(item.get("rule_id") or f"derived_rule_{index + 1}").strip()
+        left_relation = _required_rule_text(item, "left_relation", rule_id=rule_id)
+        right_relation = _required_rule_text(item, "right_relation", rule_id=rule_id)
+        target_relation = _required_rule_text(item, "target_relation", rule_id=rule_id)
+        confidence_policy = str(item.get("confidence_policy") or "min").strip().lower()
+        if confidence_policy not in {"min", "average", "product"}:
+            raise ValueError(
+                "RCA profile derived relation confidence_policy must be "
+                "min, average, or product"
+            )
+        rules.append(
+            SemanticDerivedRelationRule(
+                rule_id=rule_id,
+                left_relation=left_relation.upper(),
+                right_relation=right_relation.upper(),
+                target_relation=target_relation.upper(),
+                relation_family=str(item.get("relation_family") or "").strip().upper(),
+                confidence_policy=confidence_policy,
+            )
+        )
+    return tuple(rules)
+
+
+def _required_rule_text(
+    payload: Mapping[str, Any],
+    field_name: str,
+    *,
+    rule_id: str,
+) -> str:
+    value = payload.get(field_name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"RCA profile derived relation rule {rule_id} requires {field_name}")
+    return value.strip()
 
 
 def _relation_family_policies(value: Any) -> dict[str, RelationFamilyPolicy]:

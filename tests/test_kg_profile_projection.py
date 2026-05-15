@@ -13,6 +13,7 @@ from kgtracevis.kg_construction import (
     DraftRelation,
     RcaProfile,
     RelationFamilyPolicy,
+    SemanticDerivedRelationRule,
     SemanticProjectionRule,
     build_rca_reasoning_view,
     load_rca_profile,
@@ -38,6 +39,16 @@ def test_load_rca_profile_pack_from_json(tmp_path: Path) -> None:
                         "swap_endpoints": True,
                     }
                 },
+                "semantic_derived_relation_rules": [
+                    {
+                        "rule_id": "unit_bridge",
+                        "left_relation": "HAS_COMPONENT",
+                        "right_relation": "OBSERVED_BY",
+                        "target_relation": "OBSERVED_BY",
+                        "relation_family": "OBSERVATION",
+                        "confidence_policy": "average",
+                    }
+                ],
                 "relation_families": {"observed_by": "observation"},
                 "relation_family_policies": {
                     "observation": {
@@ -74,6 +85,134 @@ def test_load_rca_profile_pack_from_json(tmp_path: Path) -> None:
         "swap_endpoints": True,
         "target_relation": "OBSERVED_BY",
     }
+    assert manifest["semantic_derived_relation_rules"] == [
+        {
+            "confidence_policy": "average",
+            "left_relation": "HAS_COMPONENT",
+            "relation_family": "OBSERVATION",
+            "right_relation": "OBSERVED_BY",
+            "rule_id": "unit_bridge",
+            "target_relation": "OBSERVED_BY",
+        }
+    ]
+
+
+def test_profile_projection_can_derive_source_backed_two_hop_edges() -> None:
+    """Semantic profiles should derive auditable candidate edges from two-hop rules."""
+    profile = RcaProfile(
+        domain_id="unit",
+        scenario="shared",
+        ontology="unit_rca_v1",
+        keep_labels=frozenset({"Equipment", "Component", "Variable"}),
+        relation_whitelist=frozenset({"HAS_COMPONENT", "OBSERVED_BY"}),
+        relation_families={
+            "HAS_COMPONENT": "PART_OF",
+            "OBSERVED_BY": "OBSERVATION",
+        },
+        semantic_derived_relation_rules=(
+            SemanticDerivedRelationRule(
+                rule_id="component_observation_bridge",
+                left_relation="HAS_COMPONENT",
+                right_relation="OBSERVED_BY",
+                target_relation="OBSERVED_BY",
+                relation_family="OBSERVATION",
+                confidence_policy="min",
+            ),
+        ),
+        relation_family_policies={
+            "OBSERVATION": RelationFamilyPolicy(
+                propagation_enabled=True,
+                propagation_direction="reverse",
+                propagation_priority=0.7,
+                attenuation=0.85,
+            )
+        },
+    )
+    draft = DraftKG(
+        entities=(
+            DraftEntity(
+                draft_id="entity-pump",
+                source_id="unit_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="PumpA",
+                name="Pump A",
+                label="Equipment",
+                evidence="pump row",
+            ),
+            DraftEntity(
+                draft_id="entity-seal",
+                source_id="unit_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="SealAssembly",
+                name="Seal assembly",
+                label="Component",
+                evidence="seal row",
+            ),
+            DraftEntity(
+                draft_id="entity-pressure",
+                source_id="unit_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="PressureSignal",
+                name="Pressure signal",
+                label="Variable",
+                evidence="pressure row",
+            ),
+        ),
+        relations=(
+            DraftRelation(
+                draft_id="relation-pump-seal",
+                source_id="unit_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                head="PumpA",
+                relation="HAS_COMPONENT",
+                tail="SealAssembly",
+                evidence="pump has seal assembly",
+                confidence=0.9,
+            ),
+            DraftRelation(
+                draft_id="relation-seal-pressure",
+                source_id="unit_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                head="SealAssembly",
+                relation="OBSERVED_BY",
+                tail="PressureSignal",
+                evidence="seal assembly is observed by pressure signal",
+                confidence=0.7,
+            ),
+        ),
+    )
+
+    semantic = project_semantic_layer(draft, profile)
+    derived = [
+        edge
+        for edge in semantic.edges
+        if edge.source == "semantic_projection:component_observation_bridge"
+    ]
+
+    assert len(semantic.edges) == 3
+    assert len(derived) == 1
+    assert derived[0].head == "PumpA"
+    assert derived[0].relation == "OBSERVED_BY"
+    assert derived[0].tail == "PressureSignal"
+    assert derived[0].confidence == pytest.approx(0.7)
+    assert derived[0].review_status == "auto"
+    assert derived[0].propagation_enabled is True
+    assert "relation-pump-seal" not in derived[0].evidence
+    assert "PumpA|HAS_COMPONENT|SealAssembly|shared" in derived[0].evidence
+    assert semantic.manifest["derived_edge_count"] == 1
+    assert semantic.manifest["derived_edge_ids"] == [
+        "PumpA|OBSERVED_BY|PressureSignal|shared"
+    ]
 
 
 def test_profile_projection_rule_can_rewrite_and_swap_relation_endpoints() -> None:
