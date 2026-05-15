@@ -6,6 +6,9 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from kgtracevis.kg_construction import (
     GENERIC_PROFILE,
@@ -16,6 +19,7 @@ from kgtracevis.kg_construction import (
     DraftRelation,
     ExtractorRegistry,
     KGConstructionSource,
+    LLMDocumentIEExtractor,
     TepRcaGraphExtractor,
     TepSemanticLiftExtractor,
     TepVariableMappingExtractor,
@@ -84,6 +88,46 @@ class UnitExtractor:
         )
 
 
+class FakeDocumentIEClient:
+    """Small document IE fake for pipeline-level document source tests."""
+
+    def extract_candidates(
+        self,
+        chunk: Any,
+        *,
+        prompt: str,
+        response_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return one source-grounded candidate graph."""
+        return {
+            "entities": [
+                {
+                    "id": "PumpFault",
+                    "name": "Pump fault",
+                    "label": "FaultEvent",
+                    "evidence": "Pump fault can indicate seal wear.",
+                    "confidence": 0.62,
+                },
+                {
+                    "id": "SealWear",
+                    "name": "Seal wear",
+                    "label": "RootCause",
+                    "evidence": "seal wear",
+                    "confidence": 0.62,
+                },
+            ],
+            "relations": [
+                {
+                    "head": "PumpFault",
+                    "relation": "SUGGESTS_ROOT_CAUSE",
+                    "tail": "SealWear",
+                    "evidence": "Pump fault can indicate seal wear.",
+                    "confidence": 0.55,
+                }
+            ],
+        }
+
+
 def test_run_kg_construction_uses_registered_extractors() -> None:
     """The construction runner should build validated KG rows from drafts."""
     result = run_kg_construction(
@@ -102,6 +146,116 @@ def test_run_kg_construction_uses_registered_extractors() -> None:
     assert result.edges[0].source == "unit_source"
     assert result.edges[0].review_status == "reviewed"
     assert result.edges[0].weight == 0.27
+
+
+def test_run_kg_construction_validates_extractor_before_parse() -> None:
+    """Parser audit should not change missing-extractor failure behavior."""
+    with pytest.raises(ValueError, match="no KG source extractor registered"):
+        run_kg_construction(
+            [KGConstructionSource(source_id="note", source_type="txt", scenario="tep")]
+        )
+
+
+def test_run_kg_construction_records_structured_parse_audit(tmp_path: Path) -> None:
+    """Structured/manual sources should report parser metadata and row counts."""
+    source_path = tmp_path / "toy_source.jsonl"
+    _write_jsonl(
+        source_path,
+        [
+            {
+                "id": "ToyRoot",
+                "name": "Toy root",
+                "label": "RootCause",
+                "scenario": "shared",
+                "evidence": "toy row 1",
+            },
+            {
+                "id": "ToyObservation",
+                "name": "Toy observation",
+                "label": "Observation",
+                "scenario": "shared",
+                "evidence": "toy row 2",
+            },
+            {
+                "head": "ToyRoot",
+                "relation": "CAUSES",
+                "tail": "ToyObservation",
+                "scenario": "shared",
+                "evidence": "toy row 3",
+                "confidence": 0.81,
+            },
+        ],
+    )
+
+    result = run_kg_construction(
+        [
+            KGConstructionSource(
+                source_id="toy_manual_source",
+                source_type="manual_table",
+                scenario="shared",
+                path=source_path,
+            )
+        ],
+        run_id="kgbuild_toy_parse_audit",
+    )
+
+    manifest = result.audit_graph.manifest()
+    parsed_source = manifest["parsed_sources"][0]
+    assert manifest["parsed_source_count"] == 1
+    assert parsed_source["kind"] == "rows"
+    assert parsed_source["parser_kind"] == "manual_table"
+    assert parsed_source["row_count"] == 3
+    assert parsed_source["chunk_count"] == 0
+    assert parsed_source["source_reference"] == str(source_path)
+    assert parsed_source["safe_source"]["path"] == str(source_path)
+    assert parsed_source["safe_source"]["path_kind"] == "file"
+    assert "evidence" in parsed_source["parser_metadata"]["columns"]
+
+
+def test_run_kg_construction_records_document_parse_audit_without_text() -> None:
+    """Document parse summaries should keep chunk metadata but not source text."""
+    source_text = "Pump fault can indicate seal wear. Operators noted vibration."
+
+    result = run_kg_construction(
+        [
+            KGConstructionSource(
+                source_id="pump_manual",
+                source_type="txt",
+                scenario="tep",
+                text=source_text,
+            )
+        ],
+        registry=ExtractorRegistry([LLMDocumentIEExtractor(FakeDocumentIEClient())]),
+        run_id="kgbuild_document_parse_audit",
+    )
+
+    manifest = result.audit_graph.manifest()
+    parsed_source = manifest["parsed_sources"][0]
+    parsed_payload = json.dumps(parsed_source, sort_keys=True)
+    assert parsed_source["kind"] == "text_chunks"
+    assert parsed_source["parser_kind"] == "text"
+    assert parsed_source["row_count"] == 0
+    assert parsed_source["chunk_count"] == 1
+    assert parsed_source["safe_source"] == {
+        "source_id": "pump_manual",
+        "source_type": "txt",
+        "scenario": "tep",
+        "has_text": True,
+    }
+    assert parsed_source["parser_metadata"]["chunk_ids"][0].startswith(
+        "pump_manual:chunk:0001:"
+    )
+    assert parsed_source["parser_metadata"]["chunk_char_ranges"] == [
+        {
+            "chunk_id": parsed_source["parser_metadata"]["chunk_ids"][0],
+            "start_char": 0,
+            "end_char": len(source_text),
+        }
+    ]
+    assert source_text not in parsed_payload
+    assert "Pump fault can indicate seal wear" not in parsed_payload
+    assert len(result.nodes) == 2
+    assert len(result.edges) == 1
 
 
 def test_kg_construction_result_builds_manifest() -> None:
@@ -444,6 +598,53 @@ def test_tep_semantic_lift_extractor_imports_runtime_graph(tmp_path: Path) -> No
         "stream:stream_1_a_feed",
     ]
     assert result.semantic_layer.manifest["skipped_relation_count"] == 0
+
+
+def test_tep_source_reference_parse_audit_reports_paths(tmp_path: Path) -> None:
+    """TEP source-reference inputs should preserve safe path provenance."""
+    nodes_path = tmp_path / "semantic_lift_nodes.jsonl"
+    edges_path = tmp_path / "semantic_lift_edges.jsonl"
+    _write_jsonl(
+        nodes_path,
+        [
+            {
+                "node_id": "stream:stream_1_a_feed",
+                "entity_id": "stream:stream_1_a_feed",
+                "entity_type": "Stream",
+                "name": "Stream 1 A feed",
+            }
+        ],
+    )
+    _write_jsonl(edges_path, [])
+
+    result = run_kg_construction(
+        [
+            KGConstructionSource(
+                source_id="tep_semantic_lift_unit",
+                source_type="tep_semantic_lift",
+                scenario="tep",
+                metadata={"nodes_path": nodes_path, "edges_path": edges_path},
+            )
+        ],
+        registry=ExtractorRegistry([TepSemanticLiftExtractor()]),
+        run_id="kgbuild_tep_parse_audit",
+    )
+
+    parsed_source = result.audit_graph.manifest()["parsed_sources"][0]
+    assert parsed_source["kind"] == "source_reference"
+    assert parsed_source["parser_kind"] == "source_reference"
+    assert parsed_source["row_count"] == 0
+    assert parsed_source["chunk_count"] == 0
+    assert f"nodes_path={nodes_path}" in parsed_source["source_reference"]
+    assert f"edges_path={edges_path}" in parsed_source["source_reference"]
+    assert parsed_source["safe_source"]["metadata_paths"] == {
+        "edges_path": str(edges_path),
+        "nodes_path": str(nodes_path),
+    }
+    assert parsed_source["parser_metadata"]["paths"] == {
+        "edges_path": str(edges_path),
+        "nodes_path": str(nodes_path),
+    }
 
 
 def test_tep_variable_mapping_extractor_imports_channel_aliases(tmp_path: Path) -> None:

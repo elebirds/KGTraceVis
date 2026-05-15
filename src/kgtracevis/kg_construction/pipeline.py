@@ -23,6 +23,10 @@ from kgtracevis.kg_construction.models import (
     draft_rows_from_draft,
     kg_construction_artifact_paths,
 )
+from kgtracevis.kg_construction.parsers import (
+    ParsedSourceContent,
+    parse_source_for_extraction,
+)
 from kgtracevis.kg_construction.profiles import RcaProfile, profile_for_scenario
 from kgtracevis.kg_construction.publish import PublishManifest
 from kgtracevis.kg_construction.rca_view import RcaReasoningView, build_rca_reasoning_view
@@ -44,6 +48,7 @@ class KGConstructionResult:
 
     run_id: str
     sources: tuple[KGConstructionSource, ...]
+    parsed_sources: tuple[ParsedSourceContent, ...]
     draft: DraftKG
     aligned_draft: DraftKG
     alignment: AlignmentResult
@@ -143,9 +148,17 @@ def run_kg_construction(
     """Run the RCA-oriented source-to-KG construction pipeline."""
     extractor_registry = registry or default_extractor_registry()
     source_rows = list(sources)
-    drafts = [
-        extractor_registry.extractor_for(source.source_type).extract(source)
+    extractors = [
+        extractor_registry.extractor_for(source.source_type)
         for source in source_rows
+    ]
+    parsed_sources = [
+        parse_source_for_extraction(source)
+        for source in source_rows
+    ]
+    drafts = [
+        extractor.extract(source)
+        for extractor, source in zip(extractors, source_rows, strict=True)
     ]
     draft = DraftKG.combine(drafts)
     resolved_run_id = run_id or build_kg_construction_run_id()
@@ -155,6 +168,7 @@ def run_kg_construction(
         sources=tuple(source_rows),
         draft=draft,
         alignment=alignment,
+        parsed_sources=tuple(parsed_sources),
     )
     semantic_layer = project_semantic_layer(alignment.draft, resolved_profile)
     rca_view = build_rca_reasoning_view(
@@ -176,10 +190,7 @@ def run_kg_construction(
     _validate_edge_endpoints(nodes, edges)
     extractor_versions = {
         extractor.name: extractor.version
-        for extractor in (
-            extractor_registry.extractor_for(source.source_type)
-            for source in source_rows
-        )
+        for extractor in extractors
     }
     review_policy = "auto candidates require review before trusted publication"
     publish_manifest_generated_at = current_utc_iso()
@@ -196,6 +207,7 @@ def run_kg_construction(
     return KGConstructionResult(
         run_id=resolved_run_id,
         sources=tuple(source_rows),
+        parsed_sources=tuple(parsed_sources),
         draft=draft,
         aligned_draft=alignment.draft,
         alignment=alignment,

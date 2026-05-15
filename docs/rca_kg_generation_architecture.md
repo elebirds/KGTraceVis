@@ -22,7 +22,15 @@ The system is not a general industrial KG builder. It creates source-grounded, r
 
 `Source Library` records material provenance. A source is not a KG fact. It may be a structured table, document, prior graph, variable mapping, code artifact, log/event file, manual table, or external project artifact such as TEP_KG outputs.
 
-`Parser / Chunk` turns sources into extractor inputs: rows, text chunks, structured records, or source references. Parsers do not emit final KG facts.
+`Parser / Chunk` turns sources into extractor inputs: rows, text chunks,
+structured records, or source references. Parsers do not emit final KG facts.
+The construction pipeline runs the parser before extractor execution and keeps
+an audit-safe parse summary in `source_audit_graph_manifest.json`. Structured
+and manual table sources report row counts and columns. Text/document sources
+report parser kind, chunk count, chunk IDs, and character ranges without storing
+full source text. External/domain-pack sources such as TEP semantic-lift and RCA
+graph artifacts report `source_reference` plus safe path metadata while leaving
+extractor inputs unchanged.
 
 `Extractor Registry` maps source types to extractor plugins. All extractors emit `DraftKG`. LLM document IE is isolated as one extractor type and cannot publish facts.
 
@@ -147,6 +155,10 @@ The summary explicitly records `kg_build_id`, `source_ids`,
 `extractor_versions`, `profile_version`, and `review_policy`. The publish
 manifest records the same version boundary plus counts so downstream Neo4j
 publication and RCA reasoning runs can reference a reproducible build snapshot.
+The source audit graph manifest additionally records `parsed_sources` entries
+with `kind`, `parser_kind`, `row_count`, `chunk_count`, `source_reference`,
+`safe_source`, and `parser_metadata`. These entries are summaries only; row
+values and document text stay out of the manifest.
 
 ## Example Commands
 
