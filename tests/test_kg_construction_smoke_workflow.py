@@ -15,8 +15,10 @@ from kgtracevis.workflows.kg_construction_smoke import (
 )
 
 
-def test_kg_construction_smoke_builds_toy_and_tep_paths(tmp_path: Path) -> None:
-    """Smoke workflow should verify both acceptance paths with TEP fixtures."""
+def test_kg_construction_smoke_builds_toy_material_and_tep_paths(
+    tmp_path: Path,
+) -> None:
+    """Smoke workflow should verify source, material, and TEP paths."""
     tep_root = tmp_path / "TEP_KG"
     _write_tep_fixture(tep_root)
 
@@ -30,12 +32,23 @@ def test_kg_construction_smoke_builds_toy_and_tep_paths(tmp_path: Path) -> None:
     payload = result.payload()
     paths = {path["name"]: path for path in payload["paths"]}
 
-    assert payload["passed"] == 2
+    assert payload["passed"] == 3
     assert payload["skipped"] == 0
     assert paths["toy_generic"]["status"] == "passed"
     assert paths["toy_generic"]["metadata"]["source_ids"] == ["toy_generic_source"]
     assert paths["toy_generic"]["artifacts"]["source_library_manifest"].endswith(
         "source_library_manifest.json"
+    )
+    assert paths["material_direct"]["status"] == "passed"
+    assert paths["material_direct"]["metadata"]["material_ids"] == [
+        "smoke_material_note"
+    ]
+    assert paths["material_direct"]["metadata"]["source_ids"] == [
+        "smoke_material_note"
+    ]
+    assert paths["material_direct"]["metadata"]["edge_count"] == 1
+    assert paths["material_direct"]["artifacts"]["kg_construction_diff"].endswith(
+        "kg_construction_diff.json"
     )
     assert paths["tep"]["status"] == "passed"
     assert paths["tep"]["metadata"]["source_ids"] == [
@@ -61,7 +74,7 @@ def test_kg_construction_smoke_requires_tep_when_requested(tmp_path: Path) -> No
 
 
 def test_smoke_rca_kg_construction_cli_builds_fixture_paths(tmp_path: Path) -> None:
-    """The smoke CLI should run both acceptance paths and print a summary."""
+    """The smoke CLI should run all acceptance paths and print a summary."""
     tep_root = tmp_path / "TEP_KG"
     _write_tep_fixture(tep_root)
     output_dir = tmp_path / "cli_smoke"
@@ -85,10 +98,12 @@ def test_smoke_rca_kg_construction_cli_builds_fixture_paths(tmp_path: Path) -> N
     payload = json.loads(completed.stdout)
     paths = {path["name"]: path for path in payload["paths"]}
     assert payload["artifact_type"] == "rca_kg_construction_smoke_result_v1"
-    assert payload["passed"] == 2
+    assert payload["passed"] == 3
     assert paths["toy_generic"]["status"] == "passed"
+    assert paths["material_direct"]["status"] == "passed"
     assert paths["tep"]["status"] == "passed"
     assert Path(payload["summary_path"]).is_file()
+    assert Path(paths["material_direct"]["artifacts"]["review_queue"]).is_file()
     assert Path(paths["tep"]["artifacts"]["review_queue"]).is_file()
 
 

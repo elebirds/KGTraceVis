@@ -10,6 +10,16 @@ from typing import Any, Literal
 
 from kgtracevis.kg_construction import KGConstructionSource, load_source_library
 from kgtracevis.kg_construction.models import KG_CONSTRUCTION_REQUIRED_ARTIFACT_KEYS
+from kgtracevis.service.kg_materials import (
+    KGMaterialExtractionState,
+    KGMaterialRegisterRequest,
+    register_kg_material,
+)
+from kgtracevis.workflows.material_kg_construction import (
+    MaterialKGConstructionWorkflowConfig,
+    MaterialKGConstructionWorkflowResult,
+    run_material_kg_construction_workflow,
+)
 from kgtracevis.workflows.source_kg_construction import (
     SourceKGConstructionWorkflowConfig,
     SourceKGConstructionWorkflowResult,
@@ -85,6 +95,7 @@ def run_kg_construction_acceptance_smoke(
     config.output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[KGConstructionSmokePath] = [
         _run_toy_source_library_smoke(config),
+        _run_material_direct_smoke(config),
     ]
     paths.append(_run_tep_smoke(config))
     summary_path = config.output_dir / "kg_construction_smoke_summary.json"
@@ -169,6 +180,52 @@ def _run_tep_smoke(config: KGConstructionSmokeConfig) -> KGConstructionSmokePath
     return _passed_path("tep", result, metadata=metadata)
 
 
+def _run_material_direct_smoke(
+    config: KGConstructionSmokeConfig,
+) -> KGConstructionSmokePath:
+    material_root = config.output_dir / "material_library"
+    source_dir = config.output_dir / "material_direct_sources"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    records_path = source_dir / "material_records.jsonl"
+    records_path.write_text(_material_direct_records_jsonl(), encoding="utf-8")
+    register_kg_material(
+        KGMaterialRegisterRequest(
+            material_id="smoke_material_note",
+            title="Smoke material note",
+            source_kind="local_path",
+            source_uri=str(source_dir / "material_note.txt"),
+            scenario="shared",
+            material_type="text",
+            extraction=KGMaterialExtractionState(
+                status="extracted",
+                structured_records_path=str(records_path),
+                source_format="jsonl",
+                source_id="smoke_material_note",
+                extractor_name="pre_extracted_smoke_fixture",
+                extractor_version="v1",
+                record_count=3,
+            ),
+        ),
+        material_root=material_root,
+        overwrite=config.overwrite,
+    )
+    result = run_material_kg_construction_workflow(
+        MaterialKGConstructionWorkflowConfig(
+            material_ids=("smoke_material_note",),
+            material_root=material_root,
+            output_dir=config.output_dir / "material_direct",
+            overwrite=config.overwrite,
+            run_id="kgbuild_smoke_material_direct",
+            extraction_mode="never",
+        )
+    )
+    metadata = _validate_required_material_artifacts(result)
+    metadata["material_root"] = str(material_root)
+    metadata["material_ids"] = list(result.material_ids)
+    metadata["extraction_mode"] = result.summary["material_library"]["extraction_mode"]
+    return _passed_path("material_direct", result, metadata=metadata)
+
+
 def _tep_sources(tep_root: Path) -> tuple[KGConstructionSource, ...]:
     kg_dir = tep_root / "data" / "processed" / "kg"
     rca_dir = tep_root / "data" / "processed" / "rca"
@@ -209,7 +266,7 @@ def _missing_tep_artifacts(tep_root: Path) -> list[Path]:
 
 def _passed_path(
     name: str,
-    result: SourceKGConstructionWorkflowResult,
+    result: SourceKGConstructionWorkflowResult | MaterialKGConstructionWorkflowResult,
     *,
     metadata: dict[str, Any],
 ) -> KGConstructionSmokePath:
@@ -229,13 +286,41 @@ def _passed_path(
 def _validate_required_artifacts(
     result: SourceKGConstructionWorkflowResult,
 ) -> dict[str, Any]:
-    output = dict(result.summary.get("output") or {})
+    return _validate_required_output_artifacts(
+        output_dir=result.output_dir,
+        run_id=result.run_id,
+        summary=result.summary,
+    )
+
+
+def _validate_required_material_artifacts(
+    result: MaterialKGConstructionWorkflowResult,
+) -> dict[str, Any]:
+    metadata = _validate_required_output_artifacts(
+        output_dir=result.output_dir,
+        run_id=result.run_id,
+        summary=result.summary,
+    )
+    material_library = result.summary.get("material_library")
+    if not isinstance(material_library, dict):
+        raise ValueError("material smoke missing material_library summary")
+    metadata["material_source_ids"] = list(material_library.get("source_ids", []))
+    return metadata
+
+
+def _validate_required_output_artifacts(
+    *,
+    output_dir: Path,
+    run_id: str,
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    output = dict(summary.get("output") or {})
     missing_keys = [
         key for key in KG_CONSTRUCTION_REQUIRED_ARTIFACT_KEYS if key not in output
     ]
     if missing_keys:
         raise ValueError(
-            f"{result.output_dir} missing construction artifact keys: {missing_keys}"
+            f"{output_dir} missing construction artifact keys: {missing_keys}"
         )
     missing_files = [
         output[key]
@@ -244,13 +329,13 @@ def _validate_required_artifacts(
     ]
     if missing_files:
         raise ValueError(
-            f"{result.output_dir} missing construction artifact files: {missing_files}"
+            f"{output_dir} missing construction artifact files: {missing_files}"
         )
     return {
-        "kg_build_id": result.run_id,
-        "node_count": result.summary.get("node_count", 0),
-        "edge_count": result.summary.get("edge_count", 0),
-        "source_ids": list(result.summary.get("source_ids", [])),
+        "kg_build_id": run_id,
+        "node_count": summary.get("node_count", 0),
+        "edge_count": summary.get("edge_count", 0),
+        "source_ids": list(summary.get("source_ids", [])),
         "required_artifact_count": len(KG_CONSTRUCTION_REQUIRED_ARTIFACT_KEYS),
     }
 
@@ -295,3 +380,36 @@ def _toy_generic_source_csv() -> str:
             "",
         ]
     )
+
+
+def _material_direct_records_jsonl() -> str:
+    rows = [
+        {
+            "id": "MaterialCoolingAlert",
+            "name": "Material cooling alert",
+            "label": "Alert",
+            "scenario": "shared",
+            "source": "smoke_material_note",
+            "evidence": "Cooling alert suggests pump seal wear.",
+            "confidence": 0.62,
+        },
+        {
+            "id": "MaterialPumpSealWear",
+            "name": "Material pump seal wear",
+            "label": "RootCause",
+            "scenario": "shared",
+            "source": "smoke_material_note",
+            "evidence": "Cooling alert suggests pump seal wear.",
+            "confidence": 0.62,
+        },
+        {
+            "head": "MaterialCoolingAlert",
+            "relation": "CAUSES",
+            "tail": "MaterialPumpSealWear",
+            "scenario": "shared",
+            "source": "smoke_material_note",
+            "evidence": "Cooling alert suggests pump seal wear.",
+            "confidence": 0.55,
+        },
+    ]
+    return "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n"

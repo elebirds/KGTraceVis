@@ -249,6 +249,9 @@ calls the existing source-to-KG construction workflow. Material-driven builds
 persist a `material_library` section in both `kg_construction_summary.json` and
 `kg_construction_manifest.json`; that section records material IDs, source IDs,
 extraction mode, extracted material IDs, material root, and the claim boundary.
+The RCA-KG acceptance smoke also exercises this path with a pre-extracted
+material fixture, so the no-key material workflow is checked alongside the toy
+generic Source Library path and optional TEP_KG import path.
 
 ### Storage Boundary
 
