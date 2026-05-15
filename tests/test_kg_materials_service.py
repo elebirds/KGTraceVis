@@ -191,6 +191,71 @@ def test_material_extraction_supports_no_key_offline_fixture_provider(
     assert source_text not in json.dumps(manifest)
 
 
+def test_material_extraction_long_context_writes_document_map(
+    tmp_path: Path,
+) -> None:
+    """Document understanding mode should create advisory map artifacts."""
+    source_text = (
+        "# Pump Section\n"
+        "Condition Monitoring (CM) observes Pump cavitation. "
+        "Pump cavitation indicates seal wear."
+    )
+    save_kg_material_upload(
+        material_id="mapped_note",
+        title="Mapped note",
+        filename="mapped_note.txt",
+        content=source_text.encode(),
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+    client = PromptCapturingIEClient()
+
+    response = extract_kg_material_to_structured_records(
+        "mapped_note",
+        KGMaterialExtractionRunRequest(
+            document_understanding_mode="long_context",
+            overwrite=True,
+        ),
+        client=client,
+        material_root=tmp_path,
+    )
+
+    assert response.status == "extracted"
+    assert response.document_understanding_map_path is not None
+    assert response.material.extraction.document_understanding_mode == "long_context"
+    assert response.material.extraction.document_understanding_map_path == (
+        response.document_understanding_map_path
+    )
+    assert client.prompts
+    assert "Document-level context for terminology only" in client.prompts[0]
+    assert "current source text chunk" in client.prompts[0]
+
+    document_map = json.loads(
+        Path(response.document_understanding_map_path).read_text(encoding="utf-8")
+    )
+    assert document_map["mode"] == "long_context"
+    assert document_map["artifact_type"] == "document_understanding_map_v1"
+    assert document_map["cross_chunk_proposals"] == []
+    assert document_map["glossary"][0]["term"] == "CM"
+    assert document_map["sections"][0]["title"] == "Pump Section"
+    assert "not DraftKG" in document_map["claim_boundary"]
+
+    manifest = json.loads(Path(response.extraction_manifest_path).read_text(encoding="utf-8"))
+    assert manifest["document_understanding"]["mode"] == "long_context"
+    assert manifest["document_understanding"]["artifact_path"] == (
+        response.document_understanding_map_path
+    )
+    build_sources = prepare_kg_material_construction_build(
+        KGMaterialSelectedBuildRequest(material_ids=["mapped_note"]),
+        material_root=tmp_path,
+    )
+    assert build_sources.sources[0].metadata["document_understanding_mode"] == "long_context"
+    assert build_sources.sources[0].metadata["document_understanding_map_path"] == (
+        response.document_understanding_map_path
+    )
+
+
 def test_offline_fixture_provider_requires_explicit_fixture(
     tmp_path: Path,
 ) -> None:
@@ -485,6 +550,27 @@ class EmptyIEClient:
     ) -> dict[str, Any]:
         del chunk, prompt, response_schema
         return {"entities": [], "relations": []}
+
+
+class PromptCapturingIEClient(FakeIEClient):
+    """Fake IE client that records prompts for context-boundary assertions."""
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    def extract_candidates(
+        self,
+        chunk: SourceTextChunk,
+        *,
+        prompt: str,
+        response_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        self.prompts.append(prompt)
+        return super().extract_candidates(
+            chunk,
+            prompt=prompt,
+            response_schema=response_schema,
+        )
 
 
 def _offline_pump_fixture() -> dict[str, Any]:

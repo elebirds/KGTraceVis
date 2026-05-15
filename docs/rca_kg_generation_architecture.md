@@ -305,6 +305,16 @@ manifest records `provider=offline_fixture` plus `extractor_name=offline_documen
 This keeps no-key demos and regression runs source-grounded and auditable
 without treating fixtures as reviewed facts.
 
+For richer document work, extraction requests can set
+`document_understanding_mode` to `long_context` or `agentic`. The current
+implementation produces a deterministic `document_understanding_map.json`
+containing parser/chunk coverage, sections, glossary entries, entity inventory,
+relation-family hints, ontology suggestions, unresolved questions, and review
+hints. That map may be injected into chunk prompts as terminology context, but
+strict evidence grounding remains local to the current chunk. In other words,
+document understanding can guide extraction; it cannot publish KG facts or make
+cross-chunk claims without a separate reviewable proposal stage.
+
 ## Example Commands
 
 Toy/manual structured sources can use the existing source construction workflow or API. TEP artifacts can be built from local TEP_KG outputs:

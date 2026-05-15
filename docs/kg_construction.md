@@ -312,6 +312,23 @@ whitelist, and the claim boundary that extracted rows are reviewable candidates.
 The KG Studio material workflow exposes the same provider selector, so a no-key
 review/demo path is visible instead of hidden inside tests.
 
+Material extraction also supports explicit document understanding modes:
+
+- `document_understanding_mode=chunk` is the default and keeps extraction scoped
+  to each parsed chunk.
+- `document_understanding_mode=long_context` writes
+  `document_understanding_map.json` with section, glossary, entity-inventory,
+  ontology-suggestion, relation-hint, and review-hint metadata. The map is then
+  injected into chunk prompts as terminology-only context.
+- `document_understanding_mode=agentic` currently uses the same deterministic
+  advisory map contract as `long_context`; it is a scaffold for future
+  tool/agent-assisted reading, not a fact publication path.
+
+Document maps are planning and review artifacts, not KG facts. They do not
+create DraftKG rows, they do not relax current-chunk evidence grounding, and
+their `cross_chunk_proposals` field is empty until a future reviewed proposal
+stage is added.
+
 The product boundary is therefore not "LLM returned triples". The product
 experience is the audited construction workspace: source registration, parser
 and chunk audit, source-grounded candidate generation, DraftKG conversion,

@@ -20,10 +20,12 @@ from kgtracevis.kg_construction.document_extraction import (
     DocumentIEChunkExtractionSummary,
     DocumentIEClient,
     DocumentIEExtractionResult,
+    DocumentUnderstandingMode,
     OfflineDocumentIEFixtureClient,
     OpenAICompatibleKGExtractionClient,
     ParsedSourceDocument,
     SourceTextChunk,
+    build_document_understanding_map,
     chunk_source_document,
     extract_draft_kg_from_chunks_with_report,
     parse_source_material,
@@ -67,12 +69,14 @@ class KGMaterialExtractionState(BaseModel):
     extractor_name: str | None = None
     extractor_version: str | None = None
     prompt_version: str | None = None
+    document_understanding_mode: DocumentUnderstandingMode = "chunk"
     extracted_at: str | None = None
     record_count: int | None = Field(default=None, ge=0)
     chunk_count: int | None = Field(default=None, ge=0)
     error_count: int | None = Field(default=None, ge=0)
     extraction_manifest_path: str | None = None
     chunk_results_path: str | None = None
+    document_understanding_map_path: str | None = None
     error_message: str | None = None
 
     @model_validator(mode="after")
@@ -249,6 +253,7 @@ class KGMaterialExtractionRunRequest(BaseModel):
     overlap_chars: int = Field(default=200, ge=0, le=2_000)
     source_format: ConstructionSourceFormat = "jsonl"
     prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION
+    document_understanding_mode: DocumentUnderstandingMode = "chunk"
     default_confidence: float = Field(default=0.55, ge=0.0, le=1.0)
     strict_grounding: bool = True
     continue_on_chunk_error: bool = False
@@ -294,6 +299,7 @@ class KGMaterialExtractionRunResponse(BaseModel):
     record_count: int
     extraction_manifest_path: str
     chunk_results_path: str
+    document_understanding_map_path: str | None = None
     chunk_count: int
     error_count: int
     provider: DocumentIEProvider
@@ -662,9 +668,15 @@ def extract_kg_material_to_structured_records(
     records_path = record_dir / "structured_records.jsonl"
     chunk_results_path = record_dir / "chunk_extraction_results.jsonl"
     extraction_manifest_path = record_dir / "extraction_manifest.json"
+    document_understanding_map_path = record_dir / "document_understanding_map.json"
     existing_artifacts = [
         path.name
-        for path in (records_path, chunk_results_path, extraction_manifest_path)
+        for path in (
+            records_path,
+            chunk_results_path,
+            extraction_manifest_path,
+            document_understanding_map_path,
+        )
         if path.exists()
     ]
     if existing_artifacts and not request.overwrite:
@@ -697,6 +709,14 @@ def extract_kg_material_to_structured_records(
         material.material_id,
         [_source_chunk_store_payload(material.material_id, chunk) for chunk in chunks],
     )
+    document_understanding_map: dict[str, Any] | None = None
+    if request.document_understanding_mode != "chunk":
+        document_understanding_map = build_document_understanding_map(
+            document,
+            chunks,
+            mode=request.document_understanding_mode,
+        )
+        _write_json_object(document_understanding_map_path, document_understanding_map)
 
     ie_client, extractor_name = _document_ie_client_for_request(
         material=material,
@@ -712,6 +732,7 @@ def extract_kg_material_to_structured_records(
         strict_grounding=request.strict_grounding,
         prompt_version=request.prompt_version,
         continue_on_chunk_error=request.continue_on_chunk_error,
+        document_context=document_understanding_map,
     )
     draft = extraction_result.draft
     records = _structured_records_from_draft(draft)
@@ -735,6 +756,10 @@ def extract_kg_material_to_structured_records(
         records_path=records_path,
         chunk_results_path=chunk_results_path,
         extraction_manifest_path=extraction_manifest_path,
+        document_understanding_map_path=(
+            document_understanding_map_path if document_understanding_map is not None else None
+        ),
+        document_understanding_map=document_understanding_map,
         extraction_run_id=extraction_run_id,
         provider=request.provider,
         request=request,
@@ -753,12 +778,18 @@ def extract_kg_material_to_structured_records(
                 extractor_name=extractor_name,
                 extractor_version="v1",
                 prompt_version=request.prompt_version,
+                document_understanding_mode=request.document_understanding_mode,
                 extracted_at=now,
                 record_count=len(records),
                 chunk_count=extraction_result.chunk_count,
                 error_count=extraction_result.error_count,
                 extraction_manifest_path=str(extraction_manifest_path),
                 chunk_results_path=str(chunk_results_path),
+                document_understanding_map_path=(
+                    str(document_understanding_map_path)
+                    if document_understanding_map is not None
+                    else None
+                ),
             ),
         }
     )
@@ -773,6 +804,7 @@ def extract_kg_material_to_structured_records(
             "overlap_chars": request.overlap_chars,
             "source_format": request.source_format,
             "prompt_version": request.prompt_version,
+            "document_understanding_mode": request.document_understanding_mode,
             "default_confidence": request.default_confidence,
             "strict_grounding": request.strict_grounding,
             "continue_on_chunk_error": request.continue_on_chunk_error,
@@ -785,6 +817,11 @@ def extract_kg_material_to_structured_records(
             "structured_records_path": str(records_path),
             "chunk_results_path": str(chunk_results_path),
             "extraction_manifest_path": str(extraction_manifest_path),
+            "document_understanding_map_path": (
+                str(document_understanding_map_path)
+                if document_understanding_map is not None
+                else None
+            ),
         },
     )
     store.save_extraction_artifact(
@@ -820,14 +857,37 @@ def extract_kg_material_to_structured_records(
             "chunk_count": extraction_result.chunk_count,
             "prompt_version": request.prompt_version,
             "claim_boundary": manifest["claim_boundary"],
+            "document_understanding_mode": request.document_understanding_mode,
         },
     )
+    if document_understanding_map is not None:
+        store.save_extraction_artifact(
+            material_id=updated.material_id,
+            extraction_run_id=extraction_run.get("extraction_run_id"),
+            artifact_type="document_understanding_map",
+            uri=str(document_understanding_map_path),
+            media_type="application/json",
+            payload={
+                "mode": request.document_understanding_mode,
+                "chunk_count": len(chunks),
+                "entity_inventory_count": len(
+                    document_understanding_map.get("entity_inventory", [])
+                ),
+                "relation_hint_count": len(document_understanding_map.get("relation_hints", [])),
+                "claim_boundary": document_understanding_map["claim_boundary"],
+            },
+        )
     return KGMaterialExtractionRunResponse(
         material=updated,
         structured_records_path=str(records_path),
         record_count=len(records),
         extraction_manifest_path=str(extraction_manifest_path),
         chunk_results_path=str(chunk_results_path),
+        document_understanding_map_path=(
+            str(document_understanding_map_path)
+            if document_understanding_map is not None
+            else None
+        ),
         chunk_count=extraction_result.chunk_count,
         error_count=extraction_result.error_count,
         prompt_version=request.prompt_version,
@@ -874,6 +934,8 @@ def _construction_source_from_material(
         metadata["extractor_version"] = extraction.extractor_version
     if extraction.prompt_version:
         metadata["prompt_version"] = extraction.prompt_version
+    if extraction.document_understanding_mode:
+        metadata["document_understanding_mode"] = extraction.document_understanding_mode
     if extraction.record_count is not None:
         metadata["record_count"] = extraction.record_count
     if extraction.chunk_count is not None:
@@ -884,6 +946,8 @@ def _construction_source_from_material(
         metadata["extraction_manifest_path"] = extraction.extraction_manifest_path
     if extraction.chunk_results_path:
         metadata["chunk_results_path"] = extraction.chunk_results_path
+    if extraction.document_understanding_map_path:
+        metadata["document_understanding_map_path"] = extraction.document_understanding_map_path
     return KGConstructionSourceInput(
         source_id=source_id,
         source_type=source_type,
@@ -1053,6 +1117,8 @@ def _material_extraction_manifest(
     records_path: Path,
     chunk_results_path: Path,
     extraction_manifest_path: Path,
+    document_understanding_map_path: Path | None,
+    document_understanding_map: dict[str, Any] | None,
     extraction_run_id: str,
     provider: str,
     request: KGMaterialExtractionRunRequest,
@@ -1097,6 +1163,7 @@ def _material_extraction_manifest(
             "extractor_name": extraction_result.extractor_name,
             "extractor_version": extraction_result.extractor_version,
             "prompt_version": request.prompt_version,
+            "document_understanding_mode": request.document_understanding_mode,
             "default_confidence": request.default_confidence,
             "strict_grounding": request.strict_grounding,
             "continue_on_chunk_error": request.continue_on_chunk_error,
@@ -1104,6 +1171,27 @@ def _material_extraction_manifest(
             "llm_boundary": (
                 "LLM extraction proposes source-attached candidates only; review, "
                 "alignment, semantic projection, and RCA view build remain separate."
+            ),
+        },
+        "document_understanding": {
+            "mode": request.document_understanding_mode,
+            "artifact_path": (
+                str(document_understanding_map_path)
+                if document_understanding_map_path is not None
+                else None
+            ),
+            "artifact_type": (
+                document_understanding_map.get("artifact_type")
+                if document_understanding_map is not None
+                else None
+            ),
+            "claim_boundary": (
+                document_understanding_map.get("claim_boundary")
+                if document_understanding_map is not None
+                else (
+                    "chunk mode skips document-level planning artifacts and keeps "
+                    "candidate extraction scoped to each parsed chunk"
+                )
             ),
         },
         "summary": {
@@ -1118,6 +1206,11 @@ def _material_extraction_manifest(
             "structured_records": str(records_path),
             "chunk_extraction_results": str(chunk_results_path),
             "extraction_manifest": str(extraction_manifest_path),
+            "document_understanding_map": (
+                str(document_understanding_map_path)
+                if document_understanding_map_path is not None
+                else None
+            ),
         },
     }
 
@@ -1252,6 +1345,7 @@ __all__ = [
     "DEFAULT_SOURCE_KG_MATERIAL_DIR",
     "DEFAULT_MATERIAL_POSTGRES_CONFIG_PATH",
     "DocumentIEProvider",
+    "DocumentUnderstandingMode",
     "FileKGMaterialStore",
     "MAX_MATERIAL_UPLOAD_BYTES",
     "ExtractionStatus",

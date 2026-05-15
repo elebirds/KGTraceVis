@@ -250,12 +250,14 @@ export interface KGMaterialExtractionState {
   extractor_name?: string | null;
   extractor_version?: string | null;
   prompt_version?: string | null;
+  document_understanding_mode?: "chunk" | "long_context" | "agentic" | null;
   extracted_at?: string | null;
   record_count?: number | null;
   chunk_count?: number | null;
   error_count?: number | null;
   extraction_manifest_path?: string | null;
   chunk_results_path?: string | null;
+  document_understanding_map_path?: string | null;
   error_message?: string | null;
 }
 
@@ -303,6 +305,7 @@ export interface KGMaterialExtractionRequest {
   overlap_chars?: number;
   source_format?: Extract<KGConstructionSourceFormat, "jsonl">;
   prompt_version?: string;
+  document_understanding_mode?: "chunk" | "long_context" | "agentic";
   default_confidence?: number;
   strict_grounding?: boolean;
   continue_on_chunk_error?: boolean;
@@ -318,6 +321,7 @@ export interface KGMaterialExtractionResponse {
   record_count: number;
   extraction_manifest_path: string;
   chunk_results_path: string;
+  document_understanding_map_path?: string | null;
   chunk_count: number;
   error_count: number;
   provider: "openai" | "offline_fixture";

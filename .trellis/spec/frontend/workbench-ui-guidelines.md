@@ -55,6 +55,10 @@ KG and path views should make the graph the primary canvas.
   contract directly. `openai` and `offline_fixture` are reviewable document IE
   candidate sources; frontend code should pass provider and fixture-path
   options through the typed API client instead of simulating extraction locally.
+- KG Studio document understanding controls should pass
+  `document_understanding_mode` through the material extraction API. Modes such
+  as `long_context` and `agentic` are advisory map/artifact producers, not
+  frontend-side KG fact generation.
 - RCA Explorer should default to a focused selected path. Put ranking controls,
   the focused graph, and provenance/evidence in one workbench surface instead
   of stacking them as unrelated cards.

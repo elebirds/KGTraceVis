@@ -1,1 +1,5 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend checklist for document extraction and artifact contract changes."}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Document understanding must remain a reusable workflow/service concern, not UI-only logic."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Cross-chunk/document-level artifacts must fail explicitly when invalid and avoid silent fallback."}
+{"file": ".trellis/spec/frontend/workbench-ui-guidelines.md", "reason": "KG Studio material workflow must expose document understanding mode through typed API controls."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Mode selection and document map artifacts span backend DTOs, service artifacts, API contracts, UI, docs, and tests."}

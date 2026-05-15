@@ -355,6 +355,8 @@ function KGSources({
   const [materialError, setMaterialError] = useState<string | null>(null);
   const [materialExtractionProvider, setMaterialExtractionProvider] =
     useState<"openai" | "offline_fixture">("openai");
+  const [documentUnderstandingMode, setDocumentUnderstandingMode] =
+    useState<"chunk" | "long_context" | "agentic">("chunk");
   const [documentIEFixturePath, setDocumentIEFixturePath] = useState("");
   const [extractOverwrite, setExtractOverwrite] = useState(false);
   const [materialBuildOverwrite, setMaterialBuildOverwrite] = useState(false);
@@ -512,6 +514,7 @@ function KGSources({
           provider: materialExtractionProvider,
           overwrite: extractOverwrite,
           source_format: "jsonl",
+          document_understanding_mode: documentUnderstandingMode,
           document_ie_fixture_path:
             materialExtractionProvider === "offline_fixture" && documentIEFixturePath.trim()
               ? documentIEFixturePath.trim()
@@ -686,6 +689,20 @@ function KGSources({
                     options={[
                       { label: "OpenAI IE", value: "openai" },
                       { label: "Offline fixture", value: "offline_fixture" }
+                    ]}
+                  />
+                </label>
+                <label className="form-field">
+                  <span>Understanding mode</span>
+                  <Select
+                    value={documentUnderstandingMode}
+                    onChange={(value) =>
+                      setDocumentUnderstandingMode(value as "chunk" | "long_context" | "agentic")
+                    }
+                    options={[
+                      { label: "Chunk only", value: "chunk" },
+                      { label: "Long context map", value: "long_context" },
+                      { label: "Agentic map", value: "agentic" }
                     ]}
                   />
                 </label>
@@ -940,11 +957,13 @@ function SelectedMaterialPanel({ material }: { material: KGMaterialRecord | unde
         <span>status</span><strong>{materialState(material)}</strong>
         <span>extractor</span><strong>{valueText(material.extraction?.extractor_name)}</strong>
         <span>prompt</span><strong>{valueText(material.extraction?.prompt_version)}</strong>
+        <span>understanding</span><strong>{valueText(material.extraction?.document_understanding_mode)}</strong>
         <span>records</span><strong>{valueText(materialRecordCount(material))}</strong>
         <span>chunks</span><strong>{valueText(material.extraction?.chunk_count ?? material.chunk_count)}</strong>
         <span>errors</span><strong>{valueText(material.extraction?.error_count)}</strong>
         <span>structured_records</span><strong>{valueText(materialStructuredRecordsPath(material))}</strong>
         <span>chunk_results</span><strong>{valueText(material.extraction?.chunk_results_path)}</strong>
+        <span>document_map</span><strong>{valueText(material.extraction?.document_understanding_map_path)}</strong>
         <span>manifest</span><strong>{valueText(material.extraction?.extraction_manifest_path)}</strong>
         <span>pages</span><strong>{valueText(material.page_count)}</strong>
         <span>size</span><strong>{formatBytes(material.size_bytes)}</strong>

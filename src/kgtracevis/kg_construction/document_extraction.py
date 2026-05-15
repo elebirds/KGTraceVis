@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from hashlib import sha1
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -27,6 +27,7 @@ DEFAULT_DOCUMENT_CHUNK_OVERLAP_CHARS = 200
 DEFAULT_DOCUMENT_EXTRACTOR_NAME = "llm_document_ie"
 DEFAULT_DOCUMENT_EXTRACTOR_VERSION = "v1"
 DEFAULT_DOCUMENT_IE_PROMPT_VERSION = "document_ie_prompt_v1"
+DocumentUnderstandingMode = Literal["chunk", "long_context", "agentic"]
 
 ALLOWED_DOCUMENT_IE_RELATIONS = frozenset(
     {
@@ -375,6 +376,7 @@ def extract_draft_kg_from_chunks(
     default_confidence: float = 0.55,
     strict_grounding: bool = True,
     prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
+    document_context: Mapping[str, Any] | None = None,
 ) -> DraftKG:
     """Extract draft KG candidates from already parsed source text chunks."""
     result = extract_draft_kg_from_chunks_with_report(
@@ -385,6 +387,7 @@ def extract_draft_kg_from_chunks(
         default_confidence=default_confidence,
         strict_grounding=strict_grounding,
         prompt_version=prompt_version,
+        document_context=document_context,
     )
     return result.draft
 
@@ -399,6 +402,7 @@ def extract_draft_kg_from_chunks_with_report(
     strict_grounding: bool = True,
     prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
     continue_on_chunk_error: bool = False,
+    document_context: Mapping[str, Any] | None = None,
 ) -> DocumentIEExtractionResult:
     """Extract DraftKG candidates and chunk-level audit summaries.
 
@@ -411,7 +415,11 @@ def extract_draft_kg_from_chunks_with_report(
     summaries: list[DocumentIEChunkExtractionSummary] = []
     for chunk in chunks:
         try:
-            prompt = build_document_ie_prompt(chunk, prompt_version=prompt_version)
+            prompt = build_document_ie_prompt(
+                chunk,
+                prompt_version=prompt_version,
+                document_context=document_context,
+            )
             response = client.extract_candidates(chunk, prompt=prompt, response_schema=schema)
             payload = _coerce_extracted_payload(response, chunk_id=chunk.chunk_id)
             chunk_entities = [
@@ -481,13 +489,16 @@ def build_document_ie_prompt(
     chunk: SourceTextChunk,
     *,
     prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
+    document_context: Mapping[str, Any] | None = None,
 ) -> str:
     """Build a source-constrained IE prompt for one text chunk."""
+    context = _document_context_prompt(document_context)
     return (
         f"Prompt version: {prompt_version}.\n"
         "Extract only candidate industrial KG entities and relations explicitly "
         "supported by the source text chunk. Do not infer causal facts beyond the "
         "text. Use concise evidence copied from the chunk for every candidate.\n\n"
+        f"{context}"
         "Allowed relation values are: "
         f"{', '.join(sorted(ALLOWED_DOCUMENT_IE_RELATIONS))}.\n\n"
         f"source_id: {chunk.source_id}\n"
@@ -496,6 +507,59 @@ def build_document_ie_prompt(
         "Return JSON with keys `entities` and `relations`.\n\n"
         f"Source text:\n{chunk.text}"
     )
+
+
+def build_document_understanding_map(
+    document: ParsedSourceDocument,
+    chunks: Sequence[SourceTextChunk],
+    *,
+    mode: DocumentUnderstandingMode,
+) -> dict[str, Any]:
+    """Build a deterministic document-level map for review and prompt context.
+
+    The map is not a fact extractor. It records terminology and review hints so
+    downstream IE can use document context while still grounding every candidate
+    in the current chunk.
+    """
+    if mode == "chunk":
+        raise ValueError("document understanding map is only produced for non-chunk modes")
+    text = document.text
+    chunk_tuple = tuple(chunks)
+    inventory = _document_entity_inventory(text, chunk_tuple)
+    return {
+        "artifact_type": "document_understanding_map_v1",
+        "mode": mode,
+        "source_id": document.source_id,
+        "source_type": document.source_type,
+        "scenario": document.scenario,
+        "parser": document.parser,
+        "text_sha1": sha1(text.encode("utf-8")).hexdigest(),
+        "chunk_count": len(chunk_tuple),
+        "claim_boundary": (
+            "Document understanding output is planning, terminology, and review "
+            "context only; it is not DraftKG, reviewed KG, or published KG."
+        ),
+        "sections": _document_sections(text, chunk_tuple),
+        "glossary": _document_glossary(text, chunk_tuple),
+        "entity_inventory": inventory,
+        "relation_hints": _document_relation_hints(text, chunk_tuple),
+        "ontology_suggestions": _ontology_suggestions(inventory),
+        "cross_chunk_proposals": [],
+        "unresolved_questions": [
+            {
+                "question": (
+                    "Which document-level terms require human-approved canonical IDs "
+                    "before semantic projection?"
+                ),
+                "reason": "document-level terminology is advisory until aligned and reviewed",
+            }
+        ],
+        "review_hints": [
+            "Use this map to inspect aliases, terminology, and chunk coverage.",
+            "Do not accept relations unless their evidence appears in the candidate chunk.",
+            "Cross-chunk proposals must enter review separately before publication.",
+        ],
+    }
 
 
 class OpenAICompatibleKGExtractionClient:
@@ -577,6 +641,207 @@ class OpenAICompatibleKGExtractionClient:
                 },
             }
         return {"type": "json_object"}
+
+
+def _document_context_prompt(document_context: Mapping[str, Any] | None) -> str:
+    if not document_context:
+        return ""
+    terms = [
+        str(item.get("term"))
+        for item in document_context.get("entity_inventory", [])
+        if isinstance(item, Mapping) and item.get("term")
+    ][:12]
+    glossary = [
+        f"{item.get('term')}={item.get('expansion')}"
+        for item in document_context.get("glossary", [])
+        if isinstance(item, Mapping) and item.get("term") and item.get("expansion")
+    ][:8]
+    hints = [
+        str(item.get("relation_family"))
+        for item in document_context.get("relation_hints", [])
+        if isinstance(item, Mapping) and item.get("relation_family")
+    ][:8]
+    parts: list[str] = []
+    if terms:
+        parts.append(f"candidate terminology: {', '.join(terms)}")
+    if glossary:
+        parts.append(f"glossary hints: {'; '.join(glossary)}")
+    if hints:
+        parts.append(f"relation hint families: {', '.join(dict.fromkeys(hints))}")
+    if not parts:
+        return ""
+    return (
+        "Document-level context for terminology only. It may help resolve "
+        "aliases, but every extracted entity/relation must still quote evidence "
+        "from the current source text chunk.\n"
+        + "\n".join(parts)
+        + "\n\n"
+    )
+
+
+def _document_sections(
+    text: str,
+    chunks: Sequence[SourceTextChunk],
+) -> list[dict[str, Any]]:
+    sections: list[dict[str, Any]] = []
+    for match in re.finditer(r"(?m)^(#{1,6}\s+)?([A-Z][^\n]{2,100})$", text):
+        title = re.sub(r"^#{1,6}\s+", "", match.group(0)).strip()
+        if not title or title.endswith("."):
+            continue
+        sections.append(
+            {
+                "title": title[:120],
+                "char_start": match.start(),
+                "char_end": match.end(),
+                "chunk_ids": _chunk_ids_for_span(chunks, match.start(), match.end()),
+            }
+        )
+        if len(sections) >= 12:
+            break
+    if sections:
+        return sections
+    return [
+        {
+            "title": f"chunk {chunk.index}",
+            "char_start": chunk.start_char,
+            "char_end": chunk.end_char,
+            "chunk_ids": [chunk.chunk_id],
+        }
+        for chunk in chunks[:12]
+    ]
+
+
+def _document_glossary(
+    text: str,
+    chunks: Sequence[SourceTextChunk],
+) -> list[dict[str, Any]]:
+    glossary: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    pattern = re.compile(r"\b([A-Z][A-Za-z][A-Za-z0-9 /-]{3,80})\s+\(([A-Z][A-Z0-9-]{1,12})\)")
+    for match in pattern.finditer(text):
+        expansion = match.group(1).strip()
+        term = match.group(2).strip()
+        if term in seen:
+            continue
+        seen.add(term)
+        glossary.append(
+            {
+                "term": term,
+                "expansion": expansion,
+                "char_start": match.start(2),
+                "char_end": match.end(2),
+                "chunk_ids": _chunk_ids_for_span(chunks, match.start(), match.end()),
+            }
+        )
+        if len(glossary) >= 20:
+            break
+    return glossary
+
+
+def _document_entity_inventory(
+    text: str,
+    chunks: Sequence[SourceTextChunk],
+) -> list[dict[str, Any]]:
+    candidates: dict[str, dict[str, Any]] = {}
+    pattern = re.compile(
+        r"\b(?:XMEAS|XMV|MV)\s*\d+\b|\b[A-Z][A-Za-z0-9]*(?:\s+[A-Z][A-Za-z0-9]*){0,3}\b"
+    )
+    for match in pattern.finditer(text):
+        term = re.sub(r"\s+", " ", match.group(0)).strip()
+        normalized = _squashed(term)
+        if len(normalized) < 3 or normalized in {"the", "and", "for"}:
+            continue
+        item = candidates.setdefault(
+            normalized,
+            {
+                "term": term[:100],
+                "normalized": normalized,
+                "occurrence_count": 0,
+                "chunk_ids": [],
+            },
+        )
+        item["occurrence_count"] += 1
+        for chunk_id in _chunk_ids_for_span(chunks, match.start(), match.end()):
+            if chunk_id not in item["chunk_ids"]:
+                item["chunk_ids"].append(chunk_id)
+    ranked = sorted(
+        candidates.values(),
+        key=lambda item: (-int(item["occurrence_count"]), str(item["term"]).lower()),
+    )
+    return ranked[:40]
+
+
+def _document_relation_hints(
+    text: str,
+    chunks: Sequence[SourceTextChunk],
+) -> list[dict[str, Any]]:
+    patterns = {
+        "CAUSES": r"\b(cause|causes|caused|root cause|due to|because of)\b",
+        "OBSERVATION": r"\b(measure|measured|observed|sensor|signal|indicator)\b",
+        "AFFECTS": r"\b(affect|affects|impact|impacts|influence|influences)\b",
+        "DEPENDS_ON": r"\b(depend|depends|requires|upstream|downstream)\b",
+    }
+    hints: list[dict[str, Any]] = []
+    for family, pattern in patterns.items():
+        matches = list(re.finditer(pattern, text, flags=re.IGNORECASE))
+        if not matches:
+            continue
+        chunk_ids: list[str] = []
+        for match in matches[:8]:
+            for chunk_id in _chunk_ids_for_span(chunks, match.start(), match.end()):
+                if chunk_id not in chunk_ids:
+                    chunk_ids.append(chunk_id)
+        hints.append(
+            {
+                "relation_family": family,
+                "mention_count": len(matches),
+                "chunk_ids": chunk_ids,
+                "review_status": "hint_only",
+                "requires_chunk_evidence": True,
+            }
+        )
+    return hints
+
+
+def _ontology_suggestions(inventory: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    suggestions: list[dict[str, Any]] = []
+    for item in inventory[:20]:
+        term = str(item.get("term") or "")
+        label = _suggest_label(term)
+        if label:
+            suggestions.append(
+                {
+                    "term": term,
+                    "suggested_label": label,
+                    "review_status": "hint_only",
+                }
+            )
+    return suggestions
+
+
+def _suggest_label(term: str) -> str:
+    lowered = term.lower()
+    if re.search(r"\b(xmeas|xmv|mv)\s*\d+\b", lowered):
+        return "Variable"
+    if any(word in lowered for word in ("fault", "failure", "alarm", "alert")):
+        return "Fault"
+    if any(word in lowered for word in ("sensor", "signal", "measurement")):
+        return "Signal"
+    if any(word in lowered for word in ("pump", "reactor", "valve", "compressor")):
+        return "Equipment"
+    return ""
+
+
+def _chunk_ids_for_span(
+    chunks: Sequence[SourceTextChunk],
+    start: int,
+    end: int,
+) -> list[str]:
+    return [
+        chunk.chunk_id
+        for chunk in chunks
+        if start < chunk.end_char and end > chunk.start_char
+    ]
 
 
 def _select_parser(source: KGConstructionSource) -> str:
