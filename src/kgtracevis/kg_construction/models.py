@@ -40,6 +40,7 @@ KG_CONSTRUCTION_ARTIFACT_FILENAMES: dict[str, str] = {
     "published_edges": "published_edges.csv",
     "kg_construction_diff": "kg_construction_diff.json",
     "draft_manifest": "draft_manifest.json",
+    "profile_manifest": "profile_manifest.json",
     "alignment_manifest": "entity_alignment_manifest.json",
     "source_audit_graph_manifest": "source_audit_graph_manifest.json",
     "semantic_layer_manifest": "semantic_layer_manifest.json",
@@ -53,6 +54,7 @@ KG_CONSTRUCTION_ARTIFACT_FILENAMES: dict[str, str] = {
 }
 KG_CONSTRUCTION_LAYER_ARTIFACT_KEYS: tuple[str, ...] = (
     "draft_manifest",
+    "profile_manifest",
     "alignment_manifest",
     "source_audit_graph_manifest",
     "semantic_layer_manifest",

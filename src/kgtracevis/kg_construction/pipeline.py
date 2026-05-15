@@ -32,7 +32,11 @@ from kgtracevis.kg_construction.parsers import (
     ParsedSourceContent,
     parse_source_for_extraction,
 )
-from kgtracevis.kg_construction.profiles import RcaProfile, profile_for_scenario
+from kgtracevis.kg_construction.profiles import (
+    RcaProfile,
+    profile_for_scenario,
+    profile_to_manifest,
+)
 from kgtracevis.kg_construction.publish import PublishManifest
 from kgtracevis.kg_construction.rca_view import RcaReasoningView, build_rca_reasoning_view
 from kgtracevis.kg_construction.review_queue import (
@@ -57,6 +61,7 @@ class KGConstructionResult:
     draft: DraftKG
     aligned_draft: DraftKG
     alignment: AlignmentResult
+    profile: RcaProfile
     audit_graph: SourceAuditGraph
     semantic_layer: SemanticLayerResult
     rca_view: RcaReasoningView
@@ -119,6 +124,7 @@ class KGConstructionResult:
         artifact_paths = kg_construction_artifact_paths(output_dir)
         artifact_paths["draft_manifest"].parent.mkdir(parents=True, exist_ok=True)
         _write_json(artifact_paths["draft_manifest"], self.draft_manifest())
+        _write_json(artifact_paths["profile_manifest"], self.profile_manifest())
         _write_json(artifact_paths["alignment_manifest"], self.alignment.manifest())
         _write_json(artifact_paths["source_audit_graph_manifest"], self.audit_graph.manifest())
         _write_json(artifact_paths["semantic_layer_manifest"], self.semantic_layer.manifest)
@@ -146,6 +152,12 @@ class KGConstructionResult:
             "aligned_entity_count": len(self.aligned_draft.entities),
             "aligned_relation_count": len(self.aligned_draft.relations),
         }
+
+    def profile_manifest(self) -> dict[str, object]:
+        """Return a JSON-friendly active RCA profile manifest."""
+        manifest = profile_to_manifest(self.profile)
+        manifest["run_id"] = self.run_id
+        return manifest
 
 
 def run_kg_construction(
@@ -233,6 +245,7 @@ def run_kg_construction(
         draft=draft,
         aligned_draft=alignment.draft,
         alignment=alignment,
+        profile=resolved_profile,
         audit_graph=audit_graph,
         semantic_layer=semantic_layer,
         rca_view=rca_view,

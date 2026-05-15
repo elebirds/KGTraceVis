@@ -285,7 +285,7 @@ and RCA reasoning all consume these build artifacts.
   `POST /api/kg/construction/builds/{run_id}/review`
 - Required artifact keys:
   `nodes`, `edges`, `published_nodes`, `published_edges`,
-  `source_library_manifest`, `draft_manifest`, `alignment_manifest`,
+  `source_library_manifest`, `draft_manifest`, `profile_manifest`, `alignment_manifest`,
   `source_audit_graph_manifest`, `semantic_layer_manifest`,
   `rca_view_manifest`, `review_queue`, `review_decisions`, `publish_manifest`,
   `publish_report`,
@@ -318,7 +318,9 @@ and RCA reasoning all consume these build artifacts.
   direction, priority, attenuation, and edge-weight scaling for RCA views.
   Source-backed extractor/import metadata can override those defaults, but
   hard-coded RCA defaults should not be added directly to `semantic_projection`
-  or `rca_view`.
+  or `rca_view`. Builds may load JSON Domain Packs via `profile_path`; every
+  build writes `profile_manifest.json` so profile source, ontology, projection
+  rules, and RCA policies are auditable.
 - Source Library manifests passed by `--source-library` are loaded through
   `load_source_library(...)`; relative source paths resolve from the manifest
   directory before parsing or extraction.

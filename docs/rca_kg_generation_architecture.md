@@ -66,6 +66,10 @@ those defaults when it is source-backed.
 ## Domain Packs
 
 Domain behavior lives in RCA profiles under `kgtracevis.kg_construction.profiles`.
+Built-in generic and TEP profiles are available by default, and JSON Domain
+Pack examples live under `configs/kg_construction/profiles/`. CLI and service
+builds can select an external pack with `--profile-path` / `profile_path`; the
+active pack is written to `profile_manifest.json` for reproducibility.
 
 The `generic` profile includes relation families:
 
@@ -183,6 +187,7 @@ published_nodes
 published_edges
 source_library_manifest
 draft_manifest
+profile_manifest
 alignment_manifest
 source_audit_graph_manifest
 semantic_layer_manifest

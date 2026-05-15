@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from kgtracevis.kg_construction import (
@@ -12,8 +15,60 @@ from kgtracevis.kg_construction import (
     RelationFamilyPolicy,
     SemanticProjectionRule,
     build_rca_reasoning_view,
+    load_rca_profile,
+    profile_to_manifest,
     project_semantic_layer,
 )
+
+
+def test_load_rca_profile_pack_from_json(tmp_path: Path) -> None:
+    """JSON Domain Packs should hydrate the same runtime profile policy object."""
+    profile_path = tmp_path / "unit_profile.json"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "domain_id": "unit",
+                "scenario": "shared",
+                "ontology": "unit_rca_v1",
+                "keep_labels": ["Equipment", "Variable"],
+                "relation_whitelist": ["OBSERVED_BY"],
+                "semantic_projection_rules": {
+                    "metric_of": {
+                        "target_relation": "observed_by",
+                        "swap_endpoints": True,
+                    }
+                },
+                "relation_families": {"observed_by": "observation"},
+                "relation_family_policies": {
+                    "observation": {
+                        "propagation_enabled": True,
+                        "propagation_direction": "reverse",
+                        "propagation_priority": 0.6,
+                        "attenuation": 0.8,
+                        "edge_weight_multiplier": 0.5,
+                    }
+                },
+                "root_candidate_labels": ["Equipment"],
+                "observable_labels": ["Variable"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    profile = load_rca_profile(profile_path)
+    manifest = profile_to_manifest(profile)
+
+    assert profile.profile_source == str(profile_path)
+    assert profile.projection_rule_for("METRIC_OF").swap_endpoints is True
+    assert profile.rewrite_relation("metric_of") == "OBSERVED_BY"
+    assert profile.relation_family_for("observed_by") == "OBSERVATION"
+    assert profile.propagation_priority_for("OBSERVATION") == pytest.approx(0.6)
+    assert profile.edge_weight_for("OBSERVATION", base_weight=0.4) == pytest.approx(0.2)
+    assert manifest["profile_source"] == str(profile_path)
+    assert manifest["semantic_projection_rules"]["METRIC_OF"] == {
+        "swap_endpoints": True,
+        "target_relation": "OBSERVED_BY",
+    }
 
 
 def test_profile_projection_rule_can_rewrite_and_swap_relation_endpoints() -> None:

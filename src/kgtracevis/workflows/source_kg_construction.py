@@ -14,10 +14,12 @@ from kgtracevis.kg_construction import (
     KGConstructionReviewDecision,
     KGConstructionSource,
     OfflineDocumentIEExtractor,
+    RcaProfile,
     StructuredRecordExtractor,
     TepRcaGraphExtractor,
     TepSemanticLiftExtractor,
     TepVariableMappingExtractor,
+    load_rca_profile,
     run_kg_construction,
     source_library_records_from_construction_sources,
     write_source_library_manifest,
@@ -50,6 +52,8 @@ class SourceKGConstructionWorkflowConfig:
     sources: tuple[KGConstructionSource, ...]
     overwrite: bool = False
     run_id: str | None = None
+    profile: RcaProfile | None = None
+    profile_path: Path | None = None
     allow_reviewed_overwrite: bool = False
     review_decisions: tuple[KGConstructionReviewDecision, ...] = ()
 
@@ -68,6 +72,7 @@ class SourceKGConstructionWorkflowResult:
     manifest_path: Path
     source_library_manifest_path: Path
     draft_manifest_path: Path
+    profile_manifest_path: Path
     alignment_manifest_path: Path
     source_audit_graph_manifest_path: Path
     semantic_layer_manifest_path: Path
@@ -93,11 +98,13 @@ def run_source_kg_construction_workflow(
     sources = tuple(
         _materialize_text_source(source, config.output_dir) for source in config.sources
     )
+    profile = _resolve_profile(config)
     result = run_kg_construction(
         sources,
         registry=registry or _runtime_extractor_registry(),
         allow_reviewed_overwrite=config.allow_reviewed_overwrite,
         run_id=config.run_id,
+        profile=profile,
         review_decisions=config.review_decisions,
     )
     artifact_paths = kg_construction_artifact_paths(config.output_dir)
@@ -150,6 +157,7 @@ def run_source_kg_construction_workflow(
         ),
         "layer_manifests": {
             "draft": result.draft_manifest(),
+            "profile": result.profile_manifest(),
             "alignment": result.alignment.manifest(),
             "source_audit_graph": result.audit_graph.manifest(),
             "semantic_layer": result.semantic_layer.manifest,
@@ -191,6 +199,7 @@ def run_source_kg_construction_workflow(
         manifest_path=manifest_path,
         source_library_manifest_path=source_library_manifest_path,
         draft_manifest_path=layer_artifacts["draft_manifest"],
+        profile_manifest_path=layer_artifacts["profile_manifest"],
         alignment_manifest_path=layer_artifacts["alignment_manifest"],
         source_audit_graph_manifest_path=layer_artifacts["source_audit_graph_manifest"],
         semantic_layer_manifest_path=layer_artifacts["semantic_layer_manifest"],
@@ -214,6 +223,14 @@ def _runtime_extractor_registry() -> ExtractorRegistry:
             TepRcaGraphExtractor(),
         ]
     )
+
+
+def _resolve_profile(config: SourceKGConstructionWorkflowConfig) -> RcaProfile | None:
+    if config.profile is not None and config.profile_path is not None:
+        raise ValueError("pass either profile or profile_path, not both")
+    if config.profile_path is None:
+        return config.profile
+    return load_rca_profile(config.profile_path)
 
 
 def _write_review_decisions(

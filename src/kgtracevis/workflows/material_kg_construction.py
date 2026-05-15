@@ -36,6 +36,7 @@ class MaterialKGConstructionWorkflowConfig:
     material_root: Path | None = None
     overwrite: bool = False
     run_id: str | None = None
+    profile_path: Path | None = None
     extraction_mode: MaterialExtractionMode = "never"
     extraction_request: KGMaterialExtractionRunRequest | None = None
     source_type: Literal["structured_records", "manual_table"] = "structured_records"
@@ -56,6 +57,7 @@ class MaterialKGConstructionWorkflowResult:
     manifest_path: Path
     source_library_manifest_path: Path
     draft_manifest_path: Path
+    profile_manifest_path: Path
     alignment_manifest_path: Path
     source_audit_graph_manifest_path: Path
     semantic_layer_manifest_path: Path
@@ -101,6 +103,7 @@ def run_material_kg_construction_workflow(
             sources=sources,
             overwrite=config.overwrite,
             run_id=config.run_id,
+            profile_path=config.profile_path,
             allow_reviewed_overwrite=config.allow_reviewed_overwrite,
         )
     )
@@ -138,6 +141,7 @@ def run_material_kg_construction_workflow(
         manifest_path=build_result.manifest_path,
         source_library_manifest_path=build_result.source_library_manifest_path,
         draft_manifest_path=build_result.draft_manifest_path,
+        profile_manifest_path=build_result.profile_manifest_path,
         alignment_manifest_path=build_result.alignment_manifest_path,
         source_audit_graph_manifest_path=build_result.source_audit_graph_manifest_path,
         semantic_layer_manifest_path=build_result.semantic_layer_manifest_path,

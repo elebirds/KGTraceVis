@@ -200,6 +200,7 @@ class KGMaterialSelectedBuildRequest(BaseModel):
     output_name: str = "material_library"
     overwrite: bool = False
     run_id: str | None = None
+    profile_path: str | None = None
     source_type: Literal["structured_records", "manual_table"] = "structured_records"
 
     @model_validator(mode="after")
@@ -618,6 +619,7 @@ def prepare_kg_material_construction_build(
         output_name=request.output_name,
         overwrite=request.overwrite,
         run_id=request.run_id,
+        profile_path=request.profile_path,
     )
     return KGMaterialBuildSourcesResponse(
         material_root=str(material_root or DEFAULT_SOURCE_KG_MATERIAL_DIR),

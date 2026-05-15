@@ -85,6 +85,11 @@ def parse_args() -> argparse.Namespace:
         "--run-id",
         help="Optional deterministic KG build ID to record in manifests.",
     )
+    parser.add_argument(
+        "--profile-path",
+        type=Path,
+        help="Optional JSON RCA profile Domain Pack for semantic/RCA projection.",
+    )
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -108,6 +113,7 @@ def main() -> None:
                 sources=tuple(sources),
                 overwrite=bool(args.overwrite),
                 run_id=args.run_id,
+                profile_path=args.profile_path,
             )
         )
     except ValueError as exc:

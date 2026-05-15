@@ -1,0 +1,132 @@
+{
+  "confidence_policy": "source_confidence",
+  "domain_id": "tep",
+  "keep_labels": [
+    "Component",
+    "ControlLoop",
+    "Equipment",
+    "Fault",
+    "FaultAnchor",
+    "FaultEvent",
+    "Module",
+    "ProcessUnit",
+    "RootCause",
+    "SemanticConcept",
+    "SignalNode",
+    "Stream",
+    "Variable"
+  ],
+  "observable_labels": [
+    "FaultAnchor",
+    "SignalNode",
+    "Variable"
+  ],
+  "ontology": "tep_rca_v1",
+  "propagation_families": [
+    "COMPOSITION",
+    "CONTROL",
+    "ENERGY_TRANSFER",
+    "FAULT_SOURCE",
+    "MATERIAL_FLOW",
+    "OBSERVATION",
+    "PHASE_CHANGE"
+  ],
+  "relation_families": {
+    "ACTS_ON": "CONTROL",
+    "ALIGNS_TO": "ALIGNMENT",
+    "BELONGS_TO": "SEMANTIC_SUPPORT",
+    "CARRIES_COMPONENT": "COMPOSITION",
+    "CAUSES": "FAULT_SOURCE",
+    "CONNECTS_TO": "PHASE_CHANGE",
+    "FLOWS_TO": "MATERIAL_FLOW",
+    "HAS_COMPONENT": "COMPOSITION",
+    "OBSERVED_BY": "OBSERVATION",
+    "PART_OF": "SEMANTIC_SUPPORT",
+    "REALIZES": "SEMANTIC_SUPPORT",
+    "SUGGESTS_ROOT_CAUSE": "FAULT_SOURCE",
+    "SUPPLIES": "ENERGY_TRANSFER"
+  },
+  "relation_family_policies": {
+    "ALIGNMENT": {
+      "propagation_enabled": false
+    },
+    "COMPOSITION": {
+      "attenuation": 0.8,
+      "propagation_direction": "forward",
+      "propagation_enabled": true,
+      "propagation_priority": 0.65
+    },
+    "CONTROL": {
+      "attenuation": 0.9,
+      "propagation_direction": "forward",
+      "propagation_enabled": true,
+      "propagation_priority": 0.9
+    },
+    "ENERGY_TRANSFER": {
+      "attenuation": 0.85,
+      "propagation_direction": "forward",
+      "propagation_enabled": true,
+      "propagation_priority": 0.75
+    },
+    "FAULT_SOURCE": {
+      "attenuation": 1.0,
+      "edge_weight_multiplier": 0.7,
+      "propagation_direction": "reverse",
+      "propagation_enabled": true,
+      "propagation_priority": 1.0
+    },
+    "MATERIAL_FLOW": {
+      "attenuation": 0.85,
+      "propagation_direction": "forward",
+      "propagation_enabled": true,
+      "propagation_priority": 0.8
+    },
+    "OBSERVATION": {
+      "attenuation": 0.85,
+      "edge_weight_multiplier": 0.8,
+      "propagation_direction": "reverse",
+      "propagation_enabled": true,
+      "propagation_priority": 0.75
+    },
+    "PHASE_CHANGE": {
+      "attenuation": 0.8,
+      "propagation_direction": "forward",
+      "propagation_enabled": true,
+      "propagation_priority": 0.7
+    },
+    "SEMANTIC_SUPPORT": {
+      "propagation_enabled": false
+    }
+  },
+  "relation_rewrites": {
+    "CONTROLS": "ACTS_ON",
+    "CONTROLS_FLOW_OF": "ACTS_ON",
+    "MEASURES": "OBSERVED_BY",
+    "MEASURES_COMPOSITION_OF": "OBSERVED_BY",
+    "MEASURES_FLOW_OF": "OBSERVED_BY"
+  },
+  "relation_whitelist": [
+    "ACTS_ON",
+    "ALIGNS_TO",
+    "BELONGS_TO",
+    "CARRIES_COMPONENT",
+    "CAUSES",
+    "CONNECTS_TO",
+    "FLOWS_TO",
+    "HAS_COMPONENT",
+    "OBSERVED_BY",
+    "PART_OF",
+    "REALIZES",
+    "SUGGESTS_ROOT_CAUSE",
+    "SUPPLIES"
+  ],
+  "root_candidate_labels": [
+    "Component",
+    "Equipment",
+    "Fault",
+    "FaultAnchor"
+  ],
+  "scenario": "tep",
+  "semantic_projection_rules": {},
+  "task_view": "root_kgd_view"
+}

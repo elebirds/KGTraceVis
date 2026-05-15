@@ -46,6 +46,7 @@ def test_source_kg_construction_workflow_writes_candidate_artifacts(
     assert result.source_audit_graph_manifest_path == (
         output_dir / "source_audit_graph_manifest.json"
     )
+    assert result.profile_manifest_path == output_dir / "profile_manifest.json"
     assert result.alignment_manifest_path == output_dir / "entity_alignment_manifest.json"
     assert result.publish_manifest_path == output_dir / "publish_manifest.json"
     assert result.summary["node_count"] == 2
@@ -109,6 +110,7 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
         result.nodes_path,
         result.edges_path,
         result.draft_manifest_path,
+        result.profile_manifest_path,
         result.alignment_manifest_path,
         result.source_audit_graph_manifest_path,
         result.semantic_layer_manifest_path,
@@ -127,6 +129,7 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
     assert all(path.is_file() for path in expected_files)
     summary = json.loads(result.summary_path.read_text())
     semantic_manifest = json.loads(result.semantic_layer_manifest_path.read_text())
+    profile_manifest = json.loads(result.profile_manifest_path.read_text())
     alignment_manifest = json.loads(result.alignment_manifest_path.read_text())
     rca_manifest = json.loads(result.rca_view_manifest_path.read_text())
     publish_manifest = json.loads(result.publish_manifest_path.read_text())
@@ -153,6 +156,9 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
     assert publish_manifest["extractor_versions"] == {"structured_record": "v1"}
     assert publish_manifest["profile_version"] == "generic_rca_v1"
     assert semantic_manifest["edge_count"] == 1
+    assert profile_manifest["artifact_type"] == "rca_profile_manifest_v1"
+    assert profile_manifest["ontology"] == "generic_rca_v1"
+    assert profile_manifest["profile_source"] == "builtin"
     assert alignment_manifest["artifact_type"] == "entity_alignment_manifest_v1"
     assert rca_manifest["kg_build_id"] == "kgbuild_toy_generic"
     assert rca_manifest["propagation_edge_count"] == 1
@@ -162,6 +168,90 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
     assert published_edge_rows == []
     assert publish_report["disposition_counts"] == {"pending_review": 1}
     assert review_queue[0]["target_key"].endswith("|shared")
+
+
+def test_source_kg_construction_workflow_loads_external_profile_pack(
+    tmp_path: Path,
+) -> None:
+    """An external profile pack should drive semantic/RCA policy and be auditable."""
+    output_dir = tmp_path / "external_profile_build"
+    profile_path = tmp_path / "unit_profile.json"
+    profile_path.write_text(
+        json.dumps(
+            {
+                "domain_id": "unit",
+                "scenario": "shared",
+                "ontology": "unit_rca_v1",
+                "keep_labels": ["Equipment", "Variable"],
+                "relation_whitelist": ["OBSERVED_BY"],
+                "semantic_projection_rules": {
+                    "METRIC_OF": {
+                        "target_relation": "OBSERVED_BY",
+                        "swap_endpoints": True,
+                    }
+                },
+                "relation_families": {"OBSERVED_BY": "OBSERVATION"},
+                "relation_family_policies": {
+                    "OBSERVATION": {
+                        "propagation_enabled": True,
+                        "propagation_direction": "reverse",
+                        "propagation_priority": 0.42,
+                        "attenuation": 0.73,
+                        "edge_weight_multiplier": 0.5,
+                    }
+                },
+                "root_candidate_labels": ["Equipment"],
+                "observable_labels": ["Variable"],
+                "task_view": "unit_view",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_source_kg_construction_workflow(
+        SourceKGConstructionWorkflowConfig(
+            output_dir=output_dir,
+            sources=(
+                KGConstructionSource(
+                    source_id="toy_generic_source",
+                    source_type="manual_table",
+                    scenario="shared",
+                    text="\n".join(
+                        [
+                            "id,name,label,head,relation,tail,scenario,evidence,confidence",
+                            "PumpA,Pump A,Equipment,,,,shared,pump row,0.82",
+                            "PressureSignal,Pressure signal,Variable,,,,shared,signal row,0.82",
+                            (
+                                ",,,PressureSignal,METRIC_OF,PumpA,shared,"
+                                "pressure metric of Pump A,0.8"
+                            ),
+                            "",
+                        ]
+                    ),
+                    metadata={"source_format": "csv"},
+                ),
+            ),
+            run_id="kgbuild_external_profile",
+            profile_path=profile_path,
+        )
+    )
+
+    profile_manifest = json.loads(result.profile_manifest_path.read_text(encoding="utf-8"))
+    edge_rows = _read_csv_rows(result.edges_path)
+    summary = json.loads(result.summary_path.read_text(encoding="utf-8"))
+    artifact_diff = json.loads((output_dir / "kg_construction_diff.json").read_text())
+
+    assert profile_manifest["ontology"] == "unit_rca_v1"
+    assert profile_manifest["profile_source"] == str(profile_path)
+    assert summary["profile_version"] == "unit_rca_v1"
+    assert summary["layer_manifests"]["profile"]["task_view"] == "unit_view"
+    assert edge_rows[0]["head"] == "PumpA"
+    assert edge_rows[0]["relation"] == "OBSERVED_BY"
+    assert edge_rows[0]["tail"] == "PressureSignal"
+    assert edge_rows[0]["propagation_priority"] == "0.42"
+    assert edge_rows[0]["attenuation"] == "0.73"
+    assert artifact_diff["artifacts"]["profile_manifest"]["changed"] is False
 
 
 def test_source_kg_construction_workflow_protects_existing_outputs(
@@ -227,6 +317,7 @@ def _required_artifact_keys() -> set[str]:
         "kg_construction_diff",
         "source_library_manifest",
         "draft_manifest",
+        "profile_manifest",
         "alignment_manifest",
         "source_audit_graph_manifest",
         "semantic_layer_manifest",

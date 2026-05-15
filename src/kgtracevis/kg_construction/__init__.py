@@ -99,7 +99,10 @@ from kgtracevis.kg_construction.profiles import (
     RcaProfile,
     RelationFamilyPolicy,
     SemanticProjectionRule,
+    load_rca_profile,
     profile_for_scenario,
+    profile_from_mapping,
+    profile_to_manifest,
 )
 from kgtracevis.kg_construction.publish import (
     PublishManifest,
@@ -231,8 +234,11 @@ __all__ = [
     "load_source_text",
     "load_structured_records",
     "load_source_library",
+    "load_rca_profile",
     "load_review_decisions",
+    "profile_from_mapping",
     "profile_for_scenario",
+    "profile_to_manifest",
     "project_semantic_layer",
     "review_decision_for_edge",
     "review_decision_for_item",

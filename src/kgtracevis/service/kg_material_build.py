@@ -31,6 +31,7 @@ class KGMaterialBuildResponse(BaseModel):
     manifest_path: str
     source_library_manifest_path: str
     draft_manifest_path: str
+    profile_manifest_path: str
     alignment_manifest_path: str
     source_audit_graph_manifest_path: str
     semantic_layer_manifest_path: str
@@ -71,6 +72,7 @@ def run_kg_material_build(
             material_root=material_root,
             overwrite=request.overwrite,
             run_id=request.run_id,
+            profile_path=Path(request.profile_path) if request.profile_path else None,
             extraction_mode=request.extraction_mode,
             extraction_request=request.extraction_request,
             source_type=request.source_type,
@@ -87,6 +89,7 @@ def run_kg_material_build(
         manifest_path=str(result.manifest_path),
         source_library_manifest_path=str(result.source_library_manifest_path),
         draft_manifest_path=str(result.draft_manifest_path),
+        profile_manifest_path=str(result.profile_manifest_path),
         alignment_manifest_path=str(result.alignment_manifest_path),
         source_audit_graph_manifest_path=str(result.source_audit_graph_manifest_path),
         semantic_layer_manifest_path=str(result.semantic_layer_manifest_path),

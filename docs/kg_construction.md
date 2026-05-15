@@ -269,6 +269,13 @@ attenuation, and edge-weight scaling. Source-backed extractor metadata still
 wins when it explicitly supplies those RCA fields; otherwise the profile makes
 the reasoning-view defaults reproducible across domains.
 
+Profiles can now be loaded as JSON Domain Packs with `--profile-path` or the
+workflow/service `profile_path` field. Each build writes
+`profile_manifest.json`, recording the active profile source, ontology,
+projection rules, relation-family policies, root candidate labels, and
+observable labels. Built-in generic/TEP profiles remain the default when no
+profile pack is supplied.
+
 The reusable orchestration entry point for this material-driven path is
 `kgtracevis.workflows.material_kg_construction.run_material_kg_construction_workflow`.
 It accepts selected material IDs, optionally extracts missing/selected materials

@@ -1140,6 +1140,7 @@ def test_build_source_kg_script_writes_candidate_artifacts(tmp_path: Path) -> No
     assert (output_dir / "edges.csv").exists()
     assert (output_dir / "source_library_manifest.json").exists()
     assert (output_dir / "draft_manifest.json").exists()
+    assert (output_dir / "profile_manifest.json").exists()
     assert (output_dir / "entity_alignment_manifest.json").exists()
     assert (output_dir / "source_audit_graph_manifest.json").exists()
     assert (output_dir / "semantic_layer_manifest.json").exists()
@@ -1373,6 +1374,7 @@ def _required_artifact_keys() -> set[str]:
         "kg_construction_diff",
         "source_library_manifest",
         "draft_manifest",
+        "profile_manifest",
         "alignment_manifest",
         "source_audit_graph_manifest",
         "semantic_layer_manifest",

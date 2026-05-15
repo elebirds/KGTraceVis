@@ -46,6 +46,9 @@ def build_kg_construction_artifact_snapshot(output_dir: str | Path) -> dict[str,
         "alignment_manifest": _json_object_snapshot(
             artifact_paths["alignment_manifest"],
         ),
+        "profile_manifest": _json_object_snapshot(
+            artifact_paths["profile_manifest"],
+        ),
         "semantic_layer_manifest": _json_object_snapshot(
             artifact_paths["semantic_layer_manifest"],
         ),
@@ -81,6 +84,10 @@ def build_kg_construction_diff(
         "alignment_manifest": _diff_objects(
             before.get("alignment_manifest"),
             after.get("alignment_manifest"),
+        ),
+        "profile_manifest": _diff_objects(
+            before.get("profile_manifest"),
+            after.get("profile_manifest"),
         ),
         "semantic_layer_manifest": _diff_objects(
             before.get("semantic_layer_manifest"),

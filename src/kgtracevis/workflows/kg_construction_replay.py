@@ -64,12 +64,14 @@ def replay_kg_construction_reviews(
     before_snapshot = build_kg_construction_artifact_snapshot(config.output_dir)
     decisions = load_review_decisions(artifact_paths["review_decisions"])
     run_id = config.run_id or _run_id_from_manifest(artifact_paths["manifest"])
+    profile_path = _profile_path_from_manifest(artifact_paths["profile_manifest"])
     build_result = run_source_kg_construction_workflow(
         SourceKGConstructionWorkflowConfig(
             output_dir=config.output_dir,
             sources=sources,
             overwrite=True,
             run_id=run_id,
+            profile_path=profile_path,
             review_decisions=decisions,
         )
     )
@@ -140,6 +142,19 @@ def _run_id_from_manifest(path: Path) -> str:
     if isinstance(summary, dict) and str(summary.get("run_id") or ""):
         return str(summary["run_id"])
     raise ValueError(f"construction manifest missing run_id: {path}")
+
+
+def _profile_path_from_manifest(path: Path) -> Path | None:
+    if not path.is_file():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"profile manifest must be an object: {path}")
+    source = str(payload.get("profile_source") or "")
+    if not source or source in {"builtin", "mapping"}:
+        return None
+    profile_path = Path(source)
+    return profile_path if profile_path.is_file() else None
 
 
 def _target_type_counts(

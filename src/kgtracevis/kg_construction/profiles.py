@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,7 @@ class RcaProfile:
     observable_labels: frozenset[str] = frozenset()
     task_view: str = "path_ranking_view"
     confidence_policy: str = "source_confidence"
+    profile_source: str = "builtin"
 
     def rewrite_relation(self, relation: str) -> str:
         """Return the profile-normalized relation name."""
@@ -349,3 +354,261 @@ def profile_for_scenario(scenario: str) -> RcaProfile:
     if scenario == "tep":
         return TEP_PROFILE
     return GENERIC_PROFILE
+
+
+def load_rca_profile(path: str | Path) -> RcaProfile:
+    """Load an RCA profile Domain Pack from a JSON file."""
+    profile_path = Path(path).expanduser().resolve()
+    if profile_path.suffix.lower() != ".json":
+        raise ValueError(f"RCA profile packs currently support JSON only: {profile_path}")
+    payload = json.loads(profile_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"RCA profile pack must be a JSON object: {profile_path}")
+    return profile_from_mapping(payload, source_path=profile_path)
+
+
+def profile_from_mapping(
+    payload: Mapping[str, Any],
+    *,
+    source_path: str | Path | None = None,
+) -> RcaProfile:
+    """Build an `RcaProfile` from a JSON-friendly Domain Pack mapping."""
+    domain_id = _required_text(payload, "domain_id")
+    scenario = _required_text(payload, "scenario")
+    ontology = _required_text(payload, "ontology")
+    family_policies = _relation_family_policies(
+        payload.get("relation_family_policies", {})
+    )
+    propagation_families = _string_set(
+        payload.get("propagation_families", ()),
+        field_name="propagation_families",
+        uppercase=True,
+    )
+    if not propagation_families:
+        propagation_families = frozenset(
+            family
+            for family, policy in family_policies.items()
+            if policy.propagation_enabled
+        )
+    profile_source = str(source_path) if source_path is not None else "mapping"
+    return RcaProfile(
+        domain_id=domain_id,
+        scenario=scenario,
+        ontology=ontology,
+        keep_labels=_string_set(payload.get("keep_labels", ()), field_name="keep_labels"),
+        relation_whitelist=_string_set(
+            payload.get("relation_whitelist", ()),
+            field_name="relation_whitelist",
+            uppercase=True,
+        ),
+        relation_rewrites=_string_map(
+            payload.get("relation_rewrites", {}),
+            field_name="relation_rewrites",
+            uppercase_keys=True,
+            uppercase_values=True,
+        ),
+        semantic_projection_rules=_semantic_projection_rules(
+            payload.get("semantic_projection_rules", {})
+        ),
+        relation_families=_string_map(
+            payload.get("relation_families", {}),
+            field_name="relation_families",
+            uppercase_keys=True,
+            uppercase_values=True,
+        ),
+        propagation_families=propagation_families,
+        relation_family_policies=family_policies,
+        root_candidate_labels=_string_set(
+            payload.get("root_candidate_labels", ()),
+            field_name="root_candidate_labels",
+        ),
+        observable_labels=_string_set(
+            payload.get("observable_labels", ()),
+            field_name="observable_labels",
+        ),
+        task_view=str(payload.get("task_view") or "path_ranking_view"),
+        confidence_policy=str(payload.get("confidence_policy") or "source_confidence"),
+        profile_source=profile_source,
+    )
+
+
+def profile_to_manifest(profile: RcaProfile) -> dict[str, object]:
+    """Return a JSON-friendly manifest for the active RCA profile."""
+    return {
+        "artifact_type": "rca_profile_manifest_v1",
+        "domain_id": profile.domain_id,
+        "scenario": profile.scenario,
+        "ontology": profile.ontology,
+        "profile_source": profile.profile_source,
+        "task_view": profile.task_view,
+        "confidence_policy": profile.confidence_policy,
+        "keep_labels": sorted(profile.keep_labels),
+        "relation_whitelist": sorted(profile.relation_whitelist),
+        "relation_rewrites": dict(sorted(profile.relation_rewrites.items())),
+        "semantic_projection_rules": {
+            relation: {
+                "target_relation": rule.normalized_target(),
+                "swap_endpoints": rule.swap_endpoints,
+            }
+            for relation, rule in sorted(profile.semantic_projection_rules.items())
+        },
+        "relation_families": dict(sorted(profile.relation_families.items())),
+        "propagation_families": sorted(profile.propagation_families),
+        "relation_family_policies": {
+            family: {
+                "propagation_enabled": policy.propagation_enabled,
+                "propagation_direction": policy.propagation_direction,
+                "propagation_priority": policy.propagation_priority,
+                "attenuation": policy.attenuation,
+                "edge_weight_multiplier": policy.edge_weight_multiplier,
+            }
+            for family, policy in sorted(profile.relation_family_policies.items())
+        },
+        "root_candidate_labels": sorted(profile.root_candidate_labels),
+        "observable_labels": sorted(profile.observable_labels),
+    }
+
+
+def _required_text(payload: Mapping[str, Any], field_name: str) -> str:
+    value = payload.get(field_name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"RCA profile pack requires non-empty {field_name}")
+    return value.strip()
+
+
+def _string_set(
+    value: Any,
+    *,
+    field_name: str,
+    uppercase: bool = False,
+) -> frozenset[str]:
+    if value is None:
+        return frozenset()
+    if isinstance(value, str) or not isinstance(value, Sequence):
+        raise ValueError(f"RCA profile {field_name} must be an array of strings")
+    items: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"RCA profile {field_name} entries must be non-empty strings")
+        text = item.strip()
+        items.append(text.upper() if uppercase else text)
+    return frozenset(items)
+
+
+def _string_map(
+    value: Any,
+    *,
+    field_name: str,
+    uppercase_keys: bool = False,
+    uppercase_values: bool = False,
+) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError(f"RCA profile {field_name} must be an object")
+    result: dict[str, str] = {}
+    for key, item in value.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError(f"RCA profile {field_name} keys must be non-empty strings")
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"RCA profile {field_name} values must be non-empty strings")
+        normalized_key = key.strip().upper() if uppercase_keys else key.strip()
+        normalized_value = item.strip().upper() if uppercase_values else item.strip()
+        result[normalized_key] = normalized_value
+    return result
+
+
+def _semantic_projection_rules(value: Any) -> dict[str, SemanticProjectionRule]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("RCA profile semantic_projection_rules must be an object")
+    rules: dict[str, SemanticProjectionRule] = {}
+    for relation, item in value.items():
+        if not isinstance(relation, str) or not relation.strip():
+            raise ValueError("RCA profile semantic_projection_rules keys must be strings")
+        relation_key = relation.strip().upper()
+        if isinstance(item, str):
+            rules[relation_key] = SemanticProjectionRule(target_relation=item.strip().upper())
+            continue
+        if not isinstance(item, Mapping):
+            raise ValueError(
+                "RCA profile semantic_projection_rules values must be strings or objects"
+            )
+        target = item.get("target_relation")
+        if not isinstance(target, str) or not target.strip():
+            raise ValueError(
+                "RCA profile semantic_projection_rules objects require target_relation"
+            )
+        rules[relation_key] = SemanticProjectionRule(
+            target_relation=target.strip().upper(),
+            swap_endpoints=_bool_value(
+                item,
+                "swap_endpoints",
+                default=False,
+                context="semantic_projection_rules",
+            ),
+        )
+    return rules
+
+
+def _relation_family_policies(value: Any) -> dict[str, RelationFamilyPolicy]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("RCA profile relation_family_policies must be an object")
+    policies: dict[str, RelationFamilyPolicy] = {}
+    for family, item in value.items():
+        if not isinstance(family, str) or not family.strip():
+            raise ValueError("RCA profile relation_family_policies keys must be strings")
+        if not isinstance(item, Mapping):
+            raise ValueError("RCA profile relation_family_policies values must be objects")
+        policies[family.strip().upper()] = RelationFamilyPolicy(
+            propagation_enabled=_bool_value(
+                item,
+                "propagation_enabled",
+                default=False,
+                context="relation_family_policies",
+            ),
+            propagation_direction=str(item.get("propagation_direction") or "forward").lower(),
+            propagation_priority=_float_policy_value(
+                item,
+                "propagation_priority",
+                default=0.0,
+            ),
+            attenuation=_float_policy_value(item, "attenuation", default=1.0),
+            edge_weight_multiplier=_float_policy_value(
+                item,
+                "edge_weight_multiplier",
+                default=1.0,
+            ),
+        )
+    return policies
+
+
+def _bool_value(
+    payload: Mapping[str, Any],
+    field_name: str,
+    *,
+    default: bool,
+    context: str,
+) -> bool:
+    value = payload.get(field_name, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"RCA profile {context} {field_name} must be boolean")
+    return value
+
+
+def _float_policy_value(
+    payload: Mapping[str, Any],
+    field_name: str,
+    *,
+    default: float,
+) -> float:
+    value = payload.get(field_name, default)
+    if isinstance(value, bool):
+        raise ValueError(f"RCA profile policy {field_name} must be numeric")
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"RCA profile policy {field_name} must be numeric") from exc

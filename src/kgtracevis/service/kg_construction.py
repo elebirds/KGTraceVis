@@ -135,6 +135,7 @@ class KGConstructionBuildRequest(BaseModel):
     output_name: str = "runtime"
     overwrite: bool = False
     run_id: str | None = None
+    profile_path: str | None = None
 
 
 class KGConstructionBuildResponse(BaseModel):
@@ -153,6 +154,7 @@ class KGConstructionBuildResponse(BaseModel):
     manifest_path: str
     source_library_manifest_path: str | None = None
     draft_manifest_path: str | None = None
+    profile_manifest_path: str | None = None
     alignment_manifest_path: str | None = None
     source_audit_graph_manifest_path: str | None = None
     semantic_layer_manifest_path: str | None = None
@@ -252,6 +254,7 @@ class KGConstructionBuildRecord(BaseModel):
     manifest_path: str
     source_library_manifest_path: str | None = None
     draft_manifest_path: str | None = None
+    profile_manifest_path: str | None = None
     alignment_manifest_path: str | None = None
     source_audit_graph_manifest_path: str | None = None
     semantic_layer_manifest_path: str | None = None
@@ -496,6 +499,7 @@ def run_kg_construction_build(
             sources=sources,
             overwrite=request.overwrite,
             run_id=request.run_id,
+            profile_path=Path(request.profile_path) if request.profile_path else None,
         )
     )
     return KGConstructionBuildResponse(
@@ -510,6 +514,7 @@ def run_kg_construction_build(
         manifest_path=str(result.manifest_path),
         source_library_manifest_path=str(result.source_library_manifest_path),
         draft_manifest_path=str(result.draft_manifest_path),
+        profile_manifest_path=str(result.profile_manifest_path),
         alignment_manifest_path=str(result.alignment_manifest_path),
         source_audit_graph_manifest_path=str(result.source_audit_graph_manifest_path),
         semantic_layer_manifest_path=str(result.semantic_layer_manifest_path),
@@ -908,6 +913,11 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
             artifacts,
             "draft_manifest",
             fallback=default_artifacts["draft_manifest"],
+        ),
+        profile_manifest_path=_artifact_path(
+            artifacts,
+            "profile_manifest",
+            fallback=default_artifacts["profile_manifest"],
         ),
         alignment_manifest_path=_artifact_path(
             artifacts,

@@ -259,6 +259,7 @@ def test_kg_construction_build_route_writes_runtime_artifacts(
     assert Path(payload["manifest_path"]).is_file()
     assert Path(payload["source_library_manifest_path"]).is_file()
     assert Path(payload["draft_manifest_path"]).is_file()
+    assert Path(payload["profile_manifest_path"]).is_file()
     assert Path(payload["alignment_manifest_path"]).is_file()
     assert Path(payload["source_audit_graph_manifest_path"]).is_file()
     assert Path(payload["semantic_layer_manifest_path"]).is_file()
@@ -430,6 +431,7 @@ def test_kg_construction_build_registry_lists_details_and_validates(
         "source_library_manifest.json"
     )
     assert builds[0]["draft_manifest_path"].endswith("draft_manifest.json")
+    assert builds[0]["profile_manifest_path"].endswith("profile_manifest.json")
     assert builds[0]["alignment_manifest_path"].endswith(
         "entity_alignment_manifest.json"
     )
@@ -501,6 +503,7 @@ def test_kg_construction_build_registry_supports_legacy_manifests_and_edges(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     for key in (
         "draft_manifest",
+        "profile_manifest",
         "alignment_manifest",
         "source_audit_graph_manifest",
         "semantic_layer_manifest",
@@ -516,6 +519,7 @@ def test_kg_construction_build_registry_supports_legacy_manifests_and_edges(
     build = list_response.json()["builds"][0]
     assert build["source_library_manifest_path"].endswith("source_library_manifest.json")
     assert build["draft_manifest_path"].endswith("draft_manifest.json")
+    assert build["profile_manifest_path"].endswith("profile_manifest.json")
     assert build["alignment_manifest_path"].endswith("entity_alignment_manifest.json")
     assert build["source_audit_graph_manifest_path"].endswith(
         "source_audit_graph_manifest.json"
