@@ -290,6 +290,11 @@ RCA edge columns such as `rca_score`, `rca_score_confidence`,
 `rca_score_source_trust`, while `rca_view_manifest.json` records the active
 scoring policy and score summary.
 
+The review queue consumes those RCA scores as prioritization hints. High-score
+propagation edges and semantic-derived edges are surfaced with explicit graph
+impact text and recommended actions, but they remain candidates until a review
+decision accepts or rejects them.
+
 The reusable orchestration entry point for this material-driven path is
 `kgtracevis.workflows.material_kg_construction.run_material_kg_construction_workflow`.
 It accepts selected material IDs, optionally extracts missing/selected materials

@@ -359,6 +359,9 @@ and RCA reasoning all consume these build artifacts.
   `priority`, `reason`, `review_status`, `candidate_payload`, `source`,
   `evidence`, `confidence`, `scenario`, `relation_family`, `graph_impact`,
   and `recommended_action`.
+- Review queue priority should use RCA impact metadata when available:
+  high-score propagation edges and semantic-derived edges are reviewable ahead
+  of support-only edges, but score never auto-accepts a candidate.
 - Service review queues prefer `review_queue.json` when present and fall back
   to `edges.csv` for legacy builds.
 - Service artifact retrieval accepts stable construction artifact keys only. It

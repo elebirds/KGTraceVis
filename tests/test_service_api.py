@@ -846,10 +846,12 @@ def test_kg_construction_review_queue_filters_edges(
     assert initial["edges"][0]["reason"] == (
         "causal/root-cause relation needs human confirmation"
     )
-    assert initial["edges"][0]["graph_impact"] == (
-        "can change Top-K RCA propagation paths"
+    assert initial["edges"][0]["graph_impact"].startswith(
+        "can change Top-K RCA propagation paths (rca_score="
     )
-    assert initial["edges"][0]["recommended_action"] == "accept_or_reject"
+    assert initial["edges"][0]["recommended_action"] == (
+        "verify_direction_and_score_then_accept_or_reject"
+    )
 
     review_response = client.post(
         "/api/kg/construction/builds/kgbuild_review_queue_unit/review",

@@ -55,7 +55,7 @@ def build_review_queue(
                 scenario=edge.scenario,
                 relation_family=edge.relation_family,
                 graph_impact=_graph_impact(edge),
-                recommended_action="accept_or_reject",
+                recommended_action=_recommended_action(edge),
             )
         )
     return tuple(sorted(items, key=lambda item: (-item.priority, item.target_key)))
@@ -149,10 +149,18 @@ def _edge_priority(edge: KGEdge) -> tuple[int, str]:
     relation = edge.relation
     family = edge.relation_family
     source = edge.source.lower()
+    if source.startswith("semantic_projection:"):
+        if edge.propagation_enabled:
+            return 92, "derived propagation edge needs provenance review"
+        return 72, "derived semantic edge needs provenance review"
     if relation in {"CAUSES", "SUGGESTS_ROOT_CAUSE", "HAS_PLAUSIBLE_CAUSE"}:
         if "llm" in source or edge.confidence < 0.8:
             return 100, "causal/root-cause relation needs human confirmation"
         return 85, "causal/root-cause relation affects RCA reasoning"
+    if edge.propagation_enabled and edge.rca_score >= 0.85:
+        return 90, "high-impact propagation edge affects RCA ranking"
+    if edge.propagation_enabled and edge.rca_score >= 0.7:
+        return 84, "medium-high RCA score propagation edge"
     if edge.propagation_enabled and edge.confidence < 0.75:
         return 80, "low-confidence propagation edge affects RCA traversal"
     if family == "FAULT_SOURCE":
@@ -167,8 +175,19 @@ def _edge_priority(edge: KGEdge) -> tuple[int, str]:
 
 
 def _graph_impact(edge: KGEdge) -> str:
+    score = f"rca_score={edge.rca_score:.3g}" if edge.rca_score else "rca_score=unscored"
+    if edge.source.lower().startswith("semantic_projection:"):
+        return f"derived semantic edge can add RCA traversal shortcuts ({score})"
     if edge.propagation_enabled:
-        return "can change Top-K RCA propagation paths"
+        return f"can change Top-K RCA propagation paths ({score})"
     if edge.relation == "ALIGNS_TO":
         return "can change entity linking and variable mapping"
     return "supporting semantic context"
+
+
+def _recommended_action(edge: KGEdge) -> str:
+    if edge.source.lower().startswith("semantic_projection:"):
+        return "inspect_source_edges_then_accept_or_reject"
+    if edge.propagation_enabled:
+        return "verify_direction_and_score_then_accept_or_reject"
+    return "accept_or_reject"
