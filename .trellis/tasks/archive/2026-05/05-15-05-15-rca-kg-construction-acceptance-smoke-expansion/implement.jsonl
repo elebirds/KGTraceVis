@@ -1,0 +1,2 @@
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"acceptance smoke should compose workflows rather than duplicate pipeline logic"}
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"required KG construction artifact contract"}
