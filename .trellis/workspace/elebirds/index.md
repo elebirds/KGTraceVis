@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 43
+- **Total Sessions**: 44
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1679 | Active |
+| `journal-1.md` | ~1712 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 44 | 2026-05-15 | M33 document understanding mode scaffold | `fbd2478` | `main` |
 | 43 | 2026-05-15 | M32 document IE no-key product boundary | `2382de5` | `main` |
 | 42 | 2026-05-15 | M31 KG Studio construction review acceptance | `1b4a7f8` | `main` |
 | 41 | 2026-05-15 | M30 TEP runtime overlay provenance acceptance | `2fc0baa` | `main` |

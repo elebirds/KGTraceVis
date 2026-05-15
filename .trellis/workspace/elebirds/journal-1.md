@@ -1677,3 +1677,36 @@ Productized provider selection for material document IE: provider=openai uses Op
 ### Next Steps
 
 - None - task complete
+
+
+## Session 44: M33 document understanding mode scaffold
+
+**Date**: 2026-05-15
+**Task**: M33 document understanding mode scaffold
+**Branch**: `main`
+
+### Summary
+
+Added explicit document_understanding_mode for material extraction. Default chunk mode stays scoped to parsed chunks; long_context and agentic write document_understanding_map.json with section, glossary, entity-inventory, relation-hint, ontology-suggestion, unresolved-question, and review-hint metadata, inject terminology-only prompt context, and preserve strict current-chunk evidence grounding. KG Studio exposes the mode selector. Verified ruff, mypy, focused tests, pytest 351 passed, web build, run_examples, and construction smoke.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fbd2478` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
