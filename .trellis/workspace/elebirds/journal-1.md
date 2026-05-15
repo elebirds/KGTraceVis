@@ -944,3 +944,36 @@ Added safe stable-key artifact retrieval for construction builds, including diff
 ### Next Steps
 
 - None - task complete
+
+
+## Session 29: M13 review action artifact diff refresh
+
+**Date**: 2026-05-15
+**Task**: M13 review action artifact diff refresh
+**Branch**: `main`
+
+### Summary
+
+Review accept/reject workflows now refresh kg_construction_diff with direct-review scopes and decision provenance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b920a30` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
