@@ -14,12 +14,14 @@ from kgtracevis.kg_construction.draft import DraftKG, KGConstructionSource
 from kgtracevis.kg_construction.export_kg_csv import export_kg_csv, validate_kg_csv_contract
 from kgtracevis.kg_construction.extractors import ExtractorRegistry, default_extractor_registry
 from kgtracevis.kg_construction.models import (
+    KG_CONSTRUCTION_LAYER_ARTIFACT_KEYS,
     KGConstructionBuildSummary,
     KGConstructionManifest,
     build_construction_manifest,
     build_construction_summary,
     build_kg_construction_run_id,
     draft_rows_from_draft,
+    kg_construction_artifact_paths,
 )
 from kgtracevis.kg_construction.profiles import RcaProfile, profile_for_scenario
 from kgtracevis.kg_construction.publish import PublishManifest
@@ -33,6 +35,7 @@ from kgtracevis.kg_construction.semantic_projection import (
     SemanticLayerResult,
     project_semantic_layer,
 )
+from kgtracevis.kg_construction.sources import current_utc_iso
 
 
 @dataclass(frozen=True)
@@ -56,9 +59,9 @@ class KGConstructionResult:
 
     def export_csv(self, output_dir: str | Path) -> tuple[Path, Path]:
         """Export constructed KG rows as `nodes.csv` and `edges.csv`."""
-        destination = Path(output_dir)
-        nodes_path = destination / "nodes.csv"
-        edges_path = destination / "edges.csv"
+        artifact_paths = kg_construction_artifact_paths(output_dir)
+        nodes_path = artifact_paths["nodes"]
+        edges_path = artifact_paths["edges"]
         export_kg_csv(self.nodes, self.edges, nodes_path=nodes_path, edges_path=edges_path)
         return nodes_path, edges_path
 
@@ -97,27 +100,17 @@ class KGConstructionResult:
 
     def write_layer_artifacts(self, output_dir: str | Path) -> dict[str, Path]:
         """Write layer manifests and review queue artifacts."""
-        destination = Path(output_dir)
-        destination.mkdir(parents=True, exist_ok=True)
-        draft_manifest_path = destination / "draft_manifest.json"
-        semantic_manifest_path = destination / "semantic_layer_manifest.json"
-        rca_manifest_path = destination / "rca_view_manifest.json"
-        audit_manifest_path = destination / "source_audit_graph_manifest.json"
-        publish_manifest_path = destination / "publish_manifest.json"
-        review_queue_path = destination / "review_queue.json"
-        _write_json(draft_manifest_path, self.draft_manifest())
-        _write_json(audit_manifest_path, self.audit_graph.manifest())
-        _write_json(semantic_manifest_path, self.semantic_layer.manifest)
-        _write_json(rca_manifest_path, self.rca_view.manifest)
-        _write_json(publish_manifest_path, self.publish_manifest.model_dump())
-        _write_json(review_queue_path, review_queue_payload(self.review_queue))
+        artifact_paths = kg_construction_artifact_paths(output_dir)
+        artifact_paths["draft_manifest"].parent.mkdir(parents=True, exist_ok=True)
+        _write_json(artifact_paths["draft_manifest"], self.draft_manifest())
+        _write_json(artifact_paths["source_audit_graph_manifest"], self.audit_graph.manifest())
+        _write_json(artifact_paths["semantic_layer_manifest"], self.semantic_layer.manifest)
+        _write_json(artifact_paths["rca_view_manifest"], self.rca_view.manifest)
+        _write_json(artifact_paths["publish_manifest"], self.publish_manifest.model_dump())
+        _write_json(artifact_paths["review_queue"], review_queue_payload(self.review_queue))
         return {
-            "draft_manifest": draft_manifest_path,
-            "source_audit_graph_manifest": audit_manifest_path,
-            "semantic_layer_manifest": semantic_manifest_path,
-            "rca_view_manifest": rca_manifest_path,
-            "publish_manifest": publish_manifest_path,
-            "review_queue": review_queue_path,
+            key: artifact_paths[key]
+            for key in KG_CONSTRUCTION_LAYER_ARTIFACT_KEYS
         }
 
     def draft_manifest(self) -> dict[str, object]:
@@ -181,12 +174,24 @@ def run_kg_construction(
     )
     validate_kg_csv_contract(nodes, edges)
     _validate_edge_endpoints(nodes, edges)
+    extractor_versions = {
+        extractor.name: extractor.version
+        for extractor in (
+            extractor_registry.extractor_for(source.source_type)
+            for source in source_rows
+        )
+    }
+    review_policy = "auto candidates require review before trusted publication"
+    publish_manifest_generated_at = current_utc_iso()
     build_summary = build_construction_summary(
         run_id=resolved_run_id,
         sources=source_rows,
         draft=draft,
         nodes=nodes,
         edges=edges,
+        extractor_versions=extractor_versions,
+        profile_version=resolved_profile.ontology,
+        review_policy=review_policy,
     )
     return KGConstructionResult(
         run_id=resolved_run_id,
@@ -201,17 +206,12 @@ def run_kg_construction(
         publish_manifest=PublishManifest(
             kg_build_id=resolved_run_id,
             source_ids=tuple(source.source_id for source in source_rows),
-            extractor_versions={
-                extractor.name: extractor.version
-                for extractor in (
-                    extractor_registry.extractor_for(source.source_type)
-                    for source in source_rows
-                )
-            },
+            extractor_versions=extractor_versions,
             profile_version=resolved_profile.ontology,
             node_count=len(nodes),
             edge_count=len(edges),
-            review_policy="auto candidates require review before trusted publication",
+            review_policy=review_policy,
+            published_at=publish_manifest_generated_at,
         ),
         nodes=nodes,
         edges=edges,

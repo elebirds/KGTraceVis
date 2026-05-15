@@ -250,6 +250,7 @@ def test_kg_construction_build_route_writes_runtime_artifacts(
     assert Path(payload["summary_path"]).is_file()
     assert Path(payload["manifest_path"]).is_file()
     assert Path(payload["draft_manifest_path"]).is_file()
+    assert Path(payload["source_audit_graph_manifest_path"]).is_file()
     assert Path(payload["semantic_layer_manifest_path"]).is_file()
     assert Path(payload["rca_view_manifest_path"]).is_file()
     assert Path(payload["review_queue_path"]).is_file()
@@ -294,6 +295,9 @@ def test_kg_construction_build_registry_lists_details_and_validates(
     assert builds[0]["node_count"] == 2
     assert builds[0]["edge_count"] == 1
     assert builds[0]["draft_manifest_path"].endswith("draft_manifest.json")
+    assert builds[0]["source_audit_graph_manifest_path"].endswith(
+        "source_audit_graph_manifest.json"
+    )
     assert builds[0]["semantic_layer_manifest_path"].endswith(
         "semantic_layer_manifest.json"
     )
@@ -353,6 +357,7 @@ def test_kg_construction_build_registry_supports_legacy_manifests_and_edges(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     for key in (
         "draft_manifest",
+        "source_audit_graph_manifest",
         "semantic_layer_manifest",
         "rca_view_manifest",
         "review_queue",
@@ -365,6 +370,9 @@ def test_kg_construction_build_registry_supports_legacy_manifests_and_edges(
     assert list_response.status_code == 200
     build = list_response.json()["builds"][0]
     assert build["draft_manifest_path"].endswith("draft_manifest.json")
+    assert build["source_audit_graph_manifest_path"].endswith(
+        "source_audit_graph_manifest.json"
+    )
     assert build["semantic_layer_manifest_path"].endswith(
         "semantic_layer_manifest.json"
     )

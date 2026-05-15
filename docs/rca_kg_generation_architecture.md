@@ -111,6 +111,7 @@ The workflow writes:
 nodes.csv
 edges.csv
 draft_manifest.json
+source_audit_graph_manifest.json
 semantic_layer_manifest.json
 rca_view_manifest.json
 review_queue.json
@@ -119,9 +120,42 @@ kg_construction_summary.json
 kg_construction_manifest.json
 ```
 
+`kg_construction_summary.json` and `kg_construction_manifest.json` share the same
+artifact path contract. The required artifact keys are:
+
+```text
+nodes
+edges
+draft_manifest
+source_audit_graph_manifest
+semantic_layer_manifest
+rca_view_manifest
+review_queue
+publish_manifest
+summary
+manifest
+```
+
+The summary explicitly records `kg_build_id`, `source_ids`,
+`extractor_versions`, `profile_version`, and `review_policy`. The publish
+manifest records the same version boundary plus counts so downstream Neo4j
+publication and RCA reasoning runs can reference a reproducible build snapshot.
+
 ## Example Commands
 
 Toy/manual structured sources can use the existing source construction workflow or API. TEP artifacts can be built from local TEP_KG outputs:
+
+```bash
+uv run python scripts/build_source_kg.py \
+  --toy-generic-structured-source \
+  --run-id kgbuild_toy_generic_demo \
+  --output-dir runs/source_kg_build/toy_generic_candidate \
+  --overwrite
+```
+
+The toy command writes a minimal generic structured source under `_sources/`
+and emits the same CSV, layer manifest, publish manifest, summary, and
+construction manifest files as larger builds.
 
 ```bash
 uv run python scripts/build_source_kg.py \

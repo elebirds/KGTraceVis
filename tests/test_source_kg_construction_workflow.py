@@ -42,8 +42,17 @@ def test_source_kg_construction_workflow_writes_candidate_artifacts(
     assert result.edges_path == output_dir / "edges.csv"
     assert result.summary_path == output_dir / "kg_construction_summary.json"
     assert result.manifest_path == output_dir / "kg_construction_manifest.json"
+    assert result.source_audit_graph_manifest_path == (
+        output_dir / "source_audit_graph_manifest.json"
+    )
+    assert result.publish_manifest_path == output_dir / "publish_manifest.json"
     assert result.summary["node_count"] == 2
     assert result.summary["edge_count"] == 1
+    assert result.summary["kg_build_id"] == "kgbuild_manual_unit"
+    assert result.summary["source_ids"] == ["manual_unit"]
+    assert result.summary["extractor_versions"] == {"structured_record": "v1"}
+    assert result.summary["profile_version"] == "tep_rca_v1"
+    assert result.summary["review_policy"]
     assert result.summary["output"]["manifest"].endswith("kg_construction_manifest.json")
     assert (output_dir / "_sources" / "manual_unit.csv").is_file()
 
@@ -58,6 +67,7 @@ def test_source_kg_construction_workflow_writes_candidate_artifacts(
     assert manifest["run"]["run_id"] == "kgbuild_manual_unit"
     assert len(manifest["draft_rows"]) == 3
     assert manifest["artifacts"]["nodes"].endswith("nodes.csv")
+    assert _required_artifact_keys() <= set(manifest["artifacts"])
 
 
 def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
@@ -86,17 +96,34 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
         result.nodes_path,
         result.edges_path,
         result.draft_manifest_path,
+        result.source_audit_graph_manifest_path,
         result.semantic_layer_manifest_path,
         result.rca_view_manifest_path,
         result.review_queue_path,
+        result.publish_manifest_path,
         output_dir / "kg_construction_summary.json",
+        output_dir / "kg_construction_manifest.json",
     ]
     assert all(path.is_file() for path in expected_files)
+    summary = json.loads(result.summary_path.read_text())
     semantic_manifest = json.loads(result.semantic_layer_manifest_path.read_text())
     rca_manifest = json.loads(result.rca_view_manifest_path.read_text())
+    publish_manifest = json.loads(result.publish_manifest_path.read_text())
+    manifest = json.loads(result.manifest_path.read_text())
     review_queue = json.loads(result.review_queue_path.read_text())
     edge_rows = _read_csv_rows(result.edges_path)
 
+    assert summary["kg_build_id"] == "kgbuild_toy_generic"
+    assert summary["source_ids"] == ["toy_generic_source"]
+    assert summary["extractor_versions"] == {"structured_record": "v1"}
+    assert summary["profile_version"] == "generic_rca_v1"
+    assert summary["review_policy"] == publish_manifest["review_policy"]
+    assert _required_artifact_keys() <= set(summary["output"])
+    assert _required_artifact_keys() <= set(manifest["artifacts"])
+    assert publish_manifest["kg_build_id"] == "kgbuild_toy_generic"
+    assert publish_manifest["source_ids"] == ["toy_generic_source"]
+    assert publish_manifest["extractor_versions"] == {"structured_record": "v1"}
+    assert publish_manifest["profile_version"] == "generic_rca_v1"
     assert semantic_manifest["edge_count"] == 1
     assert rca_manifest["kg_build_id"] == "kgbuild_toy_generic"
     assert rca_manifest["propagation_edge_count"] == 1
@@ -158,3 +185,18 @@ def _toy_generic_source_csv() -> str:
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
+
+
+def _required_artifact_keys() -> set[str]:
+    return {
+        "nodes",
+        "edges",
+        "draft_manifest",
+        "source_audit_graph_manifest",
+        "semantic_layer_manifest",
+        "rca_view_manifest",
+        "review_queue",
+        "publish_manifest",
+        "summary",
+        "manifest",
+    }

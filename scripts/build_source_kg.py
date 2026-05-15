@@ -62,6 +62,15 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Explicit TEP_KG RCA edges.jsonl path.",
     )
+    parser.add_argument(
+        "--toy-generic-structured-source",
+        action="store_true",
+        help="Build a tiny generic manual-table source for smoke tests and demos.",
+    )
+    parser.add_argument(
+        "--run-id",
+        help="Optional deterministic KG build ID to record in manifests.",
+    )
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -73,7 +82,8 @@ def main() -> None:
     if not sources:
         raise SystemExit(
             "No source inputs provided. Pass --tep-semantic-lift-dir, "
-            "--tep-semantic-nodes/--tep-semantic-edges, or --tep-variable-mapping."
+            "--tep-semantic-nodes/--tep-semantic-edges, --tep-variable-mapping, "
+            "--tep-rca-graph-dir, or --toy-generic-structured-source."
         )
 
     try:
@@ -82,6 +92,7 @@ def main() -> None:
                 output_dir=Path(args.output_dir),
                 sources=tuple(sources),
                 overwrite=bool(args.overwrite),
+                run_id=args.run_id,
             )
         )
     except ValueError as exc:
@@ -148,7 +159,29 @@ def _build_sources(args: argparse.Namespace) -> list[KGConstructionSource]:
                 },
             )
         )
+    if args.toy_generic_structured_source:
+        sources.append(
+            KGConstructionSource(
+                source_id="toy_generic_source",
+                source_type="manual_table",
+                scenario="shared",
+                text=_toy_generic_source_csv(),
+                metadata={"source_format": "csv"},
+            )
+        )
     return sources
+
+
+def _toy_generic_source_csv() -> str:
+    return "\n".join(
+        [
+            "id,name,label,head,relation,tail,scenario,evidence,confidence",
+            "PumpA,Pump A,Equipment,,,,shared,pump row,0.82",
+            "PressureSignal,Pressure signal,Variable,,,,shared,signal row,0.82",
+            ",,,PumpA,MEASURES,PressureSignal,shared,pressure is observed by Pump A sensor,0.62",
+            "",
+        ]
+    )
 
 
 if __name__ == "__main__":

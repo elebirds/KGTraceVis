@@ -18,6 +18,10 @@ from kgtracevis.kg_construction import (
     TepVariableMappingExtractor,
     run_kg_construction,
 )
+from kgtracevis.kg_construction.models import (
+    construction_output_path_payload,
+    kg_construction_artifact_paths,
+)
 
 DEFAULT_SOURCE_KG_BUILD_DIR = Path("runs/source_kg_build")
 SOURCE_TEXT_FORMATS = ("csv", "json", "jsonl")
@@ -46,9 +50,11 @@ class SourceKGConstructionWorkflowResult:
     summary_path: Path
     manifest_path: Path
     draft_manifest_path: Path
+    source_audit_graph_manifest_path: Path
     semantic_layer_manifest_path: Path
     rca_view_manifest_path: Path
     review_queue_path: Path
+    publish_manifest_path: Path
     summary: dict[str, object]
     manifest: KGConstructionManifest
 
@@ -72,45 +78,46 @@ def run_source_kg_construction_workflow(
         allow_reviewed_overwrite=config.allow_reviewed_overwrite,
         run_id=config.run_id,
     )
+    artifact_paths = kg_construction_artifact_paths(config.output_dir)
     nodes_path, edges_path = result.export_csv(config.output_dir)
     layer_artifacts = result.write_layer_artifacts(config.output_dir)
-    summary_path = config.output_dir / "kg_construction_summary.json"
-    manifest_path = config.output_dir / "kg_construction_manifest.json"
+    artifact_paths.update(
+        {
+            "nodes": nodes_path,
+            "edges": edges_path,
+            **layer_artifacts,
+        }
+    )
+    summary_path = artifact_paths["summary"]
+    manifest_path = artifact_paths["manifest"]
     summary = {
         **result.summary,
+        "kg_build_id": result.publish_manifest.kg_build_id,
+        "source_ids": list(result.publish_manifest.source_ids),
+        "extractor_versions": dict(result.publish_manifest.extractor_versions),
+        "profile_version": result.publish_manifest.profile_version,
+        "review_policy": result.publish_manifest.review_policy,
         "claim_boundary": (
             "source-to-KG outputs are candidate/reviewable KG rows; they are not "
             "published to Neo4j automatically"
         ),
-        "output": {
-            "output_dir": str(config.output_dir),
-            "nodes": str(nodes_path),
-            "edges": str(edges_path),
-            "draft_manifest": str(layer_artifacts["draft_manifest"]),
-            "semantic_layer_manifest": str(layer_artifacts["semantic_layer_manifest"]),
-            "rca_view_manifest": str(layer_artifacts["rca_view_manifest"]),
-            "review_queue": str(layer_artifacts["review_queue"]),
-            "summary": str(summary_path),
-            "manifest": str(manifest_path),
-        },
+        "output": construction_output_path_payload(
+            output_dir=config.output_dir,
+            artifact_paths=artifact_paths,
+        ),
         "layer_manifests": {
             "draft": result.draft_manifest(),
+            "source_audit_graph": result.audit_graph.manifest(),
             "semantic_layer": result.semantic_layer.manifest,
             "rca_view": result.rca_view.manifest,
+            "publish": result.publish_manifest.model_dump(),
         },
     }
     summary_path.write_text(
         json.dumps(summary, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    artifact_paths = {
-        "output_dir": config.output_dir,
-        "nodes": nodes_path,
-        "edges": edges_path,
-        **layer_artifacts,
-        "summary": summary_path,
-        "manifest": manifest_path,
-    }
+    artifact_paths["output_dir"] = config.output_dir
     manifest = result.manifest(artifact_paths=artifact_paths)
     manifest_path.write_text(
         json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True),
@@ -124,9 +131,11 @@ def run_source_kg_construction_workflow(
         summary_path=summary_path,
         manifest_path=manifest_path,
         draft_manifest_path=layer_artifacts["draft_manifest"],
+        source_audit_graph_manifest_path=layer_artifacts["source_audit_graph_manifest"],
         semantic_layer_manifest_path=layer_artifacts["semantic_layer_manifest"],
         rca_view_manifest_path=layer_artifacts["rca_view_manifest"],
         review_queue_path=layer_artifacts["review_queue"],
+        publish_manifest_path=layer_artifacts["publish_manifest"],
         summary=summary,
         manifest=manifest,
     )
@@ -144,16 +153,7 @@ def _runtime_extractor_registry() -> ExtractorRegistry:
 
 
 def _ensure_output_dir(output_dir: Path, *, overwrite: bool) -> None:
-    outputs = [
-        output_dir / "nodes.csv",
-        output_dir / "edges.csv",
-        output_dir / "kg_construction_summary.json",
-        output_dir / "kg_construction_manifest.json",
-        output_dir / "draft_manifest.json",
-        output_dir / "semantic_layer_manifest.json",
-        output_dir / "rca_view_manifest.json",
-        output_dir / "review_queue.json",
-    ]
+    outputs = list(kg_construction_artifact_paths(output_dir).values())
     existing = [path for path in outputs if path.exists()]
     if existing and not overwrite:
         paths = ", ".join(str(path) for path in existing)

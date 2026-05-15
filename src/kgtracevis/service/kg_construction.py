@@ -29,6 +29,7 @@ from kgtracevis.kg_construction import KGConstructionSource
 from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS
 from kgtracevis.kg_construction.models import (
     KGConstructionReviewDecision,
+    kg_construction_artifact_paths,
     review_decision_for_edge,
 )
 from kgtracevis.kg_construction.qa import run_kg_qa
@@ -143,6 +144,7 @@ class KGConstructionBuildResponse(BaseModel):
     summary_path: str
     manifest_path: str
     draft_manifest_path: str | None = None
+    source_audit_graph_manifest_path: str | None = None
     semantic_layer_manifest_path: str | None = None
     rca_view_manifest_path: str | None = None
     review_queue_path: str | None = None
@@ -235,6 +237,7 @@ class KGConstructionBuildRecord(BaseModel):
     summary_path: str
     manifest_path: str
     draft_manifest_path: str | None = None
+    source_audit_graph_manifest_path: str | None = None
     semantic_layer_manifest_path: str | None = None
     rca_view_manifest_path: str | None = None
     review_queue_path: str | None = None
@@ -476,10 +479,11 @@ def run_kg_construction_build(
         summary_path=str(result.summary_path),
         manifest_path=str(result.manifest_path),
         draft_manifest_path=str(result.draft_manifest_path),
+        source_audit_graph_manifest_path=str(result.source_audit_graph_manifest_path),
         semantic_layer_manifest_path=str(result.semantic_layer_manifest_path),
         rca_view_manifest_path=str(result.rca_view_manifest_path),
         review_queue_path=str(result.review_queue_path),
-        publish_manifest_path=result.manifest.artifacts.get("publish_manifest"),
+        publish_manifest_path=str(result.publish_manifest_path),
         summary=result.summary,
     )
 
@@ -801,42 +805,48 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
     run_id = str(run.get("run_id") or summary.get("run_id") or "")
     if not run_id:
         raise ValueError(f"construction manifest missing run_id: {manifest_path}")
+    default_artifacts = kg_construction_artifact_paths(manifest_path.parent)
     output_dir = artifacts.get("output_dir") or manifest_path.parent
     return KGConstructionBuildRecord(
         run_id=run_id,
         status=str(run.get("status") or "built"),
         created_at=_str_or_none(run.get("created_at")),
         output_dir=str(output_dir),
-        nodes_path=str(artifacts.get("nodes") or manifest_path.parent / "nodes.csv"),
-        edges_path=str(artifacts.get("edges") or manifest_path.parent / "edges.csv"),
+        nodes_path=str(artifacts.get("nodes") or default_artifacts["nodes"]),
+        edges_path=str(artifacts.get("edges") or default_artifacts["edges"]),
         summary_path=str(
-            artifacts.get("summary") or manifest_path.parent / "kg_construction_summary.json"
+            artifacts.get("summary") or default_artifacts["summary"]
         ),
-        manifest_path=str(artifacts.get("manifest") or manifest_path),
+        manifest_path=str(artifacts.get("manifest") or default_artifacts["manifest"]),
         draft_manifest_path=_artifact_path(
             artifacts,
             "draft_manifest",
-            fallback=manifest_path.parent / "draft_manifest.json",
+            fallback=default_artifacts["draft_manifest"],
+        ),
+        source_audit_graph_manifest_path=_artifact_path(
+            artifacts,
+            "source_audit_graph_manifest",
+            fallback=default_artifacts["source_audit_graph_manifest"],
         ),
         semantic_layer_manifest_path=_artifact_path(
             artifacts,
             "semantic_layer_manifest",
-            fallback=manifest_path.parent / "semantic_layer_manifest.json",
+            fallback=default_artifacts["semantic_layer_manifest"],
         ),
         rca_view_manifest_path=_artifact_path(
             artifacts,
             "rca_view_manifest",
-            fallback=manifest_path.parent / "rca_view_manifest.json",
+            fallback=default_artifacts["rca_view_manifest"],
         ),
         review_queue_path=_artifact_path(
             artifacts,
             "review_queue",
-            fallback=manifest_path.parent / "review_queue.json",
+            fallback=default_artifacts["review_queue"],
         ),
         publish_manifest_path=_artifact_path(
             artifacts,
             "publish_manifest",
-            fallback=manifest_path.parent / "publish_manifest.json",
+            fallback=default_artifacts["publish_manifest"],
         ),
         source_ids=[str(item) for item in summary.get("source_ids", [])],
         source_count=_int_value(summary.get("source_count")),

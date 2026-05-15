@@ -113,6 +113,10 @@ def test_kg_construction_result_builds_manifest() -> None:
     assert manifest.artifact_type == "source_to_kg_construction_manifest_v1"
     assert manifest.run.run_id == "kgbuild_manifest"
     assert manifest.summary.node_count == 2
+    assert manifest.summary.kg_build_id == "kgbuild_manifest"
+    assert manifest.summary.extractor_versions == {"unit": "v1"}
+    assert manifest.summary.profile_version == "tep_rca_v1"
+    assert manifest.summary.review_policy
     assert manifest.artifacts["nodes"].endswith("nodes.csv")
     assert [row.row_type for row in manifest.draft_rows] == ["entity", "entity", "relation"]
     relation_row = manifest.draft_rows[-1]
@@ -394,6 +398,8 @@ def test_build_source_kg_script_writes_candidate_artifacts(tmp_path: Path) -> No
     """The source-to-KG CLI should write candidate CSV and summary artifacts."""
     semantic_dir = tmp_path / "semantic"
     semantic_dir.mkdir()
+    rca_dir = tmp_path / "rca"
+    rca_dir.mkdir()
     _write_jsonl(
         semantic_dir / "semantic_lift_nodes.jsonl",
         [
@@ -427,6 +433,41 @@ def test_build_source_kg_script_writes_candidate_artifacts(tmp_path: Path) -> No
             }
         ],
     )
+    _write_jsonl(
+        rca_dir / "nodes.jsonl",
+        [
+            {
+                "node_id": "component:steam_valve",
+                "entity_id": "component:steam_valve",
+                "entity_type": "Component",
+                "name": "Steam valve",
+                "root_cause_candidate": True,
+                "provenance_ids": ["ev_valve"],
+            },
+            {
+                "node_id": "fault_anchor:fault_06",
+                "entity_id": "fault_anchor:fault_06",
+                "entity_type": "FaultAnchor",
+                "name": "Fault 06 anchor",
+                "provenance_ids": ["ev_fault"],
+            },
+        ],
+    )
+    _write_jsonl(
+        rca_dir / "edges.jsonl",
+        [
+            {
+                "edge_id": "rca_edge_steam_valve",
+                "head_id": "component:steam_valve",
+                "relation": "CAUSES",
+                "tail_id": "fault_anchor:fault_06",
+                "confidence": 0.74,
+                "relation_family": "FAULT_SOURCE",
+                "propagation_enabled": True,
+                "provenance_ids": ["ev_rca_edge"],
+            }
+        ],
+    )
     output_dir = tmp_path / "candidate"
 
     completed = subprocess.run(
@@ -435,8 +476,12 @@ def test_build_source_kg_script_writes_candidate_artifacts(tmp_path: Path) -> No
             "scripts/build_source_kg.py",
             "--tep-semantic-lift-dir",
             str(semantic_dir),
+            "--tep-rca-graph-dir",
+            str(rca_dir),
             "--output-dir",
             str(output_dir),
+            "--run-id",
+            "kgbuild_cli_tep_rca",
         ],
         cwd=Path(__file__).resolve().parents[1],
         check=True,
@@ -447,14 +492,67 @@ def test_build_source_kg_script_writes_candidate_artifacts(tmp_path: Path) -> No
     assert "source_to_kg_construction_result_v1" in completed.stdout
     assert (output_dir / "nodes.csv").exists()
     assert (output_dir / "edges.csv").exists()
+    assert (output_dir / "draft_manifest.json").exists()
+    assert (output_dir / "source_audit_graph_manifest.json").exists()
+    assert (output_dir / "semantic_layer_manifest.json").exists()
+    assert (output_dir / "rca_view_manifest.json").exists()
+    assert (output_dir / "review_queue.json").exists()
+    assert (output_dir / "publish_manifest.json").exists()
     assert (output_dir / "kg_construction_manifest.json").exists()
     summary = json.loads((output_dir / "kg_construction_summary.json").read_text())
-    assert summary["node_count"] == 2
-    assert summary["edge_count"] == 1
+    assert summary["kg_build_id"] == "kgbuild_cli_tep_rca"
+    assert summary["source_ids"] == ["tep_semantic_lift", "tep_rca_graph"]
+    assert summary["extractor_versions"] == {
+        "tep_rca_graph": "v1",
+        "tep_semantic_lift": "v1",
+    }
+    assert summary["profile_version"] == "tep_rca_v1"
+    assert summary["review_policy"]
+    assert summary["node_count"] == 4
+    assert summary["edge_count"] == 2
     assert summary["output"]["manifest"].endswith("kg_construction_manifest.json")
+    assert summary["output"]["publish_manifest"].endswith("publish_manifest.json")
     manifest = json.loads((output_dir / "kg_construction_manifest.json").read_text())
-    assert manifest["summary"]["edge_count"] == 1
-    assert len(manifest["draft_rows"]) == 3
+    assert manifest["summary"]["edge_count"] == 2
+    assert set(_required_artifact_keys()) <= set(manifest["artifacts"])
+    assert len(manifest["draft_rows"]) == 6
+
+
+def test_build_source_kg_script_supports_toy_generic_structured_source(
+    tmp_path: Path,
+) -> None:
+    """The CLI should expose a tiny generic source with complete version metadata."""
+    output_dir = tmp_path / "toy_candidate"
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_source_kg.py",
+            "--toy-generic-structured-source",
+            "--run-id",
+            "kgbuild_cli_toy_generic",
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    assert "source_to_kg_construction_result_v1" in completed.stdout
+    summary = json.loads((output_dir / "kg_construction_summary.json").read_text())
+    manifest = json.loads((output_dir / "kg_construction_manifest.json").read_text())
+    publish_manifest = json.loads((output_dir / "publish_manifest.json").read_text())
+
+    assert summary["kg_build_id"] == "kgbuild_cli_toy_generic"
+    assert summary["source_ids"] == ["toy_generic_source"]
+    assert summary["extractor_versions"] == {"structured_record": "v1"}
+    assert summary["profile_version"] == "generic_rca_v1"
+    assert set(_required_artifact_keys()) <= set(summary["output"])
+    assert set(_required_artifact_keys()) <= set(manifest["artifacts"])
+    assert publish_manifest["kg_build_id"] == "kgbuild_cli_toy_generic"
+    assert publish_manifest["source_ids"] == ["toy_generic_source"]
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
@@ -462,3 +560,18 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
         "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
         encoding="utf-8",
     )
+
+
+def _required_artifact_keys() -> set[str]:
+    return {
+        "nodes",
+        "edges",
+        "draft_manifest",
+        "source_audit_graph_manifest",
+        "semantic_layer_manifest",
+        "rca_view_manifest",
+        "review_queue",
+        "publish_manifest",
+        "summary",
+        "manifest",
+    }
