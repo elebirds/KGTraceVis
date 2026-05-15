@@ -8,8 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from kgtracevis.kg.entity_linker import link_evidence_entities
+from kgtracevis.kg.graph import KnowledgeGraph
+from kgtracevis.kg.path_ranker import rank_root_cause_paths
 from kgtracevis.kg_construction import KGConstructionSource, load_source_library
 from kgtracevis.kg_construction.models import KG_CONSTRUCTION_REQUIRED_ARTIFACT_KEYS
+from kgtracevis.schema.evidence_schema import Evidence
 from kgtracevis.service.kg_materials import (
     KGMaterialExtractionState,
     KGMaterialRegisterRequest,
@@ -95,8 +99,10 @@ def run_kg_construction_acceptance_smoke(
     config.output_dir.mkdir(parents=True, exist_ok=True)
     paths: list[KGConstructionSmokePath] = [
         _run_toy_source_library_smoke(config),
-        _run_material_direct_smoke(config),
     ]
+    material_path, material_result = _run_material_direct_smoke(config)
+    paths.append(material_path)
+    paths.append(_run_runtime_overlay_smoke(material_result))
     paths.append(_run_tep_smoke(config))
     summary_path = config.output_dir / "kg_construction_smoke_summary.json"
     result = KGConstructionSmokeResult(
@@ -182,7 +188,7 @@ def _run_tep_smoke(config: KGConstructionSmokeConfig) -> KGConstructionSmokePath
 
 def _run_material_direct_smoke(
     config: KGConstructionSmokeConfig,
-) -> KGConstructionSmokePath:
+) -> tuple[KGConstructionSmokePath, MaterialKGConstructionWorkflowResult]:
     material_root = config.output_dir / "material_library"
     source_dir = config.output_dir / "material_direct_sources"
     source_dir.mkdir(parents=True, exist_ok=True)
@@ -223,7 +229,49 @@ def _run_material_direct_smoke(
     metadata["material_root"] = str(material_root)
     metadata["material_ids"] = list(result.material_ids)
     metadata["extraction_mode"] = result.summary["material_library"]["extraction_mode"]
-    return _passed_path("material_direct", result, metadata=metadata)
+    return _passed_path("material_direct", result, metadata=metadata), result
+
+
+def _run_runtime_overlay_smoke(
+    result: MaterialKGConstructionWorkflowResult,
+) -> KGConstructionSmokePath:
+    graph = KnowledgeGraph.from_csv(result.nodes_path, result.edges_path)
+    evidence = Evidence(
+        case_id="smoke_runtime_overlay",
+        dataset="mvtec",
+        source="unknown",
+        object="pump",
+        anomaly_type="Material cooling alert",
+        confidence=0.8,
+    )
+    links = link_evidence_entities(evidence, graph)
+    paths = rank_root_cause_paths(evidence, graph, links, top_k=1)
+    if not paths:
+        raise ValueError("runtime overlay smoke did not produce an RCA path")
+    path = paths[0]
+    if path.get("target_entity_id") != "MaterialPumpSealWear":
+        raise ValueError("runtime overlay smoke ranked an unexpected RCA target")
+    if path.get("kg_build_ids") != [result.run_id]:
+        raise ValueError("runtime overlay smoke did not preserve kg_build_id")
+    if not float(path.get("path_strength") or 0.0):
+        raise ValueError("runtime overlay smoke did not expose path_strength")
+    return KGConstructionSmokePath(
+        name="runtime_overlay",
+        status="passed",
+        output_dir=result.output_dir,
+        summary_path=result.summary_path,
+        manifest_path=result.manifest_path,
+        artifacts=dict(result.artifacts),
+        metadata={
+            "kg_build_id": result.run_id,
+            "path_id": path.get("path_id", ""),
+            "target_entity_id": path.get("target_entity_id", ""),
+            "kg_build_ids": list(path.get("kg_build_ids") or []),
+            "path_strength": path.get("path_strength", 0.0),
+            "rca_score": path.get("rca_score", 0.0),
+            "source_edge_ids": list(path.get("source_edge_ids") or []),
+        },
+    )
 
 
 def _tep_sources(tep_root: Path) -> tuple[KGConstructionSource, ...]:

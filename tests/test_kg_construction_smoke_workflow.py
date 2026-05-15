@@ -32,7 +32,7 @@ def test_kg_construction_smoke_builds_toy_material_and_tep_paths(
     payload = result.payload()
     paths = {path["name"]: path for path in payload["paths"]}
 
-    assert payload["passed"] == 3
+    assert payload["passed"] == 4
     assert payload["skipped"] == 0
     assert paths["toy_generic"]["status"] == "passed"
     assert paths["toy_generic"]["metadata"]["source_ids"] == ["toy_generic_source"]
@@ -50,6 +50,14 @@ def test_kg_construction_smoke_builds_toy_material_and_tep_paths(
     assert paths["material_direct"]["artifacts"]["kg_construction_diff"].endswith(
         "kg_construction_diff.json"
     )
+    assert paths["runtime_overlay"]["status"] == "passed"
+    assert paths["runtime_overlay"]["metadata"]["target_entity_id"] == (
+        "MaterialPumpSealWear"
+    )
+    assert paths["runtime_overlay"]["metadata"]["kg_build_ids"] == [
+        "kgbuild_smoke_material_direct"
+    ]
+    assert paths["runtime_overlay"]["metadata"]["path_strength"] > 0
     assert paths["tep"]["status"] == "passed"
     assert paths["tep"]["metadata"]["source_ids"] == [
         "tep_semantic_lift",
@@ -98,9 +106,10 @@ def test_smoke_rca_kg_construction_cli_builds_fixture_paths(tmp_path: Path) -> N
     payload = json.loads(completed.stdout)
     paths = {path["name"]: path for path in payload["paths"]}
     assert payload["artifact_type"] == "rca_kg_construction_smoke_result_v1"
-    assert payload["passed"] == 3
+    assert payload["passed"] == 4
     assert paths["toy_generic"]["status"] == "passed"
     assert paths["material_direct"]["status"] == "passed"
+    assert paths["runtime_overlay"]["status"] == "passed"
     assert paths["tep"]["status"] == "passed"
     assert Path(payload["summary_path"]).is_file()
     assert Path(paths["material_direct"]["artifacts"]["review_queue"]).is_file()
