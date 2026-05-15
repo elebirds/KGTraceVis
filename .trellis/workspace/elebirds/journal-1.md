@@ -1208,3 +1208,36 @@ Added profile-driven RCA score components, optional edge score columns, source t
 ### Next Steps
 
 - None - task complete
+
+
+## Session 37: M20 semantic projection derived edges
+
+**Date**: 2026-05-15
+**Task**: M20 semantic projection derived edges
+**Branch**: `main`
+
+### Summary
+
+Added profile-driven two-hop semantic derived edge rules, JSON/manifest support, source-backed auto candidate edge generation with provenance, semantic manifest derived counts, docs/spec updates, and tests. Gates: ruff, mypy, pytest 338, run_examples, RCA-KG smoke with toy/material/TEP passed.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0cf0270` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
