@@ -13,7 +13,7 @@ from typing import Any
 
 from kgtracevis.kg_construction.document_extraction import (
     DocumentIEClient,
-    SourceTextChunk,
+    OfflineDocumentIEFixtureClient,
     extract_draft_kg_from_chunks,
     extract_draft_kg_from_source_material,
 )
@@ -102,52 +102,6 @@ class OfflineDocumentIEExtractor:
             default_confidence=0.5,
             strict_grounding=True,
         )
-
-
-class OfflineDocumentIEFixtureClient:
-    """Document IE client that replays fixture payloads by chunk ID or index."""
-
-    def __init__(self, fixture: Mapping[str, Any]) -> None:
-        self.fixture = dict(fixture)
-
-    def extract_candidates(
-        self,
-        chunk: SourceTextChunk,
-        *,
-        prompt: str,
-        response_schema: Mapping[str, Any],
-    ) -> Mapping[str, Any]:
-        """Return the fixture payload for one parsed source chunk."""
-        del prompt, response_schema
-        payload = self._payload_for_chunk(chunk)
-        if payload is None:
-            return {"entities": [], "relations": []}
-        return payload
-
-    def _payload_for_chunk(self, chunk: SourceTextChunk) -> Mapping[str, Any] | None:
-        if "entities" in self.fixture or "relations" in self.fixture:
-            return self.fixture if chunk.index == 1 else None
-        chunks = self.fixture.get("chunks")
-        if isinstance(chunks, list):
-            for item in chunks:
-                if not isinstance(item, Mapping):
-                    continue
-                if str(item.get("chunk_id") or "") == chunk.chunk_id:
-                    return item
-                chunk_index = item.get("chunk_index", item.get("index"))
-                if str(chunk_index or "") == str(chunk.index):
-                    return item
-        by_chunk_id = self.fixture.get("by_chunk_id")
-        if isinstance(by_chunk_id, Mapping):
-            item = by_chunk_id.get(chunk.chunk_id)
-            if isinstance(item, Mapping):
-                return item
-        by_chunk_index = self.fixture.get("by_chunk_index")
-        if isinstance(by_chunk_index, Mapping):
-            item = by_chunk_index.get(str(chunk.index), by_chunk_index.get(chunk.index))
-            if isinstance(item, Mapping):
-                return item
-        return None
 
 
 def _load_offline_fixture(source: KGConstructionSource) -> Mapping[str, Any]:

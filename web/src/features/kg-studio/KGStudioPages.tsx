@@ -353,6 +353,9 @@ function KGSources({
   const [materialBusy, setMaterialBusy] = useState(false);
   const [materialStatus, setMaterialStatus] = useState<string | null>(null);
   const [materialError, setMaterialError] = useState<string | null>(null);
+  const [materialExtractionProvider, setMaterialExtractionProvider] =
+    useState<"openai" | "offline_fixture">("openai");
+  const [documentIEFixturePath, setDocumentIEFixturePath] = useState("");
   const [extractOverwrite, setExtractOverwrite] = useState(false);
   const [materialBuildOverwrite, setMaterialBuildOverwrite] = useState(false);
   const [materialOutputName, setMaterialOutputName] = useState("material_library");
@@ -506,14 +509,19 @@ function KGSources({
       let lastStructuredPath = "";
       for (const materialId of selectedMaterialIds) {
         const response = await api.extractKGMaterial(materialId, {
+          provider: materialExtractionProvider,
           overwrite: extractOverwrite,
-          source_format: "jsonl"
+          source_format: "jsonl",
+          document_ie_fixture_path:
+            materialExtractionProvider === "offline_fixture" && documentIEFixturePath.trim()
+              ? documentIEFixturePath.trim()
+              : undefined
         });
         recordCount += response.record_count;
         lastStructuredPath = response.structured_records_path;
       }
       setMaterialStatus(
-        `Extraction complete: ${recordCount} candidate record(s) written. Latest structured_records: ${lastStructuredPath}`
+        `Extraction complete via ${materialExtractionProvider}: ${recordCount} candidate record(s) written. Latest structured_records: ${lastStructuredPath}`
       );
       await loadMaterials(selectedMaterialIds[0]);
     } catch (error) {
@@ -668,6 +676,29 @@ function KGSources({
                   <span>Output name</span>
                   <Input value={materialOutputName} onChange={setMaterialOutputName} />
                 </label>
+                <label className="form-field">
+                  <span>Extraction provider</span>
+                  <Select
+                    value={materialExtractionProvider}
+                    onChange={(value) =>
+                      setMaterialExtractionProvider(value as "openai" | "offline_fixture")
+                    }
+                    options={[
+                      { label: "OpenAI IE", value: "openai" },
+                      { label: "Offline fixture", value: "offline_fixture" }
+                    ]}
+                  />
+                </label>
+                {materialExtractionProvider === "offline_fixture" && (
+                  <label className="form-field">
+                    <span>Fixture path</span>
+                    <Input
+                      value={documentIEFixturePath}
+                      onChange={setDocumentIEFixturePath}
+                      placeholder="optional if material metadata includes fixture"
+                    />
+                  </label>
+                )}
                 <label className="inline-switch build-overwrite">
                   <Switch size="small" checked={extractOverwrite} onChange={setExtractOverwrite} />
                   <span>overwrite structured records</span>
@@ -907,8 +938,14 @@ function SelectedMaterialPanel({ material }: { material: KGMaterialRecord | unde
         <span>type</span><strong>{valueText(material.source_type)}</strong>
         <span>format</span><strong>{valueText(material.source_format)}</strong>
         <span>status</span><strong>{materialState(material)}</strong>
+        <span>extractor</span><strong>{valueText(material.extraction?.extractor_name)}</strong>
+        <span>prompt</span><strong>{valueText(material.extraction?.prompt_version)}</strong>
         <span>records</span><strong>{valueText(materialRecordCount(material))}</strong>
+        <span>chunks</span><strong>{valueText(material.extraction?.chunk_count ?? material.chunk_count)}</strong>
+        <span>errors</span><strong>{valueText(material.extraction?.error_count)}</strong>
         <span>structured_records</span><strong>{valueText(materialStructuredRecordsPath(material))}</strong>
+        <span>chunk_results</span><strong>{valueText(material.extraction?.chunk_results_path)}</strong>
+        <span>manifest</span><strong>{valueText(material.extraction?.extraction_manifest_path)}</strong>
         <span>pages</span><strong>{valueText(material.page_count)}</strong>
         <span>size</span><strong>{formatBytes(material.size_bytes)}</strong>
         <span>source</span><strong>{materialLocation(material)}</strong>

@@ -20,6 +20,7 @@ from kgtracevis.kg_construction.document_extraction import (
     DocumentIEChunkExtractionSummary,
     DocumentIEClient,
     DocumentIEExtractionResult,
+    OfflineDocumentIEFixtureClient,
     OpenAICompatibleKGExtractionClient,
     ParsedSourceDocument,
     SourceTextChunk,
@@ -51,6 +52,7 @@ MaterialType = Literal[
 ]
 MaterialStatus = Literal["registered", "uploaded", "extracted", "failed"]
 ExtractionStatus = Literal["not_started", "extracted", "failed"]
+DocumentIEProvider = Literal["openai", "offline_fixture"]
 
 
 class KGMaterialExtractionState(BaseModel):
@@ -242,7 +244,7 @@ class KGMaterialExtractionRunRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["openai"] = "openai"
+    provider: DocumentIEProvider = "openai"
     max_chars: int = Field(default=2_000, ge=200, le=8_000)
     overlap_chars: int = Field(default=200, ge=0, le=2_000)
     source_format: ConstructionSourceFormat = "jsonl"
@@ -250,6 +252,8 @@ class KGMaterialExtractionRunRequest(BaseModel):
     default_confidence: float = Field(default=0.55, ge=0.0, le=1.0)
     strict_grounding: bool = True
     continue_on_chunk_error: bool = False
+    document_ie_fixture_path: str | None = None
+    document_ie_payload: dict[str, Any] | None = None
     overwrite: bool = False
 
     @model_validator(mode="after")
@@ -259,6 +263,16 @@ class KGMaterialExtractionRunRequest(BaseModel):
             raise ValueError("overlap_chars must be smaller than max_chars")
         if self.source_format != "jsonl":
             raise ValueError("material extraction writes JSONL; source_format must be jsonl")
+        if self.provider != "offline_fixture" and (
+            self.document_ie_fixture_path or self.document_ie_payload is not None
+        ):
+            raise ValueError(
+                "document_ie_fixture_path/document_ie_payload require provider=offline_fixture"
+            )
+        if self.document_ie_fixture_path and self.document_ie_payload is not None:
+            raise ValueError(
+                "provide either document_ie_fixture_path or document_ie_payload, not both"
+            )
         return self
 
 
@@ -282,6 +296,9 @@ class KGMaterialExtractionRunResponse(BaseModel):
     chunk_results_path: str
     chunk_count: int
     error_count: int
+    provider: DocumentIEProvider
+    extractor_name: str
+    extractor_version: str
     prompt_version: str
     claim_boundary: str = (
         "LLM/IE outputs are source-grounded candidate KG rows for review; they "
@@ -655,6 +672,8 @@ def extract_kg_material_to_structured_records(
         raise ValueError(f"{names} already exist; pass overwrite=true to replace")
 
     source_path, source_metadata = _local_source_for_extraction(material)
+    if request.document_ie_fixture_path:
+        source_metadata["document_ie_fixture_path"] = request.document_ie_fixture_path
     source = KGConstructionSource(
         source_id=material.material_id,
         source_type=_document_source_type(material),
@@ -679,11 +698,15 @@ def extract_kg_material_to_structured_records(
         [_source_chunk_store_payload(material.material_id, chunk) for chunk in chunks],
     )
 
-    ie_client = client or OpenAICompatibleKGExtractionClient()
+    ie_client, extractor_name = _document_ie_client_for_request(
+        material=material,
+        request=request,
+        client=client,
+    )
     extraction_result = extract_draft_kg_from_chunks_with_report(
         chunks,
         ie_client,
-        extractor_name="openai_document_ie",
+        extractor_name=extractor_name,
         extractor_version="v1",
         default_confidence=request.default_confidence,
         strict_grounding=request.strict_grounding,
@@ -727,7 +750,7 @@ def extract_kg_material_to_structured_records(
                 structured_records_path=str(records_path),
                 source_format=request.source_format,
                 source_id=material.material_id,
-                extractor_name="openai_document_ie",
+                extractor_name=extractor_name,
                 extractor_version="v1",
                 prompt_version=request.prompt_version,
                 extracted_at=now,
@@ -753,6 +776,7 @@ def extract_kg_material_to_structured_records(
             "default_confidence": request.default_confidence,
             "strict_grounding": request.strict_grounding,
             "continue_on_chunk_error": request.continue_on_chunk_error,
+            "document_ie_fixture_path": request.document_ie_fixture_path,
         },
         result_summary={
             "record_count": len(records),
@@ -807,6 +831,9 @@ def extract_kg_material_to_structured_records(
         chunk_count=extraction_result.chunk_count,
         error_count=extraction_result.error_count,
         prompt_version=request.prompt_version,
+        provider=request.provider,
+        extractor_name=extraction_result.extractor_name,
+        extractor_version=extraction_result.extractor_version,
     )
 
 
@@ -865,6 +892,61 @@ def _construction_source_from_material(
         source_format=extraction.source_format,
         metadata=metadata,
     )
+
+
+def _document_ie_client_for_request(
+    *,
+    material: KGMaterialRecord,
+    request: KGMaterialExtractionRunRequest,
+    client: DocumentIEClient | None,
+) -> tuple[DocumentIEClient, str]:
+    if client is not None:
+        extractor_name = (
+            "offline_document_ie" if request.provider == "offline_fixture" else "openai_document_ie"
+        )
+        return client, extractor_name
+    if request.provider == "openai":
+        return OpenAICompatibleKGExtractionClient(), "openai_document_ie"
+    fixture = _offline_document_ie_fixture(material=material, request=request)
+    return OfflineDocumentIEFixtureClient(fixture), "offline_document_ie"
+
+
+def _offline_document_ie_fixture(
+    *,
+    material: KGMaterialRecord,
+    request: KGMaterialExtractionRunRequest,
+) -> dict[str, Any]:
+    if request.document_ie_payload is not None:
+        return request.document_ie_payload
+    fixture_path = request.document_ie_fixture_path or _first_metadata_text(
+        material.metadata,
+        "document_ie_fixture_path",
+        "document_ie_fixture",
+    )
+    if fixture_path:
+        path = Path(fixture_path)
+        if not path.is_file():
+            raise ValueError(f"offline document IE fixture not found: {path}")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            return payload
+        raise ValueError(f"offline document IE fixture must be a JSON object: {path}")
+    inline = material.metadata.get("document_ie_payload")
+    if isinstance(inline, dict):
+        return inline
+    raise ValueError(
+        "provider=offline_fixture requires document_ie_payload, "
+        "document_ie_fixture_path, or material.metadata['document_ie_payload']/"
+        "['document_ie_fixture_path']"
+    )
+
+
+def _first_metadata_text(metadata: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def _local_source_for_extraction(material: KGMaterialRecord) -> tuple[Path, dict[str, str]]:
@@ -1169,6 +1251,7 @@ def _utc_now() -> str:
 __all__ = [
     "DEFAULT_SOURCE_KG_MATERIAL_DIR",
     "DEFAULT_MATERIAL_POSTGRES_CONFIG_PATH",
+    "DocumentIEProvider",
     "FileKGMaterialStore",
     "MAX_MATERIAL_UPLOAD_BYTES",
     "ExtractionStatus",

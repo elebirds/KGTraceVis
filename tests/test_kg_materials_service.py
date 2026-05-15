@@ -102,8 +102,11 @@ def test_material_extraction_writes_structured_records_with_fake_ie(
     assert response.record_count == 3
     assert response.chunk_count == 1
     assert response.error_count == 0
+    assert response.provider == "openai"
+    assert response.extractor_name == "openai_document_ie"
     assert response.prompt_version == "document_ie_prompt_v1"
     assert response.material.extraction.status == "extracted"
+    assert response.material.extraction.extractor_name == "openai_document_ie"
     assert response.material.extraction.extraction_manifest_path == (
         response.extraction_manifest_path
     )
@@ -128,6 +131,8 @@ def test_material_extraction_writes_structured_records_with_fake_ie(
     ]
     manifest = json.loads(Path(response.extraction_manifest_path).read_text(encoding="utf-8"))
     assert manifest["claim_boundary"].startswith("Document IE output is source-grounded")
+    assert manifest["extraction"]["provider"] == "openai"
+    assert manifest["extraction"]["extractor_name"] == "openai_document_ie"
     assert manifest["extraction"]["prompt_version"] == "document_ie_prompt_v1"
     assert manifest["summary"]["review_status"] == "auto"
     assert manifest["summary"]["record_count"] == 3
@@ -141,6 +146,71 @@ def test_material_extraction_writes_structured_records_with_fake_ie(
     assert build_sources.sources[0].metadata["extraction_manifest_path"] == (
         response.extraction_manifest_path
     )
+
+
+def test_material_extraction_supports_no_key_offline_fixture_provider(
+    tmp_path: Path,
+) -> None:
+    """No-key extraction should replay source-grounded fixture candidates."""
+    source_text = "Pump cavitation indicates seal wear."
+    save_kg_material_upload(
+        material_id="offline_note",
+        title="Offline note",
+        filename="offline_note.txt",
+        content=source_text.encode(),
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+
+    response = extract_kg_material_to_structured_records(
+        "offline_note",
+        KGMaterialExtractionRunRequest(
+            provider="offline_fixture",
+            document_ie_payload=_offline_pump_fixture(),
+            overwrite=True,
+        ),
+        material_root=tmp_path,
+    )
+
+    assert response.status == "extracted"
+    assert response.provider == "offline_fixture"
+    assert response.extractor_name == "offline_document_ie"
+    assert response.record_count == 3
+    assert response.material.extraction.extractor_name == "offline_document_ie"
+    rows = [
+        json.loads(line)
+        for line in Path(response.structured_records_path).read_text(encoding="utf-8").splitlines()
+    ]
+    assert rows[-1]["relation"] == "SUGGESTS_ROOT_CAUSE"
+    assert rows[-1]["metadata"]["prompt_version"] == "document_ie_prompt_v1"
+    manifest = json.loads(Path(response.extraction_manifest_path).read_text(encoding="utf-8"))
+    assert manifest["extraction"]["provider"] == "offline_fixture"
+    assert manifest["extraction"]["extractor_name"] == "offline_document_ie"
+    assert manifest["extraction"]["llm_boundary"].startswith("LLM extraction proposes")
+    assert source_text not in json.dumps(manifest)
+
+
+def test_offline_fixture_provider_requires_explicit_fixture(
+    tmp_path: Path,
+) -> None:
+    """Offline provider must not silently fabricate candidates."""
+    save_kg_material_upload(
+        material_id="missing_fixture_note",
+        title="Missing fixture note",
+        filename="missing_fixture_note.txt",
+        content=b"Pump cavitation indicates seal wear.",
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+
+    with pytest.raises(ValueError, match="provider=offline_fixture requires"):
+        extract_kg_material_to_structured_records(
+            "missing_fixture_note",
+            KGMaterialExtractionRunRequest(provider="offline_fixture", overwrite=True),
+            material_root=tmp_path,
+        )
 
 
 def test_material_extraction_writes_audit_artifacts_for_zero_candidates(
@@ -219,6 +289,7 @@ def test_runtime_material_store_provider_persists_extraction_state(
         "Pump cavitation indicates seal wear."
     )
     assert store.runs[0]["extraction"]["status"] == "extracted"
+    assert store.runs[0]["provider"] == "openai"
     assert store.runs[0]["parameters"]["source_format"] == "jsonl"
     assert store.runs[0]["parameters"]["prompt_version"] == "document_ie_prompt_v1"
     assert store.runs[0]["result_summary"]["chunk_count"] == 1
@@ -360,6 +431,9 @@ def test_material_dtos_reject_unsafe_or_ambiguous_inputs() -> None:
     with pytest.raises(ValidationError, match="source_format must be jsonl"):
         KGMaterialExtractionRunRequest(source_format="csv")
 
+    with pytest.raises(ValidationError, match="require provider=offline_fixture"):
+        KGMaterialExtractionRunRequest(document_ie_payload={})
+
 
 class FakeIEClient:
     """Fake document IE client for material extraction service tests."""
@@ -411,6 +485,34 @@ class EmptyIEClient:
     ) -> dict[str, Any]:
         del chunk, prompt, response_schema
         return {"entities": [], "relations": []}
+
+
+def _offline_pump_fixture() -> dict[str, Any]:
+    return {
+        "entities": [
+            {
+                "id": "PumpCavitation",
+                "name": "Pump cavitation",
+                "label": "FaultEvent",
+                "evidence": "Pump cavitation",
+            },
+            {
+                "id": "SealWear",
+                "name": "Seal wear",
+                "label": "RootCause",
+                "evidence": "seal wear",
+            },
+        ],
+        "relations": [
+            {
+                "head": "PumpCavitation",
+                "relation": "SUGGESTS_ROOT_CAUSE",
+                "tail": "SealWear",
+                "evidence": "Pump cavitation indicates seal wear.",
+                "confidence": 0.55,
+            }
+        ],
+    }
 
 
 class InMemoryMaterialStore:

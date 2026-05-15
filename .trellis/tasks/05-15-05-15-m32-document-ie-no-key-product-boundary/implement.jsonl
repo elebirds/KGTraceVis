@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend workflow and quality checklist for material extraction provider changes."}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Keep extraction/provider logic in reusable service/workflow boundaries, with scripts and APIs as clients."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "No-key offline provider should fail with explicit validation errors when fixture inputs are absent or malformed."}
+{"file": ".trellis/spec/frontend/workbench-ui-guidelines.md", "reason": "KG Studio UI changes should preserve dense review/workflow controls and typed API contracts."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Provider selection spans API DTOs, service behavior, web contracts, UI state, tests, and docs."}

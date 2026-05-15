@@ -298,6 +298,13 @@ or `source.metadata["document_ie_fixture_path"]`. It uses the same chunk-to-Draf
 conversion and grounding checks as the LLM-backed extractor, but it never calls
 an external model.
 
+The material-library extraction API and KG Studio workflow expose that boundary
+as `provider=offline_fixture`. Users can supply `document_ie_payload` or a local
+`document_ie_fixture_path` when extracting a material, and the resulting
+manifest records `provider=offline_fixture` plus `extractor_name=offline_document_ie`.
+This keeps no-key demos and regression runs source-grounded and auditable
+without treating fixtures as reviewed facts.
+
 ## Example Commands
 
 Toy/manual structured sources can use the existing source construction workflow or API. TEP artifacts can be built from local TEP_KG outputs:

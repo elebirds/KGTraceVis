@@ -51,6 +51,10 @@ KG and path views should make the graph the primary canvas.
   contracts directly: list builds, read the build review queue, submit
   accept/reject decisions, and run overlay validation. Do not duplicate CSV
   parsing or review artifact mutation in frontend code.
+- KG Studio material extraction controls should expose the backend provider
+  contract directly. `openai` and `offline_fixture` are reviewable document IE
+  candidate sources; frontend code should pass provider and fixture-path
+  options through the typed API client instead of simulating extraction locally.
 - RCA Explorer should default to a focused selected path. Put ranking controls,
   the focused graph, and provenance/evidence in one workbench surface instead
   of stacking them as unrelated cards.

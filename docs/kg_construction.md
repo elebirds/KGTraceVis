@@ -296,6 +296,22 @@ RCA-oriented KG construction whitelist fail before a candidate build is
 produced. Document IE also coerces model-returned entity references into the
 same PascalCase-ish node ID style used by KG CSV validation.
 
+Material extraction now exposes the document IE provider explicitly:
+
+- `provider=openai` calls the OpenAI-compatible IE client and requires a valid
+  API key or injected compatible client.
+- `provider=offline_fixture` replays `document_ie_payload` or
+  `document_ie_fixture_path` supplied in the extraction request or material
+  metadata. It uses the same parser, chunking, schema validation, confidence,
+  and evidence-grounding checks, but it does not call an external model.
+
+Both providers write `structured_records.jsonl`,
+`chunk_extraction_results.jsonl`, and `extraction_manifest.json`. The manifest
+records the provider, extractor name, prompt version, allowed relation
+whitelist, and the claim boundary that extracted rows are reviewable candidates.
+The KG Studio material workflow exposes the same provider selector, so a no-key
+review/demo path is visible instead of hidden inside tests.
+
 The product boundary is therefore not "LLM returned triples". The product
 experience is the audited construction workspace: source registration, parser
 and chunk audit, source-grounded candidate generation, DraftKG conversion,

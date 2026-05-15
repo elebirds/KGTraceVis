@@ -249,8 +249,13 @@ export interface KGMaterialExtractionState {
   source_id?: string | null;
   extractor_name?: string | null;
   extractor_version?: string | null;
+  prompt_version?: string | null;
   extracted_at?: string | null;
   record_count?: number | null;
+  chunk_count?: number | null;
+  error_count?: number | null;
+  extraction_manifest_path?: string | null;
+  chunk_results_path?: string | null;
   error_message?: string | null;
 }
 
@@ -293,10 +298,16 @@ export interface KGMaterialRegisterUrlResponse {
 }
 
 export interface KGMaterialExtractionRequest {
-  provider?: "openai";
+  provider?: "openai" | "offline_fixture";
   max_chars?: number;
   overlap_chars?: number;
   source_format?: Extract<KGConstructionSourceFormat, "jsonl">;
+  prompt_version?: string;
+  default_confidence?: number;
+  strict_grounding?: boolean;
+  continue_on_chunk_error?: boolean;
+  document_ie_fixture_path?: string | null;
+  document_ie_payload?: Record<string, unknown> | null;
   overwrite?: boolean;
 }
 
@@ -305,6 +316,14 @@ export interface KGMaterialExtractionResponse {
   material: KGMaterialRecord;
   structured_records_path: string;
   record_count: number;
+  extraction_manifest_path: string;
+  chunk_results_path: string;
+  chunk_count: number;
+  error_count: number;
+  provider: "openai" | "offline_fixture";
+  extractor_name: string;
+  extractor_version: string;
+  prompt_version: string;
   claim_boundary: string;
 }
 

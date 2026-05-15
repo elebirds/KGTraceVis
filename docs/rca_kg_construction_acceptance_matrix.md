@@ -79,7 +79,7 @@ top-k RCA path is contract/runtime valid, but not overlay-contribution accepted.
 | Review-controlled publish snapshot | Accepted | `published_nodes.csv`, `published_edges.csv`, `publish_report.json` |
 | Artifact diff | Accepted | fresh no-op and review replay `kg_construction_diff.json` |
 | External profile packs | Accepted | `--profile-path` / `profile_path`, recorded in `profile_manifest.json` |
-| LLM document extraction boundary | Accepted as controlled adapter | LLM/offline document IE emits DraftKG candidates and material audit artifacts; it does not publish facts |
+| LLM document extraction boundary | Accepted as controlled adapter | OpenAI/offline fixture providers emit DraftKG candidates and material audit artifacts; no-key provider selection is exposed in KG Studio and does not publish facts |
 
 ## Commands
 
