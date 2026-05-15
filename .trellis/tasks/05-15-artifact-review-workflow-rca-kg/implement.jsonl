@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Reusable workflow boundary for script and service review actions."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "RCA KG construction review/publish artifact contract."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Explicit validation for unknown edge targets and invalid artifacts."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required verification commands."}

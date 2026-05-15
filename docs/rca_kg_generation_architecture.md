@@ -229,6 +229,23 @@ uv run python scripts/build_source_kg.py \
   --overwrite
 ```
 
+The document source creates a high-risk root-cause candidate, so
+`published_edges.csv` remains empty until a reviewer accepts it. A local,
+service-free review can be applied with:
+
+```bash
+uv run python scripts/review_source_kg.py \
+  --build-dir runs/source_kg_build/toy_document_candidate \
+  --action accept \
+  --target-key 'CoolingAlert|SUGGESTS_ROOT_CAUSE|PumpSealWear|shared' \
+  --reviewer reviewer-id \
+  --note 'source evidence checked'
+```
+
+This appends to `review_decisions.jsonl`, refreshes `review_queue.json`, and
+rewrites the review-controlled `published_nodes.csv`, `published_edges.csv`,
+and `publish_report.json` snapshot.
+
 ```bash
 uv run python scripts/build_source_kg.py \
   --tep-semantic-lift-dir /Users/hhm/code/TEP_KG/data/processed/kg \

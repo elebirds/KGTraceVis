@@ -30,15 +30,12 @@ from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS
 from kgtracevis.kg_construction.models import (
     KGConstructionReviewDecision,
     kg_construction_artifact_paths,
-    review_decision_for_edge,
-)
-from kgtracevis.kg_construction.publish import (
-    append_review_decision,
-    build_publish_snapshot,
-    load_review_decisions,
-    write_publish_snapshot,
 )
 from kgtracevis.kg_construction.qa import run_kg_qa
+from kgtracevis.workflows.kg_construction_review import (
+    ReviewKGConstructionEdgeConfig,
+    review_kg_construction_edge_artifact,
+)
 from kgtracevis.workflows.source_kg_construction import (
     DEFAULT_SOURCE_KG_BUILD_DIR,
     SourceKGConstructionWorkflowConfig,
@@ -677,41 +674,27 @@ def review_kg_construction_edge(
     """Record an accept/reject decision for one candidate construction edge."""
     build = _find_build_record(run_id, build_root=build_root)
     _require_build_artifacts(build)
-    target_key = request.edge_key()
-    edge_rows = _read_edge_rows(Path(build.edges_path))
-    updated_edge = _review_edge_row(edge_rows, target_key=target_key, action=request.action)
-    _write_edge_rows(Path(build.edges_path), edge_rows)
-
-    manifest = _load_json_object(Path(build.manifest_path), object_name="construction manifest")
-    summary = _load_json_object(Path(build.summary_path), object_name="construction summary")
-    _refresh_review_summary(summary, edge_rows)
-    _refresh_manifest_review_summary(manifest, summary)
-    _refresh_review_queue_artifact(build, updated_edge)
-    decision = review_decision_for_edge(
-        target_id=target_key,
-        target_key=target_key,
-        action=request.action,
-        reviewer=request.reviewer,
-        note=request.note,
-        proposed_payload=request.proposed_payload or updated_edge,
-        metadata={
-            "run_id": build.run_id,
-            "edge": updated_edge,
-            **request.metadata,
-        },
+    result = review_kg_construction_edge_artifact(
+        ReviewKGConstructionEdgeConfig(
+            output_dir=Path(build.output_dir),
+            target_key=request.target_key,
+            head=request.head,
+            relation=request.relation,
+            tail=request.tail,
+            scenario=request.scenario,
+            action=request.action,
+            reviewer=request.reviewer,
+            note=request.note,
+            proposed_payload=request.proposed_payload,
+            metadata=request.metadata,
+        )
     )
-    decision_path = kg_construction_artifact_paths(build.output_dir)["review_decisions"]
-    append_review_decision(decision_path, decision)
-    manifest.setdefault("review_decisions", []).append(decision.model_dump(mode="json"))
-    _write_json_object(Path(build.summary_path), summary)
-    _write_json_object(Path(build.manifest_path), manifest)
-    _refresh_publish_snapshot_artifacts(build)
     refreshed_build = _build_record_from_manifest_path(Path(build.manifest_path))
     return KGConstructionEdgeReviewResponse(
         build=refreshed_build,
-        decision=decision,
-        edge=updated_edge,
-        summary=summary,
+        decision=result.decision,
+        edge=result.edge,
+        summary=result.summary,
         manifest_path=build.manifest_path,
         edges_path=build.edges_path,
     )
@@ -919,33 +902,6 @@ def _read_edge_rows(path: Path) -> list[dict[str, str]]:
         return [{key: row.get(key, "") for key in EDGE_COLUMNS} for row in reader]
 
 
-def _write_edge_rows(path: Path, rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=EDGE_COLUMNS)
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _review_edge_row(
-    rows: list[dict[str, str]],
-    *,
-    target_key: str,
-    action: Literal["accept", "reject"],
-) -> dict[str, Any]:
-    for row in rows:
-        if _edge_key_from_row(row) != target_key:
-            continue
-        row["feedback_count"] = str(_int_value(row.get("feedback_count")) + 1)
-        if action == "accept":
-            row["review_status"] = "reviewed"
-            row["accepted_count"] = str(_int_value(row.get("accepted_count")) + 1)
-        elif action == "reject":
-            row["review_status"] = "rejected"
-            row["rejected_count"] = str(_int_value(row.get("rejected_count")) + 1)
-        return dict(row)
-    raise ValueError(f"unknown construction edge target_key: {target_key}")
-
-
 def _edge_key_from_row(row: dict[str, str]) -> str:
     return _safe_edge_key(
         "|".join(
@@ -1136,95 +1092,6 @@ def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
         json.dumps(payload, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-
-
-def _write_json_list(path: Path, payload: list[Any]) -> None:
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-
-
-def _refresh_review_queue_artifact(
-    build: KGConstructionBuildRecord,
-    updated_edge: dict[str, Any],
-) -> None:
-    queue_path = _review_queue_artifact_path(build)
-    if queue_path is None:
-        return
-    payload = _load_json_list(queue_path, object_name="construction review queue")
-    target_key = _edge_key_from_row(
-        {key: str(updated_edge.get(key, "")) for key in EDGE_COLUMNS}
-    )
-    updated = False
-    for item in payload:
-        if not isinstance(item, dict):
-            continue
-        candidate = item.get("candidate_payload")
-        if not isinstance(candidate, dict):
-            candidate = {}
-        item_key = str(item.get("target_key") or candidate.get("edge_id") or "")
-        if item_key != target_key:
-            continue
-        candidate.update(updated_edge)
-        candidate["edge_id"] = target_key
-        item["candidate_payload"] = candidate
-        item["review_status"] = updated_edge.get("review_status", "")
-        item["feedback_count"] = _int_value(updated_edge.get("feedback_count"))
-        item["accepted_count"] = _int_value(updated_edge.get("accepted_count"))
-        item["rejected_count"] = _int_value(updated_edge.get("rejected_count"))
-        item["source"] = updated_edge.get("source", item.get("source", ""))
-        item["evidence"] = updated_edge.get("evidence", item.get("evidence", ""))
-        item["confidence"] = _float_value(updated_edge.get("confidence"))
-        item["scenario"] = updated_edge.get("scenario", item.get("scenario", ""))
-        item["relation_family"] = updated_edge.get(
-            "relation_family",
-            item.get("relation_family", ""),
-        )
-        updated = True
-    if updated:
-        _write_json_list(queue_path, payload)
-
-
-def _refresh_publish_snapshot_artifacts(build: KGConstructionBuildRecord) -> None:
-    artifact_paths = kg_construction_artifact_paths(build.output_dir)
-    graph = KnowledgeGraph.from_csv(build.nodes_path, build.edges_path)
-    decisions = load_review_decisions(artifact_paths["review_decisions"])
-    snapshot = build_publish_snapshot(
-        kg_build_id=build.run_id,
-        nodes=tuple(graph.nodes.values()),
-        edges=tuple(graph.edges),
-        review_decisions=decisions,
-    )
-    write_publish_snapshot(
-        snapshot,
-        nodes_path=artifact_paths["published_nodes"],
-        edges_path=artifact_paths["published_edges"],
-        report_path=artifact_paths["publish_report"],
-    )
-
-
-def _refresh_review_summary(
-    summary: dict[str, Any],
-    edge_rows: list[dict[str, str]],
-) -> None:
-    review_counts = Counter(row.get("review_status", "") for row in edge_rows)
-    review_counts.pop("", None)
-    summary["review_status_counts"] = dict(sorted(review_counts.items()))
-
-
-def _refresh_manifest_review_summary(
-    manifest: dict[str, Any],
-    summary: dict[str, Any],
-) -> None:
-    manifest_summary = manifest.get("summary")
-    if isinstance(manifest_summary, dict):
-        manifest_summary["review_status_counts"] = summary.get("review_status_counts", {})
-    run = manifest.get("run")
-    if isinstance(run, dict) and summary.get("review_status_counts"):
-        statuses = set(_int_dict(summary.get("review_status_counts")))
-        if statuses and "auto" not in statuses:
-            run["status"] = "reviewed"
 
 
 def _dict_value(payload: dict[str, Any], key: str) -> dict[str, Any]:
