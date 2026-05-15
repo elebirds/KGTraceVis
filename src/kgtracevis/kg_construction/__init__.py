@@ -97,6 +97,8 @@ from kgtracevis.kg_construction.profiles import (
     GENERIC_PROFILE,
     TEP_PROFILE,
     RcaProfile,
+    RelationFamilyPolicy,
+    SemanticProjectionRule,
     profile_for_scenario,
 )
 from kgtracevis.kg_construction.publish import (
@@ -176,8 +178,10 @@ __all__ = [
     "ParsedKGSourceExtractor",
     "RcaProfile",
     "RcaReasoningView",
+    "RelationFamilyPolicy",
     "ReviewQueueItem",
     "SemanticLayerResult",
+    "SemanticProjectionRule",
     "SourceAuditGraph",
     "SourceLibraryRecord",
     "SourceRecord",

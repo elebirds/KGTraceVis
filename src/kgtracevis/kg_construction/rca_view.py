@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from kgtracevis.kg.graph import KGEdge, KGNode
 from kgtracevis.kg_construction.profiles import RcaProfile
@@ -39,6 +39,9 @@ def build_rca_reasoning_view(
         )
         for edge in edges
     )
+    relation_families = sorted(
+        {edge.relation_family for edge in rca_edges if edge.relation_family}
+    )
     manifest = {
         "artifact_type": "rca_view_manifest_v1",
         "profile": profile.domain_id,
@@ -50,9 +53,11 @@ def build_rca_reasoning_view(
         "propagation_edge_count": sum(edge.propagation_enabled for edge in rca_edges),
         "root_candidate_count": len(root_candidate_ids),
         "observable_count": len(observable_ids),
-        "relation_families": sorted(
-            {edge.relation_family for edge in rca_edges if edge.relation_family}
-        ),
+        "relation_families": relation_families,
+        "relation_family_policies": {
+            family: asdict(profile.relation_family_policy_for(family))
+            for family in relation_families
+        },
     }
     return RcaReasoningView(nodes=nodes, edges=rca_edges, manifest=manifest)
 
@@ -70,6 +75,23 @@ def _annotate_edge(
         family,
         explicit=edge.propagation_enabled,
     )
+    propagation_direction = profile.propagation_direction_for(
+        family,
+        explicit=edge.propagation_direction if edge.propagation_direction != "forward" else "",
+    )
+    propagation_priority = profile.propagation_priority_for(
+        family,
+        explicit=edge.propagation_priority if edge.propagation_priority else None,
+    )
+    attenuation = profile.attenuation_for(
+        family,
+        explicit=edge.attenuation if edge.attenuation != 1.0 else None,
+    )
+    edge_weight = profile.edge_weight_for(
+        family,
+        base_weight=edge.weight,
+        explicit=edge.edge_weight,
+    )
     return KGEdge(
         head=edge.head,
         relation=edge.relation,
@@ -85,10 +107,10 @@ def _annotate_edge(
         rejected_count=edge.rejected_count,
         relation_family=family,
         propagation_enabled=propagation_enabled,
-        propagation_direction=edge.propagation_direction or "forward",
-        propagation_priority=edge.propagation_priority or (1.0 if propagation_enabled else 0.0),
-        attenuation=edge.attenuation,
-        edge_weight=edge.edge_weight if edge.edge_weight is not None else edge.weight,
+        propagation_direction=propagation_direction,
+        propagation_priority=propagation_priority if propagation_enabled else 0.0,
+        attenuation=attenuation,
+        edge_weight=edge_weight,
         root_candidate=edge.root_candidate or edge.head in root_candidate_ids,
         observable=edge.observable or edge.tail in observable_ids,
         event_anchor=edge.event_anchor,

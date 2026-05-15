@@ -6,6 +6,33 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class SemanticProjectionRule:
+    """Profile rule for projecting one source relation into the semantic layer."""
+
+    target_relation: str
+    swap_endpoints: bool = False
+
+    def normalized_target(self) -> str:
+        """Return the target relation using KG relation naming."""
+        return self.target_relation.strip().upper()
+
+
+@dataclass(frozen=True)
+class RelationFamilyPolicy:
+    """RCA defaults for one semantic relation family."""
+
+    propagation_enabled: bool = False
+    propagation_direction: str = "forward"
+    propagation_priority: float = 0.0
+    attenuation: float = 1.0
+    edge_weight_multiplier: float = 1.0
+
+    def edge_weight_for(self, base_weight: float) -> float:
+        """Return the family-adjusted RCA edge weight."""
+        return max(0.0, min(1.0, base_weight * self.edge_weight_multiplier))
+
+
+@dataclass(frozen=True)
 class RcaProfile:
     """Scenario-specific policy for projection, RCA view, and review priority."""
 
@@ -15,8 +42,10 @@ class RcaProfile:
     keep_labels: frozenset[str]
     relation_whitelist: frozenset[str]
     relation_rewrites: dict[str, str] = field(default_factory=dict)
+    semantic_projection_rules: dict[str, SemanticProjectionRule] = field(default_factory=dict)
     relation_families: dict[str, str] = field(default_factory=dict)
     propagation_families: frozenset[str] = frozenset()
+    relation_family_policies: dict[str, RelationFamilyPolicy] = field(default_factory=dict)
     root_candidate_labels: frozenset[str] = frozenset()
     observable_labels: frozenset[str] = frozenset()
     task_view: str = "path_ranking_view"
@@ -25,7 +54,17 @@ class RcaProfile:
     def rewrite_relation(self, relation: str) -> str:
         """Return the profile-normalized relation name."""
         normalized = relation.strip().upper()
+        if normalized in self.semantic_projection_rules:
+            return self.semantic_projection_rules[normalized].normalized_target()
         return self.relation_rewrites.get(normalized, normalized)
+
+    def projection_rule_for(self, relation: str) -> SemanticProjectionRule:
+        """Return the semantic projection rule for a source relation."""
+        normalized = relation.strip().upper()
+        return self.semantic_projection_rules.get(
+            normalized,
+            SemanticProjectionRule(target_relation=self.rewrite_relation(normalized)),
+        )
 
     def relation_family_for(self, relation: str, explicit: str = "") -> str:
         """Return relation family from explicit metadata or profile defaults."""
@@ -37,7 +76,52 @@ class RcaProfile:
         """Return whether a relation family participates in propagation."""
         if explicit is not None:
             return explicit
-        return relation_family in self.propagation_families
+        return self.relation_family_policy_for(relation_family).propagation_enabled
+
+    def relation_family_policy_for(self, relation_family: str) -> RelationFamilyPolicy:
+        """Return RCA policy defaults for a relation family."""
+        family = relation_family.strip().upper()
+        if family in self.relation_family_policies:
+            return self.relation_family_policies[family]
+        enabled = family in self.propagation_families
+        return RelationFamilyPolicy(
+            propagation_enabled=enabled,
+            propagation_priority=1.0 if enabled else 0.0,
+        )
+
+    def propagation_direction_for(self, relation_family: str, explicit: str = "") -> str:
+        """Return propagation direction from explicit metadata or profile policy."""
+        if explicit.strip():
+            return explicit.strip().lower()
+        return self.relation_family_policy_for(relation_family).propagation_direction
+
+    def propagation_priority_for(
+        self,
+        relation_family: str,
+        explicit: float | None = None,
+    ) -> float:
+        """Return propagation priority from explicit metadata or profile policy."""
+        if explicit is not None:
+            return explicit
+        return self.relation_family_policy_for(relation_family).propagation_priority
+
+    def attenuation_for(self, relation_family: str, explicit: float | None = None) -> float:
+        """Return propagation attenuation from explicit metadata or profile policy."""
+        if explicit is not None:
+            return explicit
+        return self.relation_family_policy_for(relation_family).attenuation
+
+    def edge_weight_for(
+        self,
+        relation_family: str,
+        *,
+        base_weight: float,
+        explicit: float | None = None,
+    ) -> float:
+        """Return RCA edge weight from explicit metadata or profile policy."""
+        if explicit is not None:
+            return explicit
+        return self.relation_family_policy_for(relation_family).edge_weight_for(base_weight)
 
 
 GENERIC_PROFILE = RcaProfile(
@@ -98,6 +182,36 @@ GENERIC_PROFILE = RcaProfile(
         "SUGGESTS_ROOT_CAUSE": "CAUSES",
     },
     propagation_families=frozenset({"CAUSES", "AFFECTS", "DEPENDS_ON", "OBSERVATION"}),
+    relation_family_policies={
+        "OBSERVATION": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="reverse",
+            propagation_priority=0.7,
+            attenuation=0.85,
+            edge_weight_multiplier=0.8,
+        ),
+        "CAUSES": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=1.0,
+            attenuation=1.0,
+        ),
+        "AFFECTS": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.85,
+            attenuation=0.9,
+        ),
+        "DEPENDS_ON": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="reverse",
+            propagation_priority=0.6,
+            attenuation=0.8,
+            edge_weight_multiplier=0.9,
+        ),
+        "PART_OF": RelationFamilyPolicy(propagation_enabled=False),
+        "ALIGNS_TO": RelationFamilyPolicy(propagation_enabled=False),
+    },
     root_candidate_labels=frozenset({"Fault", "RootCause", "Component", "Equipment"}),
     observable_labels=frozenset({"Variable", "Metric", "Signal", "Event", "Alert", "Defect"}),
 )
@@ -176,6 +290,54 @@ TEP_PROFILE = RcaProfile(
             "FAULT_SOURCE",
         }
     ),
+    relation_family_policies={
+        "OBSERVATION": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="reverse",
+            propagation_priority=0.75,
+            attenuation=0.85,
+            edge_weight_multiplier=0.8,
+        ),
+        "CONTROL": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.9,
+            attenuation=0.9,
+        ),
+        "MATERIAL_FLOW": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.8,
+            attenuation=0.85,
+        ),
+        "ENERGY_TRANSFER": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.75,
+            attenuation=0.85,
+        ),
+        "PHASE_CHANGE": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.7,
+            attenuation=0.8,
+        ),
+        "COMPOSITION": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.65,
+            attenuation=0.8,
+        ),
+        "FAULT_SOURCE": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="reverse",
+            propagation_priority=1.0,
+            attenuation=1.0,
+            edge_weight_multiplier=0.7,
+        ),
+        "ALIGNMENT": RelationFamilyPolicy(propagation_enabled=False),
+        "SEMANTIC_SUPPORT": RelationFamilyPolicy(propagation_enabled=False),
+    },
     root_candidate_labels=frozenset({"Component", "Equipment", "Fault", "FaultAnchor"}),
     observable_labels=frozenset({"Variable", "SignalNode", "FaultAnchor"}),
     task_view="root_kgd_view",

@@ -253,6 +253,14 @@ and chunk audit, source-grounded candidate generation, DraftKG conversion,
 alignment/projection/review queues, and versioned build artifacts. The LLM is
 one adapter inside that workspace and cannot skip review or publish.
 
+Domain profile policy now controls more of the semantic/RCA shape. Profiles can
+define semantic projection rules that rewrite a source relation and optionally
+swap endpoints before the semantic layer is built. They also define
+relation-family RCA defaults for propagation enablement, direction, priority,
+attenuation, and edge-weight scaling. Source-backed extractor metadata still
+wins when it explicitly supplies those RCA fields; otherwise the profile makes
+the reasoning-view defaults reproducible across domains.
+
 The reusable orchestration entry point for this material-driven path is
 `kgtracevis.workflows.material_kg_construction.run_material_kg_construction_workflow`.
 It accepts selected material IDs, optionally extracts missing/selected materials

@@ -40,9 +40,17 @@ extractor inputs unchanged.
 
 `Source Audit Graph` preserves the full provenance-rich extraction state for debug and drill-down. It is not the default RCA runtime graph.
 
-`Semantic Layer` projects aligned drafts through a domain profile. It keeps task-relevant labels, rewrites relations, and assigns relation families.
+`Semantic Layer` projects aligned drafts through a domain profile. It keeps
+task-relevant labels, applies profile semantic projection rules, rewrites
+relations, can swap endpoints when a source relation has the opposite
+direction, and assigns relation families.
 
-`RCA Reasoning View` annotates the semantic layer with RCA metadata: `relation_family`, `propagation_enabled`, `propagation_direction`, `propagation_priority`, `attenuation`, `edge_weight`, root/observable flags, task view, confidence policy, and `kg_build_id`.
+`RCA Reasoning View` annotates the semantic layer with RCA metadata:
+`relation_family`, `propagation_enabled`, `propagation_direction`,
+`propagation_priority`, `attenuation`, `edge_weight`, root/observable flags,
+task view, confidence policy, and `kg_build_id`. Relation-family defaults now
+come from the profile policy; extractor/import metadata may still override
+those defaults when it is source-backed.
 
 `Review Queue` prioritizes candidates that need human attention, especially causal/root-cause edges, low-confidence propagation edges, new anchors, merge candidates, unresolved entities, alignment conflicts, and facts that can affect Top-K RCA paths. Every item carries `review_status`, `priority`, `reason`, and `recommended_action`. Edge decisions can refresh the publish snapshot; non-edge alignment decisions are recorded and synchronized in the queue first, without automatically changing KG facts.
 
@@ -65,7 +73,13 @@ OBSERVATION, CONTROL, MATERIAL_FLOW, ENERGY_TRANSFER, PHASE_CHANGE,
 COMPOSITION, FAULT_SOURCE, ALIGNMENT
 ```
 
-Profiles own label keep-lists, relation whitelists, relation rewrites, propagation families, root candidate labels, observable labels, task view names, and confidence policy.
+Profiles own label keep-lists, relation whitelists, semantic projection rules,
+relation rewrites, relation-family RCA policies, root candidate labels,
+observable labels, task view names, and confidence policy. A projection rule can
+map a source relation to a semantic relation and optionally swap endpoints. A
+relation-family policy defines whether propagation is enabled plus the default
+direction, priority, attenuation, and edge-weight multiplier used by the RCA
+reasoning view.
 
 ## LLM Boundary
 

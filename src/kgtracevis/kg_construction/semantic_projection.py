@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from kgtracevis.kg.graph import KGEdge, KGNode
+from kgtracevis.kg_construction.confidence_assigner import edge_weight
 from kgtracevis.kg_construction.draft import DraftKG, DraftRelation
 from kgtracevis.kg_construction.profiles import RcaProfile
 from kgtracevis.kg_construction.triple_cleaner import (
@@ -61,21 +62,49 @@ def project_semantic_layer(draft: DraftKG, profile: RcaProfile) -> SemanticLayer
 
 
 def _project_relation(relation: DraftRelation, *, profile: RcaProfile) -> DraftRelation:
-    rewritten = profile.rewrite_relation(relation.relation)
+    projection_rule = profile.projection_rule_for(relation.relation)
+    rewritten = projection_rule.normalized_target()
     family = profile.relation_family_for(
         rewritten,
         explicit=str(relation.metadata.get("relation_family") or ""),
     )
+    head = relation.tail if projection_rule.swap_endpoints else relation.head
+    tail = relation.head if projection_rule.swap_endpoints else relation.tail
     metadata = dict(relation.metadata)
     metadata["relation_family"] = family
-    metadata.setdefault(
-        "propagation_enabled",
-        profile.propagation_enabled_for(
-            family,
-            explicit=_optional_bool(relation.metadata.get("propagation_enabled")),
-        ),
+    metadata["projection_source_relation"] = relation.relation.strip().upper()
+    metadata["projection_target_relation"] = rewritten
+    if projection_rule.swap_endpoints:
+        metadata["projection_swapped_endpoints"] = True
+    propagation_enabled = _optional_bool(relation.metadata.get("propagation_enabled"))
+    metadata["propagation_enabled"] = (
+        propagation_enabled
+        if propagation_enabled is not None
+        else profile.propagation_enabled_for(family)
     )
-    return replace(relation, relation=rewritten, metadata=metadata)
+    propagation_direction = str(relation.metadata.get("propagation_direction") or "").strip()
+    metadata["propagation_direction"] = (
+        propagation_direction.lower()
+        if propagation_direction
+        else profile.propagation_direction_for(family)
+    )
+    propagation_priority = _optional_float(relation.metadata.get("propagation_priority"))
+    metadata["propagation_priority"] = profile.propagation_priority_for(
+        family,
+        explicit=propagation_priority,
+    )
+    attenuation = _optional_float(relation.metadata.get("attenuation"))
+    metadata["attenuation"] = profile.attenuation_for(
+        family,
+        explicit=attenuation,
+    )
+    explicit_edge_weight = _optional_float(relation.metadata.get("edge_weight"))
+    metadata["edge_weight"] = profile.edge_weight_for(
+        family,
+        base_weight=edge_weight(relation.confidence),
+        explicit=explicit_edge_weight,
+    )
+    return replace(relation, head=head, relation=rewritten, tail=tail, metadata=metadata)
 
 
 def _optional_bool(value: object) -> bool | None:
@@ -87,3 +116,14 @@ def _optional_bool(value: object) -> bool | None:
     if not text:
         return None
     return text.lower() in {"1", "true", "yes", "y"}
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return float(text)

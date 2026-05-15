@@ -311,6 +311,13 @@ and RCA reasoning all consume these build artifacts.
   and the claim boundary that LLM output is unreviewed candidate material.
   Manifests should use chunk locators and text hashes instead of duplicating
   full source text; full text belongs in the source-chunk audit store.
+- Domain profiles own semantic projection and RCA relation-family policy.
+  Projection rules may rewrite relations and swap endpoints before semantic
+  layer export. Relation-family policies define propagation enablement,
+  direction, priority, attenuation, and edge-weight scaling for RCA views.
+  Source-backed extractor/import metadata can override those defaults, but
+  hard-coded RCA defaults should not be added directly to `semantic_projection`
+  or `rca_view`.
 - Source Library manifests passed by `--source-library` are loaded through
   `load_source_library(...)`; relative source paths resolve from the manifest
   directory before parsing or extraction.
