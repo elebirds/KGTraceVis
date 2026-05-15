@@ -40,6 +40,45 @@ Implemented and verified the adapter-first MVTec/WM811K paper pipeline: determin
 - None - task complete
 
 
+## Session 41: M24 construction overlay runtime RCA smoke
+
+**Date**: 2026-05-15
+**Task**: M24 construction overlay runtime RCA smoke
+**Branch**: `main`
+
+### Summary
+
+Added an acceptance smoke path that loads a freshly constructed material KG artifact as a runtime `KnowledgeGraph` overlay and runs generic RCA path ranking against it. The smoke now verifies the constructed edge produces an RCA path with `path_strength`, `rca_score`, source edge IDs, and the originating `kg_build_id`.
+
+### Main Changes
+
+- Extended RCA-KG construction smoke from three paths to four: toy generic, material direct, runtime overlay, and TEP.
+- Added runtime overlay assertions to prove construction artifacts feed the existing entity linking and path ranking runtime.
+- Updated smoke workflow tests and CLI expectations.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `296560f` | Add runtime overlay RCA construction smoke |
+
+### Testing
+
+- [OK] `uv run --extra dev ruff check .`
+- [OK] `uv run --extra dev mypy src tests scripts`
+- [OK] `uv run --extra dev pytest -q`
+- [OK] `uv run python scripts/run_examples.py`
+- [OK] `uv run python scripts/smoke_rca_kg_construction.py --tep-kg-root /Users/hhm/code/TEP_KG --require-tep --overwrite`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Continue productizing source-to-runtime RCA overlay behavior and acceptance coverage.
+
+
 ## Session 2: PatchCore and model asset cleanup
 
 **Date**: 2026-05-12
