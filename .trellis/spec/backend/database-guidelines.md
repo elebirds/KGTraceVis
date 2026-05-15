@@ -270,6 +270,8 @@ and RCA reasoning all consume these build artifacts.
   `uv run python scripts/build_source_kg.py [--source-library PATH] [--toy-generic-structured-source] [--toy-generic-document-source] [--tep-semantic-lift-dir DIR] [--tep-variable-mapping PATH] [--tep-rca-graph-dir DIR] [--run-id ID] --output-dir DIR`
 - Review CLI:
   `uv run python scripts/review_source_kg.py --build-dir DIR --action accept|reject --target-key HEAD|RELATION|TAIL|SCENARIO`
+- Acceptance smoke CLI:
+  `uv run python scripts/smoke_rca_kg_construction.py --output-dir DIR [--tep-kg-root TEP_KG_ROOT] [--require-tep] [--overwrite]`
 - Service build source types:
   `structured_records`, `manual_table`, `tep_semantic_lift`,
   `tep_variable_mapping`, `tep_rca_graph`
@@ -331,6 +333,9 @@ and RCA reasoning all consume these build artifacts.
   `src/kgtracevis/workflows/`, not duplicate artifact mutation logic.
 - TEP RCA graph imports are source-backed candidates. TEP_KG `accept` does not
   become KGTraceVis `reviewed` automatically.
+- Acceptance smoke must build the toy generic path from a Source Library
+  manifest and must only run the TEP path when explicit TEP_KG artifact paths
+  are supplied or required.
 - External IDs belong in the alignment manifest canonical table by default.
   Only source-backed mapping rows should materialize explicit `ALIGNS_TO`
   draft relations, such as TEP variable mapping aliases.

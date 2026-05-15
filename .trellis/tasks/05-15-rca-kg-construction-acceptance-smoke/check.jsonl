@@ -1,0 +1,3 @@
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"artifact verification"}
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"script/workflow boundary"}
+{"type":"spec","path":".trellis/spec/backend/quality-guidelines.md","reason":"quality gate"}

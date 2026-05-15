@@ -66,6 +66,10 @@ def run_real_model_pipeline(
 def run_source_kg_construction_workflow(
     config: SourceKGConstructionWorkflowConfig,
 ) -> SourceKGConstructionWorkflowResult: ...
+
+def run_kg_construction_acceptance_smoke(
+    config: KGConstructionSmokeConfig,
+) -> KGConstructionSmokeResult: ...
 ```
 
 CLI modules may re-export moved helper functions briefly for backward

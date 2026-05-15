@@ -1,0 +1,5 @@
+{"type":"spec","path":".trellis/spec/backend/workflow-architecture.md","reason":"new reusable smoke workflow plus CLI client"}
+{"type":"spec","path":".trellis/spec/backend/database-guidelines.md","reason":"RCA KG construction artifact contract and acceptance paths"}
+{"type":"spec","path":".trellis/spec/backend/quality-guidelines.md","reason":"verification commands"}
+{"type":"guide","path":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"smoke crosses CLI, workflow, artifacts, source libraries"}
+{"type":"guide","path":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"reuse source library and construction workflow helpers"}

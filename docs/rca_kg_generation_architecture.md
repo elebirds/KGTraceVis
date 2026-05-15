@@ -274,3 +274,19 @@ uv run python scripts/build_source_kg.py \
 ```
 
 The resulting `nodes.csv` and `edges.csv` are an RCA view snapshot, not proof that all imported TEP facts are reviewed industrial truth.
+
+To run both acceptance paths through one command, use the smoke workflow. The
+toy generic path always runs from a generated Source Library manifest. The TEP
+path runs when a TEP_KG root is provided:
+
+```bash
+uv run python scripts/smoke_rca_kg_construction.py \
+  --output-dir runs/source_kg_smoke \
+  --tep-kg-root /Users/hhm/code/TEP_KG \
+  --require-tep \
+  --overwrite
+```
+
+The smoke summary checks that every required construction artifact exists for
+each built path and that TEP RCA metadata such as `FAULT_SOURCE`,
+`propagation_enabled`, and `FaultAnchor` survives the import.
