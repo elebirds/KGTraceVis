@@ -120,6 +120,48 @@ Added a reusable candidate KG overlay validation workflow and CLI. A source-to-K
 - Continue tightening product-facing construction validation and runtime publication readiness.
 
 
+## Session 43: M26 expose KG overlay validation API
+
+**Date**: 2026-05-15
+**Task**: M26 expose KG overlay validation API
+**Branch**: `main`
+
+### Summary
+
+Exposed candidate KG overlay validation through the construction service/API. Builds can now be validated as runtime RCA overlays via `POST /api/kg/construction/builds/{run_id}/validate-overlay`, which writes `kg_overlay_validation_report.json` and serves it through artifact key `kg_overlay_validation_report`. Also fixed the generic profile to retain `FaultType`, `AnomalyType`, and `DefectType` so structured RCA source nodes are not dropped during semantic projection.
+
+### Main Changes
+
+- Added service DTOs and `validate_kg_construction_overlay`.
+- Added FastAPI route for build-scoped overlay validation.
+- Added stable artifact retrieval for `kg_overlay_validation_report`.
+- Added service regression test proving runtime RCA path metadata preserves `kg_build_id`.
+- Updated generic builtin and JSON profile label policies plus docs/spec.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f462828` | Expose KG overlay validation through API |
+
+### Testing
+
+- [OK] `uv run --extra dev ruff check .`
+- [OK] `uv run --extra dev mypy src tests scripts`
+- [OK] `uv run --extra dev pytest -q`
+- [OK] `uv run python scripts/run_examples.py`
+- [OK] `uv run python scripts/smoke_rca_kg_construction.py --tep-kg-root /Users/hhm/code/TEP_KG --require-tep --overwrite`
+- [OK] `uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_smoke/material_direct --example-dir data/examples --output-path runs/source_kg_smoke/material_direct/kg_overlay_validation_report.json`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Continue toward a final readiness pass: documentation consistency, acceptance matrix, and remaining sharp edges.
+
+
 ## Session 2: PatchCore and model asset cleanup
 
 **Date**: 2026-05-12
