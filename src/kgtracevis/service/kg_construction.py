@@ -28,6 +28,7 @@ from kgtracevis.kg.import_neo4j import (
 from kgtracevis.kg_construction import KGConstructionSource
 from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS
 from kgtracevis.kg_construction.models import (
+    KG_CONSTRUCTION_ARTIFACT_FILENAMES,
     KGConstructionReviewDecision,
     kg_construction_artifact_paths,
 )
@@ -641,6 +642,25 @@ def get_kg_construction_build(
     return KGConstructionBuildDetail(build=build, summary=summary, manifest=manifest)
 
 
+def get_kg_construction_build_artifact_path(
+    run_id: str,
+    artifact_key: str,
+    *,
+    build_root: Path | None = None,
+) -> Path:
+    """Return a safe local file path for one construction build artifact key."""
+    key = _safe_artifact_key(artifact_key)
+    if not _known_construction_artifact_key(key):
+        raise ValueError(f"unknown construction artifact key: {artifact_key}")
+    build = _find_build_record(run_id, build_root=build_root)
+    artifact_path = _resolved_construction_artifact_path(build, key)
+    if artifact_path.is_dir():
+        raise ValueError(f"construction build artifact is a directory: {key}")
+    if not artifact_path.is_file():
+        raise ValueError(f"construction build artifact not found: {key}")
+    return artifact_path
+
+
 def validate_kg_construction_build(
     run_id: str,
     *,
@@ -943,6 +963,103 @@ def _artifact_path(
     if fallback is not None and fallback.is_file():
         return str(fallback)
     return None
+
+
+def _safe_artifact_key(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("artifact_key cannot be empty")
+    if stripped in {".", ".."}:
+        raise ValueError("artifact_key must not be a traversal segment")
+    if "/" in stripped or "\\" in stripped or Path(stripped).name != stripped:
+        raise ValueError("artifact_key must not contain path separators")
+    if stripped != re.sub(r"[^A-Za-z0-9_.-]+", "_", stripped):
+        raise ValueError("artifact_key may contain only letters, numbers, '.', '_', and '-'")
+    return stripped
+
+
+def _known_construction_artifact_key(key: str) -> bool:
+    return key in KG_CONSTRUCTION_ARTIFACT_FILENAMES or key == "output_dir"
+
+
+def _resolved_construction_artifact_path(
+    build: KGConstructionBuildRecord,
+    key: str,
+) -> Path:
+    output_dir = Path(build.output_dir)
+    artifact_map = _construction_build_artifact_map(build, output_dir=output_dir)
+    value = artifact_map.get(key)
+    if value is None:
+        raise ValueError(f"unknown construction artifact key: {key}")
+    return _resolve_artifact_path_value(value, output_dir=output_dir, key=key)
+
+
+def _construction_build_artifact_map(
+    build: KGConstructionBuildRecord,
+    *,
+    output_dir: Path,
+) -> dict[str, str | Path]:
+    artifacts: dict[str, str | Path] = {
+        key: path
+        for key, path in kg_construction_artifact_paths(output_dir).items()
+        if _known_construction_artifact_key(key)
+    }
+    artifacts["output_dir"] = output_dir
+    artifacts.update(_artifact_map_from_json(Path(build.summary_path), "output"))
+    artifacts.update(_artifact_map_from_json(Path(build.manifest_path), "artifacts"))
+    return {
+        key: value
+        for key, value in artifacts.items()
+        if _known_construction_artifact_key(key)
+    }
+
+
+def _artifact_map_from_json(path: Path, field_name: str) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"construction build artifact metadata must be an object: {path}")
+    artifacts = payload.get(field_name)
+    if not isinstance(artifacts, dict):
+        return {}
+    return {
+        str(key): str(value)
+        for key, value in artifacts.items()
+        if isinstance(key, str) and value is not None and str(value)
+    }
+
+
+def _resolve_artifact_path_value(
+    value: str | Path,
+    *,
+    output_dir: Path,
+    key: str,
+) -> Path:
+    path = Path(value)
+    output_root = output_dir.resolve()
+    if path.is_absolute():
+        resolved = path.resolve()
+    else:
+        cwd_resolved = path.resolve()
+        if _is_relative_to(cwd_resolved, output_root):
+            resolved = cwd_resolved
+        else:
+            resolved = (output_dir / path).resolve()
+    if not (
+        resolved == output_root
+        or _is_relative_to(resolved, output_root)
+    ):
+        raise ValueError(f"construction build artifact path escapes output_dir: {key}")
+    return resolved
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
 
 
 def _publish_paths(

@@ -264,6 +264,123 @@ def test_kg_construction_build_route_writes_runtime_artifacts(
     assert Path(payload["rca_view_manifest_path"]).is_file()
     assert Path(payload["review_queue_path"]).is_file()
     assert Path(payload["publish_manifest_path"]).is_file()
+    assert Path(payload["diff_path"]).is_file()
+
+    nodes_artifact = client.get(
+        "/api/kg/construction/builds/kgbuild_api_unit/artifacts/nodes"
+    )
+    review_queue_artifact = client.get(
+        "/api/kg/construction/builds/kgbuild_api_unit/artifacts/review_queue"
+    )
+    decisions_artifact = client.get(
+        "/api/kg/construction/builds/kgbuild_api_unit/artifacts/review_decisions"
+    )
+    diff_artifact = client.get(
+        "/api/kg/construction/builds/kgbuild_api_unit/artifacts/kg_construction_diff"
+    )
+    traversal_artifact = client.get(
+        "/api/kg/construction/builds/kgbuild_api_unit/artifacts/..%2Fnodes"
+    )
+    invalid_key = client.get(
+        "/api/kg/construction/builds/kgbuild_api_unit/artifacts/bad$key"
+    )
+    missing_key = client.get(
+        "/api/kg/construction/builds/kgbuild_api_unit/artifacts/not_a_real_key"
+    )
+
+    assert nodes_artifact.status_code == 200
+    assert "ApiManualSource" in nodes_artifact.text
+    assert review_queue_artifact.status_code == 200
+    assert isinstance(review_queue_artifact.json(), list)
+    assert decisions_artifact.status_code == 200
+    assert decisions_artifact.text == ""
+    assert diff_artifact.status_code == 200
+    assert diff_artifact.json()["scope"] == "fresh_build"
+    assert traversal_artifact.status_code == 404
+    assert invalid_key.status_code == 400
+    assert missing_key.status_code == 404
+
+
+def test_kg_construction_build_artifact_helper_resolves_safe_keys(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Construction artifact lookup should use stable keys, not raw paths."""
+    monkeypatch.setattr(
+        service_kg_construction,
+        "DEFAULT_SOURCE_KG_BUILD_DIR",
+        tmp_path / "source_kg_build",
+    )
+    build = service_kg_construction.run_kg_construction_build(
+        service_kg_construction.KGConstructionBuildRequest(
+            output_name="artifact_helper_runtime",
+            overwrite=True,
+            run_id="kgbuild_artifact_helper_unit",
+            sources=[
+                service_kg_construction.KGConstructionSourceInput(
+                    source_id="api_manual_unit",
+                    source_type="manual_table",
+                    scenario="tep",
+                    source_format="csv",
+                    source_text=_manual_source_csv(),
+                )
+            ],
+        )
+    )
+
+    nodes_path = service_kg_construction.get_kg_construction_build_artifact_path(
+        "kgbuild_artifact_helper_unit",
+        "nodes",
+    )
+    queue_path = service_kg_construction.get_kg_construction_build_artifact_path(
+        "kgbuild_artifact_helper_unit",
+        "review_queue",
+    )
+    decisions_path = service_kg_construction.get_kg_construction_build_artifact_path(
+        "kgbuild_artifact_helper_unit",
+        "review_decisions",
+    )
+
+    assert nodes_path == Path(build.nodes_path).resolve()
+    assert nodes_path.suffix == ".csv"
+    assert queue_path == Path(build.review_queue_path).resolve()
+    assert queue_path.suffix == ".json"
+    assert decisions_path == Path(build.summary["output"]["review_decisions"]).resolve()
+    assert decisions_path.suffix == ".jsonl"
+
+    alternate_queue_path = Path(build.output_dir) / "alternate_review_queue.json"
+    alternate_queue_path.write_text("[]", encoding="utf-8")
+    manifest_path = Path(build.manifest_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"]["review_queue"] = str(alternate_queue_path)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert service_kg_construction.get_kg_construction_build_artifact_path(
+        "kgbuild_artifact_helper_unit",
+        "review_queue",
+    ) == alternate_queue_path.resolve()
+
+    with pytest.raises(ValueError, match="unknown construction artifact key"):
+        service_kg_construction.get_kg_construction_build_artifact_path(
+            "kgbuild_artifact_helper_unit",
+            "nodes.csv",
+        )
+    with pytest.raises(ValueError, match="path separators"):
+        service_kg_construction.get_kg_construction_build_artifact_path(
+            "kgbuild_artifact_helper_unit",
+            "../nodes",
+        )
+    with pytest.raises(ValueError, match="is a directory"):
+        service_kg_construction.get_kg_construction_build_artifact_path(
+            "kgbuild_artifact_helper_unit",
+            "output_dir",
+        )
+
+    alternate_queue_path.unlink()
+    with pytest.raises(ValueError, match="artifact not found"):
+        service_kg_construction.get_kg_construction_build_artifact_path(
+            "kgbuild_artifact_helper_unit",
+            "review_queue",
+        )
 
 
 def test_kg_construction_build_registry_lists_details_and_validates(
@@ -1300,6 +1417,14 @@ def test_kg_material_direct_build_runs_material_workflow(
     assert payload["artifacts"]["kg_construction_diff"] == payload["diff_path"]
     manifest = json.loads(Path(payload["manifest_path"]).read_text(encoding="utf-8"))
     assert manifest["material_library"]["extraction_mode"] == "never"
+
+    artifact_response = client.get(
+        "/api/kg/construction/builds/kgbuild_pump_manual_direct/artifacts/"
+        "kg_construction_diff"
+    )
+
+    assert artifact_response.status_code == 200
+    assert artifact_response.json()["artifact_type"] == "kg_construction_diff_v1"
 
 
 def test_upload_run_prepares_visual_evidence_artifacts(

@@ -34,6 +34,7 @@ from kgtracevis.service.kg_construction import (
     KGConstructionPublishRequest,
     KGConstructionReviewQueueRequest,
     get_kg_construction_build,
+    get_kg_construction_build_artifact_path,
     get_kg_construction_review_queue,
     list_kg_construction_builds,
     list_kg_construction_source_uploads,
@@ -360,6 +361,27 @@ def create_app() -> FastAPI:
             return validate_kg_construction_build(run_id).model_dump(mode="json")
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/builds/{run_id}/artifacts/{artifact_key}")
+    def kg_construction_build_artifact(
+        run_id: str,
+        artifact_key: str,
+    ) -> FileResponse:
+        try:
+            return FileResponse(
+                get_kg_construction_build_artifact_path(run_id, artifact_key)
+            )
+        except ValueError as exc:
+            detail = str(exc)
+            status_code = (
+                404
+                if "unknown construction build run_id" in detail
+                or "unknown construction artifact key" in detail
+                or "construction build artifact not found" in detail
+                or "construction build artifact is a directory" in detail
+                else 400
+            )
+            raise HTTPException(status_code=status_code, detail=detail) from exc
 
     @app.post("/api/kg/construction/builds/{run_id}/publish")
     def kg_construction_build_publish(

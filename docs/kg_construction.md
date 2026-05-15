@@ -116,6 +116,7 @@ publish step:
 ```http
 GET /api/kg/construction/builds
 GET /api/kg/construction/builds/{run_id}
+GET /api/kg/construction/builds/{run_id}/artifacts/{artifact_key}
 POST /api/kg/construction/builds/{run_id}/validate
 GET /api/kg/construction/builds/{run_id}/review-queue
 POST /api/kg/construction/builds/{run_id}/review
@@ -126,6 +127,9 @@ The registry is file-backed in v0. It scans `runs/source_kg_build/*` for
 `kg_construction_manifest.json`, returns artifact paths and summary counts, and
 runs structured KG CSV QA on the selected build. Validation is read-only and
 does not import to Neo4j.
+The artifact endpoint serves one conventional construction artifact by stable
+key, such as `nodes`, `review_queue`, `review_decisions`, or
+`kg_construction_diff`, without accepting raw filesystem paths.
 
 The review endpoint is the pre-publish control point for candidate edges. It
 updates only the selected construction build's `edges.csv` and manifest. A

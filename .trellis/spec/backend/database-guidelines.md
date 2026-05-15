@@ -279,6 +279,8 @@ and RCA reasoning all consume these build artifacts.
   `tep_variable_mapping`, `tep_rca_graph`
 - Service review queue:
   `GET /api/kg/construction/builds/{run_id}/review-queue`
+- Service artifact retrieval:
+  `GET /api/kg/construction/builds/{run_id}/artifacts/{artifact_key}`
 - Service review action:
   `POST /api/kg/construction/builds/{run_id}/review`
 - Required artifact keys:
@@ -332,6 +334,9 @@ and RCA reasoning all consume these build artifacts.
   and `recommended_action`.
 - Service review queues prefer `review_queue.json` when present and fall back
   to `edges.csv` for legacy builds.
+- Service artifact retrieval accepts stable construction artifact keys only. It
+  must not accept raw filesystem paths and must reject path separators before
+  resolving the conventional artifact path for a known build.
 - `POST /review` and `scripts/review_source_kg.py` accept edge and non-edge
   review queue items. Edge decisions update `edges.csv` status/counters,
   refresh the matching `review_queue.json` candidate payload, append the
