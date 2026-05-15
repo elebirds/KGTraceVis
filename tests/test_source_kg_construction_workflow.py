@@ -60,6 +60,52 @@ def test_source_kg_construction_workflow_writes_candidate_artifacts(
     assert manifest["artifacts"]["nodes"].endswith("nodes.csv")
 
 
+def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
+    tmp_path: Path,
+) -> None:
+    """A toy generic source should produce draft, semantic, RCA, and review artifacts."""
+    output_dir = tmp_path / "generic_rca_build"
+
+    result = run_source_kg_construction_workflow(
+        SourceKGConstructionWorkflowConfig(
+            output_dir=output_dir,
+            sources=(
+                KGConstructionSource(
+                    source_id="toy_generic_source",
+                    source_type="manual_table",
+                    scenario="shared",
+                    text=_toy_generic_source_csv(),
+                    metadata={"source_format": "csv"},
+                ),
+            ),
+            run_id="kgbuild_toy_generic",
+        )
+    )
+
+    expected_files = [
+        result.nodes_path,
+        result.edges_path,
+        result.draft_manifest_path,
+        result.semantic_layer_manifest_path,
+        result.rca_view_manifest_path,
+        result.review_queue_path,
+        output_dir / "kg_construction_summary.json",
+    ]
+    assert all(path.is_file() for path in expected_files)
+    semantic_manifest = json.loads(result.semantic_layer_manifest_path.read_text())
+    rca_manifest = json.loads(result.rca_view_manifest_path.read_text())
+    review_queue = json.loads(result.review_queue_path.read_text())
+    edge_rows = _read_csv_rows(result.edges_path)
+
+    assert semantic_manifest["edge_count"] == 1
+    assert rca_manifest["kg_build_id"] == "kgbuild_toy_generic"
+    assert rca_manifest["propagation_edge_count"] == 1
+    assert edge_rows[0]["relation"] == "OBSERVED_BY"
+    assert edge_rows[0]["relation_family"] == "OBSERVATION"
+    assert edge_rows[0]["propagation_enabled"] == "true"
+    assert review_queue[0]["target_key"].endswith("|shared")
+
+
 def test_source_kg_construction_workflow_protects_existing_outputs(
     tmp_path: Path,
 ) -> None:
@@ -92,6 +138,18 @@ def _manual_source_csv() -> str:
             "ManualSource,Manual source,Variable,,,,tep,manual source row,0.71",
             "ManualTarget,Manual target,ProcessUnit,,,,tep,manual target row,0.71",
             ",,,ManualSource,BELONGS_TO,ManualTarget,tep,explicit manual source row,0.71",
+            "",
+        ]
+    )
+
+
+def _toy_generic_source_csv() -> str:
+    return "\n".join(
+        [
+            "id,name,label,head,relation,tail,scenario,evidence,confidence",
+            "PumpA,Pump A,Equipment,,,,shared,pump row,0.82",
+            "PressureSignal,Pressure signal,Variable,,,,shared,signal row,0.82",
+            ",,,PumpA,MEASURES,PressureSignal,shared,pressure is observed by Pump A sensor,0.62",
             "",
         ]
     )

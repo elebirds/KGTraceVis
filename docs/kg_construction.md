@@ -11,6 +11,9 @@ review status.
 
 For the full source-to-KG methodology and future system design, see
 [`source_to_kg_construction_system.md`](source_to_kg_construction_system.md).
+For the new RCA-oriented generation architecture, domain pack boundary, TEP_KG
+integration strategy, and layer manifests, see
+[`rca_kg_generation_architecture.md`](rca_kg_generation_architecture.md).
 
 ## Construction Lifecycle
 

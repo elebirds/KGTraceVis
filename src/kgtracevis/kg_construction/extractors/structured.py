@@ -1,9 +1,6 @@
-"""Pluggable source-to-KG extractor registry."""
+"""Structured source record extractor."""
 
 from __future__ import annotations
-
-from collections.abc import Iterable
-from typing import Protocol
 
 from kgtracevis.kg_construction.draft import (
     DraftEntity,
@@ -11,39 +8,8 @@ from kgtracevis.kg_construction.draft import (
     DraftRelation,
     KGConstructionSource,
 )
+from kgtracevis.kg_construction.extractors.base import ExtractorRegistry
 from kgtracevis.kg_construction.source_loader import load_structured_records
-
-
-class KGSourceExtractor(Protocol):
-    """Protocol implemented by source-to-KG extractor plugins."""
-
-    name: str
-    version: str
-    supported_source_types: tuple[str, ...]
-
-    def extract(self, source: KGConstructionSource) -> DraftKG:
-        """Extract draft KG rows from one source."""
-
-
-class ExtractorRegistry:
-    """Registry for source-type-specific KG extractors."""
-
-    def __init__(self, extractors: Iterable[KGSourceExtractor] = ()) -> None:
-        self._extractors_by_source_type: dict[str, KGSourceExtractor] = {}
-        for extractor in extractors:
-            self.register(extractor)
-
-    def register(self, extractor: KGSourceExtractor) -> None:
-        """Register an extractor for each of its supported source types."""
-        for source_type in extractor.supported_source_types:
-            self._extractors_by_source_type[source_type] = extractor
-
-    def extractor_for(self, source_type: str) -> KGSourceExtractor:
-        """Return the extractor registered for a source type."""
-        extractor = self._extractors_by_source_type.get(source_type)
-        if extractor is None:
-            raise ValueError(f"no KG source extractor registered for source_type={source_type}")
-        return extractor
 
 
 class StructuredRecordExtractor:
@@ -77,7 +43,6 @@ class StructuredRecordExtractor:
                 record.get("label") or record.get("entity_label") or record.get("node_label") or ""
             )
             if entity_id and entity_name and entity_label:
-                aliases = _split_aliases(str(record.get("aliases") or record.get("alias") or ""))
                 entities.append(
                     DraftEntity(
                         draft_id=f"{source.source_id}:entity:{index}",
@@ -86,12 +51,28 @@ class StructuredRecordExtractor:
                         extractor_version=self.version,
                         scenario=scenario,
                         entity_id_suggestion=entity_id,
+                        canonical_id=str(record.get("canonical_id") or ""),
                         name=entity_name,
                         label=entity_label,
-                        aliases=aliases,
+                        aliases=_split_aliases(
+                            str(record.get("aliases") or record.get("alias") or "")
+                        ),
                         description=str(record.get("description") or ""),
                         evidence=evidence,
                         confidence=_float_or_default(record.get("confidence"), 0.6),
+                        metadata={
+                            key: value
+                            for key, value in record.items()
+                            if key.startswith("metadata.")
+                            or key
+                            in {
+                                "external_id",
+                                "external_entity_id",
+                                "relation_family",
+                                "root_candidate",
+                                "observable",
+                            }
+                        },
                     )
                 )
 
@@ -120,6 +101,24 @@ class StructuredRecordExtractor:
                         tail=tail,
                         evidence=evidence,
                         confidence=_float_or_default(record.get("confidence"), 0.6),
+                        metadata={
+                            key: value
+                            for key, value in record.items()
+                            if key
+                            in {
+                                "relation_family",
+                                "propagation_enabled",
+                                "propagation_direction",
+                                "propagation_priority",
+                                "attenuation",
+                                "edge_weight",
+                                "task_view",
+                                "external_edge_id",
+                                "root_candidate",
+                                "observable",
+                            }
+                            or key.startswith("metadata.")
+                        },
                     )
                 )
         return DraftKG(entities=tuple(entities), relations=tuple(relations))

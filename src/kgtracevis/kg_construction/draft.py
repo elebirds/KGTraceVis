@@ -9,14 +9,16 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Literal
 
+from kgtracevis.kg.graph import KGEdge
 from kgtracevis.kg_construction.candidate_entity_extractor import CandidateEntity
 from kgtracevis.kg_construction.candidate_triple_extractor import CandidateTriple
 from kgtracevis.kg_construction.confidence_assigner import edge_weight
 
-DraftStatus = Literal["draft", "accepted", "rejected", "published"]
+DraftStatus = Literal["draft", "auto", "accepted", "rejected", "published"]
 
 _REVIEW_STATUS_BY_DRAFT_STATUS = {
     "draft": "auto",
+    "auto": "auto",
     "accepted": "reviewed",
     "rejected": "rejected",
     "published": "reviewed",
@@ -47,6 +49,7 @@ class DraftEntity:
     entity_id_suggestion: str
     name: str
     label: str
+    canonical_id: str = ""
     aliases: tuple[str, ...] = ()
     description: str = ""
     evidence: str = ""
@@ -59,7 +62,7 @@ class DraftEntity:
         """Convert the draft entity to the existing candidate entity contract."""
         evidence = self.evidence or self.evidence_span or self.draft_id
         return CandidateEntity(
-            id=self.entity_id_suggestion,
+            id=self.canonical_id or self.entity_id_suggestion,
             name=self.name,
             label=self.label,
             scenario=self.scenario,
@@ -100,7 +103,27 @@ class DraftRelation:
             confidence=self.confidence,
             weight=edge_weight(self.confidence),
             review_status=_REVIEW_STATUS_BY_DRAFT_STATUS[self.status],
+            relation_family=_metadata_text(self.metadata, "relation_family"),
+            propagation_enabled=_metadata_bool(self.metadata, "propagation_enabled", False),
+            propagation_direction=_metadata_text(
+                self.metadata, "propagation_direction", default="forward"
+            ),
+            propagation_priority=_metadata_float(self.metadata, "propagation_priority", 0.0),
+            attenuation=_metadata_float(self.metadata, "attenuation", 1.0),
+            edge_weight=_metadata_optional_float(self.metadata, "edge_weight"),
+            root_candidate=_metadata_bool(self.metadata, "root_candidate", False),
+            observable=_metadata_bool(self.metadata, "observable", False),
+            event_anchor=_metadata_text(self.metadata, "event_anchor"),
+            fault_anchor=_metadata_text(self.metadata, "fault_anchor"),
+            task_view=_metadata_text(self.metadata, "task_view"),
+            confidence_policy=_metadata_text(self.metadata, "confidence_policy"),
+            external_edge_id=_metadata_text(self.metadata, "external_edge_id"),
+            kg_build_id=_metadata_text(self.metadata, "kg_build_id"),
         )
+
+    def to_kg_edge(self) -> KGEdge:
+        """Convert the draft relation to the extended KG edge contract."""
+        return self.to_candidate_triple().to_kg_edge()
 
 
 @dataclass(frozen=True)
@@ -122,6 +145,41 @@ class DraftKG:
 def draft_status_to_review_status(status: DraftStatus) -> str:
     """Return the KG edge review status corresponding to a draft status."""
     return _REVIEW_STATUS_BY_DRAFT_STATUS[status]
+
+
+def _metadata_text(
+    metadata: Mapping[str, Any],
+    key: str,
+    *,
+    default: str = "",
+) -> str:
+    value = metadata.get(key, default)
+    if value is None:
+        return default
+    text = str(value).strip()
+    return text or default
+
+
+def _metadata_bool(metadata: Mapping[str, Any], key: str, default: bool) -> bool:
+    value = metadata.get(key, default)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _metadata_float(metadata: Mapping[str, Any], key: str, default: float) -> float:
+    value = _metadata_optional_float(metadata, key)
+    return default if value is None else value
+
+
+def _metadata_optional_float(metadata: Mapping[str, Any], key: str) -> float | None:
+    value = metadata.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return float(text)
 
 
 def draft_relations_from_source_text(

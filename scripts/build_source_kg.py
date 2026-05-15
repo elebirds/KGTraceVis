@@ -47,6 +47,21 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="TEP_KG tep_variable_mapping CSV/JSON/JSONL path.",
     )
+    parser.add_argument(
+        "--tep-rca-graph-dir",
+        type=Path,
+        help="Directory containing TEP_KG RCA nodes.jsonl and edges.jsonl.",
+    )
+    parser.add_argument(
+        "--tep-rca-nodes",
+        type=Path,
+        help="Explicit TEP_KG RCA nodes.jsonl path.",
+    )
+    parser.add_argument(
+        "--tep-rca-edges",
+        type=Path,
+        help="Explicit TEP_KG RCA edges.jsonl path.",
+    )
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -108,6 +123,29 @@ def _build_sources(args: argparse.Namespace) -> list[KGConstructionSource]:
                 source_type="tep_variable_mapping",
                 scenario="tep",
                 path=args.tep_variable_mapping,
+            )
+        )
+    if args.tep_rca_graph_dir is not None:
+        sources.append(
+            KGConstructionSource(
+                source_id="tep_rca_graph",
+                source_type="tep_rca_graph",
+                scenario="tep",
+                path=args.tep_rca_graph_dir,
+            )
+        )
+    if args.tep_rca_nodes is not None or args.tep_rca_edges is not None:
+        if args.tep_rca_nodes is None or args.tep_rca_edges is None:
+            raise SystemExit("--tep-rca-nodes and --tep-rca-edges must be provided together")
+        sources.append(
+            KGConstructionSource(
+                source_id="tep_rca_graph",
+                source_type="tep_rca_graph",
+                scenario="tep",
+                metadata={
+                    "nodes_path": args.tep_rca_nodes,
+                    "edges_path": args.tep_rca_edges,
+                },
             )
         )
     return sources

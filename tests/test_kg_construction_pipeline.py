@@ -13,6 +13,7 @@ from kgtracevis.kg_construction import (
     DraftRelation,
     ExtractorRegistry,
     KGConstructionSource,
+    TepRcaGraphExtractor,
     TepSemanticLiftExtractor,
     TepVariableMappingExtractor,
     draft_status_to_review_status,
@@ -317,6 +318,76 @@ def test_tep_import_preserves_alignment_alias_nodes(tmp_path: Path) -> None:
     assert "variable:mv_42" not in nodes_by_id["ManipulatedVariable1DFeedVariable"].aliases
     assert result.edges[0].head == "Mv42Variable"
     assert result.edges[0].tail == "ManipulatedVariable1DFeedVariable"
+
+
+def test_tep_rca_graph_extractor_preserves_rca_metadata(tmp_path: Path) -> None:
+    """TEP RCA graph rows should become RCA-view edges with propagation metadata."""
+    rca_dir = tmp_path / "rca"
+    rca_dir.mkdir()
+    _write_jsonl(
+        rca_dir / "nodes.jsonl",
+        [
+            {
+                "node_id": "component:component_a",
+                "entity_id": "component:component_a",
+                "entity_type": "Component",
+                "name": "Component A",
+                "candidate_role": "composition_anchor",
+                "root_cause_candidate": True,
+                "provenance_ids": ["ev_component"],
+            },
+            {
+                "node_id": "fault_anchor:fault_06",
+                "entity_id": "fault_anchor:fault_06",
+                "entity_type": "FaultAnchor",
+                "name": "Fault 06 anchor",
+                "candidate_role": "fault_anchor",
+                "provenance_ids": ["ev_fault"],
+            },
+        ],
+    )
+    _write_jsonl(
+        rca_dir / "edges.jsonl",
+        [
+            {
+                "edge_id": "rca_edge_1",
+                "head_id": "component:component_a",
+                "relation": "CAUSES",
+                "tail_id": "fault_anchor:fault_06",
+                "confidence": 0.71,
+                "relation_family": "FAULT_SOURCE",
+                "propagation_enabled": True,
+                "edge_origin": "curated_bridge",
+                "review_status": "accept",
+                "provenance_ids": ["ev_edge"],
+            }
+        ],
+    )
+
+    result = run_kg_construction(
+        [
+            KGConstructionSource(
+                source_id="tep_rca_graph_unit",
+                source_type="tep_rca_graph",
+                scenario="tep",
+                path=rca_dir,
+            )
+        ],
+        registry=ExtractorRegistry([TepRcaGraphExtractor()]),
+        run_id="kgbuild_tep_rca_unit",
+    )
+
+    assert result.rca_view.manifest["task_view"] == "root_kgd_view"
+    assert result.rca_view.manifest["propagation_edge_count"] == 1
+    assert len(result.edges) == 1
+    edge = result.edges[0]
+    assert edge.relation == "CAUSES"
+    assert edge.relation_family == "FAULT_SOURCE"
+    assert edge.propagation_enabled is True
+    assert edge.review_status == "auto"
+    assert edge.external_edge_id == "rca_edge_1"
+    assert edge.kg_build_id == "kgbuild_tep_rca_unit"
+    assert result.review_queue[0].priority >= 80
 
 
 def test_build_source_kg_script_writes_candidate_artifacts(tmp_path: Path) -> None:

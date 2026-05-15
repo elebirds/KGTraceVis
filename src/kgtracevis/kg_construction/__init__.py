@@ -1,5 +1,11 @@
 """Source-constrained KG construction modules."""
 
+from kgtracevis.kg_construction.alignment import (
+    AlignmentCandidate,
+    AlignmentResult,
+    run_entity_alignment,
+)
+from kgtracevis.kg_construction.audit_graph import SourceAuditGraph
 from kgtracevis.kg_construction.candidate_entity_extractor import (
     CandidateEntity,
     extract_candidate_entities,
@@ -45,7 +51,11 @@ from kgtracevis.kg_construction.export_kg_csv import (
 from kgtracevis.kg_construction.extractors import (
     ExtractorRegistry,
     KGSourceExtractor,
+    LLMDocumentIEExtractor,
     StructuredRecordExtractor,
+    TepRcaGraphExtractor,
+    TepSemanticLiftExtractor,
+    TepVariableMappingExtractor,
     default_extractor_registry,
 )
 from kgtracevis.kg_construction.models import (
@@ -68,18 +78,33 @@ from kgtracevis.kg_construction.mvtec_source_bundle import (
     download_mvtec_source_bundle,
 )
 from kgtracevis.kg_construction.pipeline import KGConstructionResult, run_kg_construction
+from kgtracevis.kg_construction.profiles import (
+    GENERIC_PROFILE,
+    TEP_PROFILE,
+    RcaProfile,
+    profile_for_scenario,
+)
 from kgtracevis.kg_construction.qa import KGQAFinding, KGQAReport, run_kg_qa
+from kgtracevis.kg_construction.rca_view import (
+    RcaReasoningView,
+    build_rca_reasoning_view,
+)
+from kgtracevis.kg_construction.review_queue import (
+    ReviewQueueItem,
+    build_review_queue,
+)
+from kgtracevis.kg_construction.semantic_projection import (
+    SemanticLayerResult,
+    project_semantic_layer,
+)
 from kgtracevis.kg_construction.source_loader import (
     SourceRecord,
     load_source_registry,
     load_source_text,
     load_structured_records,
 )
-from kgtracevis.kg_construction.tep_import import (
-    TepSemanticLiftExtractor,
-    TepVariableMappingExtractor,
-    tep_external_id_to_kg_id,
-)
+from kgtracevis.kg_construction.sources import SourceLibraryRecord
+from kgtracevis.kg_construction.tep_import import tep_external_id_to_kg_id
 from kgtracevis.kg_construction.triple_cleaner import (
     clean_candidate_nodes,
     clean_candidate_triples,
@@ -98,6 +123,9 @@ __all__ = [
     "DraftRelation",
     "EndToEndInterpretabilityAuditOutput",
     "ExtractorRegistry",
+    "GENERIC_PROFILE",
+    "AlignmentCandidate",
+    "AlignmentResult",
     "KGConstructionResult",
     "KGConstructionBuildSummary",
     "KGConstructionDraftRow",
@@ -108,8 +136,17 @@ __all__ = [
     "KGQAFinding",
     "KGQAReport",
     "KGSourceExtractor",
+    "LLMDocumentIEExtractor",
+    "RcaProfile",
+    "RcaReasoningView",
+    "ReviewQueueItem",
+    "SemanticLayerResult",
+    "SourceAuditGraph",
+    "SourceLibraryRecord",
     "SourceRecord",
     "StructuredRecordExtractor",
+    "TEP_PROFILE",
+    "TepRcaGraphExtractor",
     "TepSemanticLiftExtractor",
     "TepVariableMappingExtractor",
     "assign_confidence",
@@ -121,6 +158,8 @@ __all__ = [
     "build_kg_construction_run_id",
     "build_review_decision_id",
     "build_coverage_report",
+    "build_rca_reasoning_view",
+    "build_review_queue",
     "clean_candidate_nodes",
     "clean_candidate_triples",
     "default_extractor_registry",
@@ -137,8 +176,11 @@ __all__ = [
     "load_source_registry",
     "load_source_text",
     "load_structured_records",
+    "profile_for_scenario",
+    "project_semantic_layer",
     "review_decision_for_edge",
     "run_kg_construction",
+    "run_entity_alignment",
     "run_kg_qa",
     "run_before_after_comparison",
     "tep_external_id_to_kg_id",

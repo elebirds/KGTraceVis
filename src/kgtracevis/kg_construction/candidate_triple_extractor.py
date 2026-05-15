@@ -27,6 +27,20 @@ class CandidateTriple:
     feedback_count: int = 0
     accepted_count: int = 0
     rejected_count: int = 0
+    relation_family: str = ""
+    propagation_enabled: bool = False
+    propagation_direction: str = "forward"
+    propagation_priority: float = 0.0
+    attenuation: float = 1.0
+    edge_weight: float | None = None
+    root_candidate: bool = False
+    observable: bool = False
+    event_anchor: str = ""
+    fault_anchor: str = ""
+    task_view: str = ""
+    confidence_policy: str = ""
+    external_edge_id: str = ""
+    kg_build_id: str = ""
 
     def to_kg_edge(self) -> KGEdge:
         """Convert the candidate to the KG edge CSV contract."""
@@ -43,6 +57,20 @@ class CandidateTriple:
             feedback_count=self.feedback_count,
             accepted_count=self.accepted_count,
             rejected_count=self.rejected_count,
+            relation_family=self.relation_family,
+            propagation_enabled=self.propagation_enabled,
+            propagation_direction=self.propagation_direction,
+            propagation_priority=self.propagation_priority,
+            attenuation=self.attenuation,
+            edge_weight=self.edge_weight,
+            root_candidate=self.root_candidate,
+            observable=self.observable,
+            event_anchor=self.event_anchor,
+            fault_anchor=self.fault_anchor,
+            task_view=self.task_view,
+            confidence_policy=self.confidence_policy,
+            external_edge_id=self.external_edge_id,
+            kg_build_id=self.kg_build_id,
         )
 
 

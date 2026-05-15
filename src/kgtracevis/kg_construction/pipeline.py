@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from kgtracevis.kg.graph import KGEdge, KGNode
+from kgtracevis.kg_construction.alignment import AlignmentResult, run_entity_alignment
+from kgtracevis.kg_construction.audit_graph import SourceAuditGraph
 from kgtracevis.kg_construction.draft import DraftKG, KGConstructionSource
 from kgtracevis.kg_construction.export_kg_csv import export_kg_csv, validate_kg_csv_contract
 from kgtracevis.kg_construction.extractors import ExtractorRegistry, default_extractor_registry
@@ -17,8 +19,20 @@ from kgtracevis.kg_construction.models import (
     build_construction_manifest,
     build_construction_summary,
     build_kg_construction_run_id,
+    draft_rows_from_draft,
 )
-from kgtracevis.kg_construction.triple_cleaner import clean_candidate_nodes, clean_candidate_triples
+from kgtracevis.kg_construction.profiles import RcaProfile, profile_for_scenario
+from kgtracevis.kg_construction.publish import PublishManifest
+from kgtracevis.kg_construction.rca_view import RcaReasoningView, build_rca_reasoning_view
+from kgtracevis.kg_construction.review_queue import (
+    ReviewQueueItem,
+    build_review_queue,
+    review_queue_payload,
+)
+from kgtracevis.kg_construction.semantic_projection import (
+    SemanticLayerResult,
+    project_semantic_layer,
+)
 
 
 @dataclass(frozen=True)
@@ -28,6 +42,13 @@ class KGConstructionResult:
     run_id: str
     sources: tuple[KGConstructionSource, ...]
     draft: DraftKG
+    aligned_draft: DraftKG
+    alignment: AlignmentResult
+    audit_graph: SourceAuditGraph
+    semantic_layer: SemanticLayerResult
+    rca_view: RcaReasoningView
+    review_queue: tuple[ReviewQueueItem, ...]
+    publish_manifest: PublishManifest
     nodes: tuple[KGNode, ...]
     edges: tuple[KGEdge, ...]
     build_summary: KGConstructionBuildSummary
@@ -74,6 +95,48 @@ class KGConstructionResult:
         )
         return manifest_path
 
+    def write_layer_artifacts(self, output_dir: str | Path) -> dict[str, Path]:
+        """Write layer manifests and review queue artifacts."""
+        destination = Path(output_dir)
+        destination.mkdir(parents=True, exist_ok=True)
+        draft_manifest_path = destination / "draft_manifest.json"
+        semantic_manifest_path = destination / "semantic_layer_manifest.json"
+        rca_manifest_path = destination / "rca_view_manifest.json"
+        audit_manifest_path = destination / "source_audit_graph_manifest.json"
+        publish_manifest_path = destination / "publish_manifest.json"
+        review_queue_path = destination / "review_queue.json"
+        _write_json(draft_manifest_path, self.draft_manifest())
+        _write_json(audit_manifest_path, self.audit_graph.manifest())
+        _write_json(semantic_manifest_path, self.semantic_layer.manifest)
+        _write_json(rca_manifest_path, self.rca_view.manifest)
+        _write_json(publish_manifest_path, self.publish_manifest.model_dump())
+        _write_json(review_queue_path, review_queue_payload(self.review_queue))
+        return {
+            "draft_manifest": draft_manifest_path,
+            "source_audit_graph_manifest": audit_manifest_path,
+            "semantic_layer_manifest": semantic_manifest_path,
+            "rca_view_manifest": rca_manifest_path,
+            "publish_manifest": publish_manifest_path,
+            "review_queue": review_queue_path,
+        }
+
+    def draft_manifest(self) -> dict[str, object]:
+        """Return a JSON-friendly DraftKG manifest."""
+        extractor_versions = {
+            row.extractor_name: row.extractor_version
+            for row in draft_rows_from_draft(self.draft)
+        }
+        return {
+            "artifact_type": "draft_kg_manifest_v1",
+            "run_id": self.run_id,
+            "source_ids": [source.source_id for source in self.sources],
+            "extractor_versions": extractor_versions,
+            "draft_entity_count": len(self.draft.entities),
+            "draft_relation_count": len(self.draft.relations),
+            "aligned_entity_count": len(self.aligned_draft.entities),
+            "aligned_relation_count": len(self.aligned_draft.relations),
+        }
+
 
 def run_kg_construction(
     sources: Iterable[KGConstructionSource],
@@ -82,8 +145,9 @@ def run_kg_construction(
     existing_edges: Iterable[KGEdge] = (),
     allow_reviewed_overwrite: bool = False,
     run_id: str | None = None,
+    profile: RcaProfile | None = None,
 ) -> KGConstructionResult:
-    """Run registered extractors and return validated KG rows."""
+    """Run the RCA-oriented source-to-KG construction pipeline."""
     extractor_registry = registry or default_extractor_registry()
     source_rows = list(sources)
     drafts = [
@@ -91,19 +155,32 @@ def run_kg_construction(
         for source in source_rows
     ]
     draft = DraftKG.combine(drafts)
-    nodes = tuple(
-        clean_candidate_nodes(entity.to_candidate_entity() for entity in draft.entities)
+    resolved_run_id = run_id or build_kg_construction_run_id()
+    resolved_profile = profile or profile_for_scenario(_primary_scenario(source_rows))
+    alignment = run_entity_alignment(draft, resolved_profile)
+    audit_graph = SourceAuditGraph(
+        sources=tuple(source_rows),
+        draft=draft,
+        alignment=alignment,
     )
+    semantic_layer = project_semantic_layer(alignment.draft, resolved_profile)
+    rca_view = build_rca_reasoning_view(
+        semantic_layer.nodes,
+        semantic_layer.edges,
+        profile=resolved_profile,
+        kg_build_id=resolved_run_id,
+    )
+    review_queue = build_review_queue(rca_view.edges, alignment=alignment)
+    nodes = rca_view.nodes
     edges = tuple(
-        clean_candidate_triples(
-            (relation.to_candidate_triple() for relation in draft.relations),
+        _merge_with_existing_edges(
+            rca_view.edges,
             existing_edges=existing_edges,
             allow_reviewed_overwrite=allow_reviewed_overwrite,
         )
     )
     validate_kg_csv_contract(nodes, edges)
     _validate_edge_endpoints(nodes, edges)
-    resolved_run_id = run_id or build_kg_construction_run_id()
     build_summary = build_construction_summary(
         run_id=resolved_run_id,
         sources=source_rows,
@@ -115,6 +192,27 @@ def run_kg_construction(
         run_id=resolved_run_id,
         sources=tuple(source_rows),
         draft=draft,
+        aligned_draft=alignment.draft,
+        alignment=alignment,
+        audit_graph=audit_graph,
+        semantic_layer=semantic_layer,
+        rca_view=rca_view,
+        review_queue=review_queue,
+        publish_manifest=PublishManifest(
+            kg_build_id=resolved_run_id,
+            source_ids=tuple(source.source_id for source in source_rows),
+            extractor_versions={
+                extractor.name: extractor.version
+                for extractor in (
+                    extractor_registry.extractor_for(source.source_type)
+                    for source in source_rows
+                )
+            },
+            profile_version=resolved_profile.ontology,
+            node_count=len(nodes),
+            edge_count=len(edges),
+            review_policy="auto candidates require review before trusted publication",
+        ),
         nodes=nodes,
         edges=edges,
         build_summary=build_summary,
@@ -129,3 +227,44 @@ def _validate_edge_endpoints(nodes: tuple[KGNode, ...], edges: tuple[KGEdge, ...
             raise ValueError(f"edge head does not exist in constructed nodes: {edge.head}")
         if edge.tail not in node_ids:
             raise ValueError(f"edge tail does not exist in constructed nodes: {edge.tail}")
+
+
+def _primary_scenario(sources: list[KGConstructionSource]) -> str:
+    scenarios = [
+        source.scenario
+        for source in sources
+        if source.scenario and source.scenario != "shared"
+    ]
+    return scenarios[0] if scenarios else "shared"
+
+
+def _merge_with_existing_edges(
+    edges: tuple[KGEdge, ...],
+    *,
+    existing_edges: Iterable[KGEdge],
+    allow_reviewed_overwrite: bool,
+) -> tuple[KGEdge, ...]:
+    protected = {edge.edge_id: edge for edge in existing_edges}
+    merged: dict[str, KGEdge] = {}
+    for edge in edges:
+        existing = protected.get(edge.edge_id)
+        if existing is not None and existing != edge:
+            if existing.review_status == "reviewed" and not allow_reviewed_overwrite:
+                raise ValueError(f"refusing to overwrite reviewed edge {edge.edge_id}")
+        prior = merged.get(edge.edge_id)
+        if prior is None:
+            merged[edge.edge_id] = edge
+            continue
+        if prior.review_status == "reviewed" and not allow_reviewed_overwrite:
+            raise ValueError(f"refusing to overwrite reviewed edge {edge.edge_id}")
+        if edge.review_status == "reviewed" or prior.review_status != "reviewed":
+            merged[edge.edge_id] = edge
+    return tuple(sorted(merged.values(), key=lambda item: item.edge_id))
+
+
+def _write_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )

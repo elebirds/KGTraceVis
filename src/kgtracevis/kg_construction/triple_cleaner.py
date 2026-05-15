@@ -117,6 +117,20 @@ def _normalize_edge(edge: KGEdge) -> KGEdge:
         feedback_count=edge.feedback_count,
         accepted_count=edge.accepted_count,
         rejected_count=edge.rejected_count,
+        relation_family=edge.relation_family.strip(),
+        propagation_enabled=edge.propagation_enabled,
+        propagation_direction=edge.propagation_direction.strip() or "forward",
+        propagation_priority=float(edge.propagation_priority),
+        attenuation=float(edge.attenuation),
+        edge_weight=edge.edge_weight,
+        root_candidate=edge.root_candidate,
+        observable=edge.observable,
+        event_anchor=edge.event_anchor.strip(),
+        fault_anchor=edge.fault_anchor.strip(),
+        task_view=edge.task_view.strip(),
+        confidence_policy=edge.confidence_policy.strip(),
+        external_edge_id=edge.external_edge_id.strip(),
+        kg_build_id=edge.kg_build_id.strip(),
     )
 
 
@@ -150,10 +164,13 @@ def _index_node_identities(node: KGNode, identity_to_id: dict[str, str]) -> None
 
 def _node_identities(node: KGNode) -> set[str]:
     identities: set[str] = set()
-    for term in (node.id, node.name, *node.aliases):
-        normalized = normalize_text(term)
-        if normalized:
-            identities.add(normalized)
+    if normalized_id := normalize_text(node.id):
+        identities.add(f"id:{normalized_id}")
+    if normalized_name := normalize_text(node.name):
+        identities.add(f"name:{node.label}:{normalized_name}")
+    for alias in node.aliases:
+        if normalized_alias := normalize_text(alias):
+            identities.add(f"alias:{node.label}:{normalized_alias}")
     return identities
 
 

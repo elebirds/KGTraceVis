@@ -8,7 +8,13 @@ import re
 from collections.abc import Iterable
 from pathlib import Path
 
-from kgtracevis.kg.graph import REQUIRED_EDGE_COLUMNS, REQUIRED_NODE_COLUMNS, KGEdge, KGNode
+from kgtracevis.kg.graph import (
+    OPTIONAL_RCA_EDGE_COLUMNS,
+    REQUIRED_EDGE_COLUMNS,
+    REQUIRED_NODE_COLUMNS,
+    KGEdge,
+    KGNode,
+)
 from kgtracevis.kg_construction.confidence_assigner import edge_weight
 
 NODE_COLUMNS = ["id", "name", "label", "scenario", "aliases", "description"]
@@ -25,14 +31,30 @@ EDGE_COLUMNS = [
     "feedback_count",
     "accepted_count",
     "rejected_count",
+    "relation_family",
+    "propagation_enabled",
+    "propagation_direction",
+    "propagation_priority",
+    "attenuation",
+    "edge_weight",
+    "root_candidate",
+    "observable",
+    "event_anchor",
+    "fault_anchor",
+    "task_view",
+    "confidence_policy",
+    "external_edge_id",
+    "kg_build_id",
 ]
 VALID_SCENARIOS = {"mvtec", "tep", "wafer", "shared"}
 VALID_REVIEW_STATUS = {"auto", "reviewed", "rejected"}
 
 if set(NODE_COLUMNS) != REQUIRED_NODE_COLUMNS:  # pragma: no cover - import-time guard.
     raise RuntimeError("node export columns diverged from KG loader contract")
-if set(EDGE_COLUMNS) != REQUIRED_EDGE_COLUMNS:  # pragma: no cover - import-time guard.
+if not REQUIRED_EDGE_COLUMNS.issubset(set(EDGE_COLUMNS)):  # pragma: no cover.
     raise RuntimeError("edge export columns diverged from KG loader contract")
+if not OPTIONAL_RCA_EDGE_COLUMNS.issubset(set(EDGE_COLUMNS)):  # pragma: no cover.
+    raise RuntimeError("RCA edge export columns diverged from KG loader contract")
 
 
 def export_nodes_csv(nodes: Iterable[KGNode], path: str | Path) -> None:
@@ -81,6 +103,22 @@ def export_edges_csv(edges: Iterable[KGEdge], path: str | Path) -> None:
                     "feedback_count": edge.feedback_count,
                     "accepted_count": edge.accepted_count,
                     "rejected_count": edge.rejected_count,
+                    "relation_family": edge.relation_family,
+                    "propagation_enabled": _bool_csv(edge.propagation_enabled),
+                    "propagation_direction": edge.propagation_direction,
+                    "propagation_priority": _number_csv(edge.propagation_priority),
+                    "attenuation": _number_csv(edge.attenuation),
+                    "edge_weight": _number_csv(
+                        edge.edge_weight if edge.edge_weight is not None else edge.weight
+                    ),
+                    "root_candidate": _bool_csv(edge.root_candidate),
+                    "observable": _bool_csv(edge.observable),
+                    "event_anchor": edge.event_anchor,
+                    "fault_anchor": edge.fault_anchor,
+                    "task_view": edge.task_view,
+                    "confidence_policy": edge.confidence_policy,
+                    "external_edge_id": edge.external_edge_id,
+                    "kg_build_id": edge.kg_build_id,
                 }
             )
 
@@ -165,3 +203,13 @@ def _is_pascal_case(value: str) -> bool:
 
 def _is_upper_snake(value: str) -> bool:
     return bool(re.fullmatch(r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*", value.strip()))
+
+
+def _bool_csv(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def _number_csv(value: float | int | None) -> str:
+    if value is None:
+        return ""
+    return f"{float(value):.6g}"

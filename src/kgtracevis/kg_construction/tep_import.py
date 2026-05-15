@@ -143,6 +143,38 @@ class TepVariableMappingExtractor:
         return DraftKG(entities=tuple(entities), relations=tuple(relations))
 
 
+class TepRcaGraphExtractor:
+    """Import TEP_KG RCA graph JSONL rows into source-backed draft KG rows."""
+
+    name = "tep_rca_graph"
+    version = "v1"
+    supported_source_types: tuple[str, ...] = ("tep_rca_graph",)
+
+    def extract(self, source: KGConstructionSource) -> DraftKG:
+        """Extract candidate RCA graph rows from TEP RCA nodes and edges."""
+        nodes_path, edges_path = _resolve_rca_graph_paths(source)
+        node_rows = _read_jsonl(nodes_path)
+        edge_rows = _read_jsonl(edges_path)
+        id_map = {
+            str(row["node_id"]): tep_external_id_to_kg_id(
+                str(row["node_id"]),
+                label=str(row.get("entity_type") or "Other"),
+            )
+            for row in node_rows
+        }
+        entities = tuple(
+            _draft_rca_entity_from_row(row, source=source, node_id=id_map[str(row["node_id"])])
+            for row in node_rows
+        )
+        relations = tuple(
+            relation
+            for row in edge_rows
+            if (relation := _draft_rca_relation_from_row(row, source=source, id_map=id_map))
+            is not None
+        )
+        return DraftKG(entities=entities, relations=relations)
+
+
 def tep_external_id_to_kg_id(external_id: str, *, label: str) -> str:
     """Map a TEP_KG external ID to KGTraceVis PascalCase node ID."""
     if ":" in external_id:
@@ -175,6 +207,19 @@ def _resolve_semantic_lift_paths(source: KGConstructionSource) -> tuple[Path, Pa
     )
 
 
+def _resolve_rca_graph_paths(source: KGConstructionSource) -> tuple[Path, Path]:
+    nodes_path = source.metadata.get("nodes_path")
+    edges_path = source.metadata.get("edges_path")
+    if nodes_path and edges_path:
+        return Path(str(nodes_path)), Path(str(edges_path))
+    if source.path is None:
+        raise ValueError("TEP RCA graph extraction requires source.path or metadata paths")
+    base = source.path
+    if base.is_dir():
+        return base / "nodes.jsonl", base / "edges.jsonl"
+    raise ValueError("TEP RCA graph source.path must be a directory when metadata paths are absent")
+
+
 def _draft_entity_from_row(
     row: Mapping[str, Any],
     *,
@@ -202,6 +247,43 @@ def _draft_entity_from_row(
             "external_id": external_id,
             "tep_channel": str(row.get("tep_channel") or ""),
             "variable_role": str(row.get("variable_role") or ""),
+        },
+    )
+
+
+def _draft_rca_entity_from_row(
+    row: Mapping[str, Any],
+    *,
+    source: KGConstructionSource,
+    node_id: str,
+) -> DraftEntity:
+    external_id = str(row["node_id"])
+    label = str(row.get("entity_type") or "Other")
+    aliases = _aliases_from_row(row)
+    candidate_role = str(row.get("candidate_role") or "")
+    evidence = _entity_evidence(row)
+    return DraftEntity(
+        draft_id=f"{source.source_id}:entity:{external_id}",
+        source_id=source.source_id,
+        extractor_name=TepRcaGraphExtractor.name,
+        extractor_version=TepRcaGraphExtractor.version,
+        scenario=source.scenario or "tep",
+        entity_id_suggestion=node_id,
+        name=str(row.get("name") or external_id),
+        label=label,
+        aliases=aliases,
+        description=str(row.get("summary") or "TEP RCA graph node"),
+        evidence=evidence,
+        confidence=_float_or_default(row.get("lift_confidence"), 0.82),
+        status="auto",
+        metadata={
+            "external_id": external_id,
+            "tep_channel": str(row.get("tep_channel") or ""),
+            "variable_role": str(row.get("variable_role") or ""),
+            "candidate_role": candidate_role,
+            "root_candidate": _bool_value(row.get("root_cause_candidate", False)),
+            "is_tep_52_variable": _bool_value(row.get("is_tep_52_variable", False)),
+            "source_types": _list_values(row.get("source_types")),
         },
     )
 
@@ -237,6 +319,47 @@ def _draft_relation_from_row(
             "tail_external_id": tail_external,
             "relation_family": str(row.get("relation_family") or ""),
             "propagation_enabled": _bool_value(row.get("propagation_enabled", False)),
+        },
+    )
+
+
+def _draft_rca_relation_from_row(
+    row: Mapping[str, Any],
+    *,
+    source: KGConstructionSource,
+    id_map: Mapping[str, str],
+) -> DraftRelation | None:
+    head_external = str(row.get("head_id") or row.get("source") or "")
+    tail_external = str(row.get("tail_id") or row.get("target") or "")
+    if head_external not in id_map or tail_external not in id_map:
+        return None
+    relation = str(row.get("relation") or "").strip()
+    if not relation:
+        return None
+    edge_id = str(row.get("edge_id") or f"{head_external}|{relation}|{tail_external}")
+    relation_family = str(row.get("relation_family") or "")
+    propagation_enabled = _bool_value(row.get("propagation_enabled", False))
+    return DraftRelation(
+        draft_id=f"{source.source_id}:relation:{edge_id}",
+        source_id=source.source_id,
+        extractor_name=TepRcaGraphExtractor.name,
+        extractor_version=TepRcaGraphExtractor.version,
+        scenario=source.scenario or "tep",
+        head=id_map[head_external],
+        relation=relation,
+        tail=id_map[tail_external],
+        evidence=_relation_evidence(row),
+        confidence=_float_or_default(row.get("confidence"), 0.6),
+        status="auto",
+        metadata={
+            "external_edge_id": edge_id,
+            "head_external_id": head_external,
+            "tail_external_id": tail_external,
+            "relation_family": relation_family,
+            "propagation_enabled": propagation_enabled,
+            "edge_origin": str(row.get("edge_origin") or ""),
+            "source_types": _list_values(row.get("source_types")),
+            "tep_review_status": str(row.get("review_status") or ""),
         },
     )
 
