@@ -57,6 +57,44 @@ def build_kg_construction_artifact_snapshot(output_dir: str | Path) -> dict[str,
             artifact_paths["cross_chunk_proposals"],
             key_fields=("proposal_id",),
         ),
+        "brainstorm_hypotheses": _jsonl_record_snapshot(
+            artifact_paths["brainstorm_hypotheses"],
+            key_fields=("hypothesis_id",),
+        ),
+        "brainstorm_evidence_tasks": _jsonl_record_snapshot(
+            artifact_paths["brainstorm_evidence_tasks"],
+            key_fields=("task_id",),
+        ),
+        "brainstorm_review_items": _json_list_snapshot(
+            artifact_paths["brainstorm_review_items"],
+            key_fields=("item_type", "target_key"),
+        ),
+        "hypothesis_brainstorming_manifest": _json_object_snapshot(
+            artifact_paths["hypothesis_brainstorming_manifest"],
+        ),
+        "alignment_suggestions": _jsonl_record_snapshot(
+            artifact_paths["alignment_suggestions"],
+            key_fields=("suggestion_id",),
+        ),
+        "semantic_layer_suggestions": _jsonl_record_snapshot(
+            artifact_paths["semantic_layer_suggestions"],
+            key_fields=("suggestion_id",),
+        ),
+        "profile_gap_suggestions": _json_object_snapshot(
+            artifact_paths["profile_gap_suggestions"],
+        ),
+        "accepted_alignment_overrides": _json_object_snapshot(
+            artifact_paths["accepted_alignment_overrides"],
+        ),
+        "accepted_profile_gaps": _json_object_snapshot(
+            artifact_paths["accepted_profile_gaps"],
+        ),
+        "accepted_hypotheses": _json_object_snapshot(
+            artifact_paths["accepted_hypotheses"],
+        ),
+        "accepted_evidence_tasks": _json_object_snapshot(
+            artifact_paths["accepted_evidence_tasks"],
+        ),
         "alignment_manifest": _json_object_snapshot(
             artifact_paths["alignment_manifest"],
         ),
@@ -110,6 +148,50 @@ def build_kg_construction_diff(
         "cross_chunk_proposals": _diff_records(
             before.get("cross_chunk_proposals"),
             after.get("cross_chunk_proposals"),
+        ),
+        "brainstorm_hypotheses": _diff_records(
+            before.get("brainstorm_hypotheses"),
+            after.get("brainstorm_hypotheses"),
+        ),
+        "brainstorm_evidence_tasks": _diff_records(
+            before.get("brainstorm_evidence_tasks"),
+            after.get("brainstorm_evidence_tasks"),
+        ),
+        "brainstorm_review_items": _diff_records(
+            before.get("brainstorm_review_items"),
+            after.get("brainstorm_review_items"),
+        ),
+        "hypothesis_brainstorming_manifest": _diff_objects(
+            before.get("hypothesis_brainstorming_manifest"),
+            after.get("hypothesis_brainstorming_manifest"),
+        ),
+        "alignment_suggestions": _diff_records(
+            before.get("alignment_suggestions"),
+            after.get("alignment_suggestions"),
+        ),
+        "semantic_layer_suggestions": _diff_records(
+            before.get("semantic_layer_suggestions"),
+            after.get("semantic_layer_suggestions"),
+        ),
+        "profile_gap_suggestions": _diff_objects(
+            before.get("profile_gap_suggestions"),
+            after.get("profile_gap_suggestions"),
+        ),
+        "accepted_alignment_overrides": _diff_objects(
+            before.get("accepted_alignment_overrides"),
+            after.get("accepted_alignment_overrides"),
+        ),
+        "accepted_profile_gaps": _diff_objects(
+            before.get("accepted_profile_gaps"),
+            after.get("accepted_profile_gaps"),
+        ),
+        "accepted_hypotheses": _diff_objects(
+            before.get("accepted_hypotheses"),
+            after.get("accepted_hypotheses"),
+        ),
+        "accepted_evidence_tasks": _diff_objects(
+            before.get("accepted_evidence_tasks"),
+            after.get("accepted_evidence_tasks"),
         ),
         "alignment_manifest": _diff_objects(
             before.get("alignment_manifest"),

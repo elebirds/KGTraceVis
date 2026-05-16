@@ -68,6 +68,12 @@ class MaterialKGConstructionWorkflowResult:
     document_map_path: Path
     chunk_prompt_context_path: Path
     cross_chunk_proposals_path: Path
+    hypothesis_brainstorming_manifest_path: Path
+    brainstorm_hypotheses_path: Path
+    brainstorm_review_items_path: Path
+    alignment_suggestions_path: Path
+    semantic_layer_suggestions_path: Path
+    profile_gap_suggestions_path: Path
     publish_manifest_path: Path
     publish_report_path: Path
     diff_path: Path
@@ -156,6 +162,14 @@ def run_material_kg_construction_workflow(
         document_map_path=build_result.document_map_path,
         chunk_prompt_context_path=build_result.chunk_prompt_context_path,
         cross_chunk_proposals_path=build_result.cross_chunk_proposals_path,
+        hypothesis_brainstorming_manifest_path=(
+            build_result.hypothesis_brainstorming_manifest_path
+        ),
+        brainstorm_hypotheses_path=build_result.brainstorm_hypotheses_path,
+        brainstorm_review_items_path=build_result.brainstorm_review_items_path,
+        alignment_suggestions_path=build_result.alignment_suggestions_path,
+        semantic_layer_suggestions_path=build_result.semantic_layer_suggestions_path,
+        profile_gap_suggestions_path=build_result.profile_gap_suggestions_path,
         publish_manifest_path=build_result.publish_manifest_path,
         publish_report_path=build_result.publish_report_path,
         diff_path=build_result.diff_path,

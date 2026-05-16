@@ -7,6 +7,7 @@ import os
 import re
 import urllib.request
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from hashlib import sha1
 from pathlib import Path
@@ -36,6 +37,17 @@ from kgtracevis.kg_construction.document_extraction import (
     parse_source_material,
 )
 from kgtracevis.kg_construction.draft import DraftEntity, DraftRelation, KGConstructionSource
+from kgtracevis.kg_construction.hypothesis_brainstorming import (
+    DEFAULT_HYPOTHESIS_BRAINSTORMING_PROMPT_VERSION,
+    HypothesisBrainstormingClient,
+    HypothesisInfluence,
+    HypothesisMode,
+    HypothesisProvider,
+    OfflineHypothesisFixtureClient,
+    OpenAICompatibleHypothesisBrainstormingClient,
+    run_hypothesis_brainstorming,
+)
+from kgtracevis.kg_construction.review_queue import review_queue_payload
 from kgtracevis.service.kg_construction import (
     ConstructionSourceFormat,
     KGConstructionBuildRequest,
@@ -84,6 +96,17 @@ class KGMaterialExtractionState(BaseModel):
     chunk_results_path: str | None = None
     document_understanding_map_path: str | None = None
     chunk_prompt_context_path: str | None = None
+    hypothesis_mode: HypothesisMode = "none"
+    hypothesis_provider: HypothesisProvider = "none"
+    hypothesis_influence: HypothesisInfluence = "review_only"
+    hypothesis_brainstorming_manifest_path: str | None = None
+    brainstorm_hypotheses_path: str | None = None
+    brainstorm_review_items_path: str | None = None
+    brainstorm_evidence_tasks_path: str | None = None
+    brainstorm_profile_gaps_path: str | None = None
+    alignment_suggestions_path: str | None = None
+    semantic_layer_suggestions_path: str | None = None
+    profile_gap_suggestions_path: str | None = None
     error_message: str | None = None
 
     @model_validator(mode="after")
@@ -263,6 +286,10 @@ class KGMaterialExtractionRunRequest(BaseModel):
     document_understanding_mode: DocumentUnderstandingMode = "chunk"
     document_understanding_provider: DocumentUnderstandingProvider = "none"
     document_understanding_prompt_version: str = DEFAULT_DOCUMENT_UNDERSTANDING_PROMPT_VERSION
+    hypothesis_mode: HypothesisMode = "none"
+    hypothesis_provider: HypothesisProvider = "none"
+    hypothesis_influence: HypothesisInfluence = "review_only"
+    hypothesis_prompt_version: str = DEFAULT_HYPOTHESIS_BRAINSTORMING_PROMPT_VERSION
     default_confidence: float = Field(default=0.55, ge=0.0, le=1.0)
     strict_grounding: bool = True
     continue_on_chunk_error: bool = False
@@ -270,6 +297,8 @@ class KGMaterialExtractionRunRequest(BaseModel):
     document_ie_payload: dict[str, Any] | None = None
     document_understanding_fixture_path: str | None = None
     document_understanding_payload: dict[str, Any] | None = None
+    hypothesis_fixture_path: str | None = None
+    hypothesis_payload: dict[str, Any] | None = None
     overwrite: bool = False
 
     @model_validator(mode="after")
@@ -314,6 +343,25 @@ class KGMaterialExtractionRunRequest(BaseModel):
                 "provide either document_understanding_fixture_path or "
                 "document_understanding_payload, not both"
             )
+        if self.hypothesis_mode == "none" and (
+            self.hypothesis_provider != "none"
+            or self.hypothesis_fixture_path
+            or self.hypothesis_payload is not None
+        ):
+            raise ValueError(
+                "hypothesis_provider/payload require hypothesis_mode=brainstorm"
+            )
+        if self.hypothesis_provider != "offline_fixture" and (
+            self.hypothesis_fixture_path or self.hypothesis_payload is not None
+        ):
+            raise ValueError(
+                "hypothesis_fixture_path/hypothesis_payload require "
+                "hypothesis_provider=offline_fixture"
+            )
+        if self.hypothesis_fixture_path and self.hypothesis_payload is not None:
+            raise ValueError(
+                "provide either hypothesis_fixture_path or hypothesis_payload, not both"
+            )
         return self
 
 
@@ -337,6 +385,9 @@ class KGMaterialExtractionRunResponse(BaseModel):
     chunk_results_path: str
     document_understanding_map_path: str | None = None
     chunk_prompt_context_path: str | None = None
+    hypothesis_brainstorming_manifest_path: str | None = None
+    brainstorm_hypotheses_path: str | None = None
+    brainstorm_review_items_path: str | None = None
     chunk_count: int
     error_count: int
     provider: DocumentIEProvider
@@ -696,6 +747,7 @@ def extract_kg_material_to_structured_records(
     *,
     client: DocumentIEClient | None = None,
     document_understanding_client: DocumentUnderstandingClient | None = None,
+    hypothesis_client: HypothesisBrainstormingClient | None = None,
     material_root: Path | None = None,
 ) -> KGMaterialExtractionRunResponse:
     """Extract one material into structured records consumable by construction."""
@@ -708,6 +760,16 @@ def extract_kg_material_to_structured_records(
     extraction_manifest_path = record_dir / "extraction_manifest.json"
     document_understanding_map_path = record_dir / "document_understanding_map.json"
     chunk_prompt_context_path = record_dir / "chunk_prompt_context.jsonl"
+    brainstorm_hypotheses_path = record_dir / "brainstorm_hypotheses.jsonl"
+    brainstorm_evidence_tasks_path = record_dir / "brainstorm_evidence_tasks.jsonl"
+    brainstorm_profile_gaps_path = record_dir / "brainstorm_profile_gaps.json"
+    brainstorm_review_items_path = record_dir / "brainstorm_review_items.json"
+    hypothesis_brainstorming_manifest_path = (
+        record_dir / "hypothesis_brainstorming_manifest.json"
+    )
+    alignment_suggestions_path = record_dir / "alignment_suggestions.jsonl"
+    semantic_layer_suggestions_path = record_dir / "semantic_layer_suggestions.jsonl"
+    profile_gap_suggestions_path = record_dir / "profile_gap_suggestions.json"
     existing_artifacts = [
         path.name
         for path in (
@@ -716,6 +778,14 @@ def extract_kg_material_to_structured_records(
             extraction_manifest_path,
             document_understanding_map_path,
             chunk_prompt_context_path,
+            brainstorm_hypotheses_path,
+            brainstorm_evidence_tasks_path,
+            brainstorm_profile_gaps_path,
+            brainstorm_review_items_path,
+            hypothesis_brainstorming_manifest_path,
+            alignment_suggestions_path,
+            semantic_layer_suggestions_path,
+            profile_gap_suggestions_path,
         )
         if path.exists()
     ]
@@ -795,6 +865,65 @@ def extract_kg_material_to_structured_records(
             for summary in extraction_result.chunk_summaries
         ],
     )
+    hypothesis_result = None
+    if request.hypothesis_mode == "brainstorm":
+        brainstorming_client = _hypothesis_client_for_request(
+            material=material,
+            request=request,
+            client=hypothesis_client,
+        )
+        hypothesis_result = run_hypothesis_brainstorming(
+            document,
+            chunks,
+            mode=request.hypothesis_mode,
+            provider=request.hypothesis_provider,
+            influence=request.hypothesis_influence,
+            client=brainstorming_client,
+            document_map=document_understanding_map,
+            draft_kg=draft,
+            semantic_context={
+                "allowed_relations": sorted(ALLOWED_DOCUMENT_IE_RELATIONS),
+                "claim_boundary": (
+                    "semantic projection remains deterministic and profile-controlled"
+                ),
+            },
+            prompt_version=request.hypothesis_prompt_version,
+        )
+        _write_jsonl(brainstorm_hypotheses_path, hypothesis_result.hypotheses)
+        _write_jsonl(brainstorm_evidence_tasks_path, hypothesis_result.evidence_tasks)
+        _write_json_object(
+            brainstorm_profile_gaps_path,
+            {
+                "artifact_type": "brainstorm_profile_gaps_v1",
+                "source_id": material.material_id,
+                "profile_gaps": list(hypothesis_result.profile_gaps),
+            },
+        )
+        _write_json_object(
+            brainstorm_review_items_path,
+            {
+                "artifact_type": "brainstorm_review_items_v1",
+                "source_id": material.material_id,
+                "items": review_queue_payload(hypothesis_result.review_items),
+            },
+        )
+        _write_json_object(
+            hypothesis_brainstorming_manifest_path,
+            hypothesis_result.manifest,
+        )
+        _write_jsonl(alignment_suggestions_path, hypothesis_result.alignment_suggestions)
+        _write_jsonl(
+            semantic_layer_suggestions_path,
+            hypothesis_result.semantic_layer_suggestions,
+        )
+        _write_json_object(
+            profile_gap_suggestions_path,
+            {
+                "artifact_type": "profile_gap_suggestions_v1",
+                "source_id": material.material_id,
+                "profile_gaps": list(hypothesis_result.profile_gaps),
+            },
+        )
 
     now = _utc_now()
     extraction_run_id = str(uuid.uuid4())
@@ -814,6 +943,25 @@ def extract_kg_material_to_structured_records(
             chunk_prompt_context_path if document_understanding_map is not None else None
         ),
         document_understanding_map=document_understanding_map,
+        hypothesis_result_manifest=(
+            hypothesis_result.manifest if hypothesis_result is not None else None
+        ),
+        hypothesis_artifact_paths=(
+            {
+                "brainstorm_hypotheses": brainstorm_hypotheses_path,
+                "brainstorm_evidence_tasks": brainstorm_evidence_tasks_path,
+                "brainstorm_profile_gaps": brainstorm_profile_gaps_path,
+                "brainstorm_review_items": brainstorm_review_items_path,
+                "hypothesis_brainstorming_manifest": (
+                    hypothesis_brainstorming_manifest_path
+                ),
+                "alignment_suggestions": alignment_suggestions_path,
+                "semantic_layer_suggestions": semantic_layer_suggestions_path,
+                "profile_gap_suggestions": profile_gap_suggestions_path,
+            }
+            if hypothesis_result is not None
+            else None
+        ),
         extraction_run_id=extraction_run_id,
         provider=request.provider,
         request=request,
@@ -833,6 +981,9 @@ def extract_kg_material_to_structured_records(
                 extractor_version="v1",
                 prompt_version=request.prompt_version,
                 document_understanding_mode=request.document_understanding_mode,
+                hypothesis_mode=request.hypothesis_mode,
+                hypothesis_provider=request.hypothesis_provider,
+                hypothesis_influence=request.hypothesis_influence,
                 extracted_at=now,
                 record_count=len(records),
                 chunk_count=extraction_result.chunk_count,
@@ -847,6 +998,44 @@ def extract_kg_material_to_structured_records(
                 chunk_prompt_context_path=(
                     str(chunk_prompt_context_path)
                     if document_understanding_map is not None
+                    else None
+                ),
+                hypothesis_brainstorming_manifest_path=(
+                    str(hypothesis_brainstorming_manifest_path)
+                    if hypothesis_result is not None
+                    else None
+                ),
+                brainstorm_hypotheses_path=(
+                    str(brainstorm_hypotheses_path) if hypothesis_result is not None else None
+                ),
+                brainstorm_review_items_path=(
+                    str(brainstorm_review_items_path)
+                    if hypothesis_result is not None
+                    else None
+                ),
+                brainstorm_evidence_tasks_path=(
+                    str(brainstorm_evidence_tasks_path)
+                    if hypothesis_result is not None
+                    else None
+                ),
+                brainstorm_profile_gaps_path=(
+                    str(brainstorm_profile_gaps_path)
+                    if hypothesis_result is not None
+                    else None
+                ),
+                alignment_suggestions_path=(
+                    str(alignment_suggestions_path)
+                    if hypothesis_result is not None
+                    else None
+                ),
+                semantic_layer_suggestions_path=(
+                    str(semantic_layer_suggestions_path)
+                    if hypothesis_result is not None
+                    else None
+                ),
+                profile_gap_suggestions_path=(
+                    str(profile_gap_suggestions_path)
+                    if hypothesis_result is not None
                     else None
                 ),
             ),
@@ -875,6 +1064,11 @@ def extract_kg_material_to_structured_records(
             "document_understanding_fixture_path": (
                 request.document_understanding_fixture_path
             ),
+            "hypothesis_mode": request.hypothesis_mode,
+            "hypothesis_provider": request.hypothesis_provider,
+            "hypothesis_influence": request.hypothesis_influence,
+            "hypothesis_prompt_version": request.hypothesis_prompt_version,
+            "hypothesis_fixture_path": request.hypothesis_fixture_path,
         },
         result_summary={
             "record_count": len(records),
@@ -891,6 +1085,16 @@ def extract_kg_material_to_structured_records(
             "chunk_prompt_context_path": (
                 str(chunk_prompt_context_path)
                 if document_understanding_map is not None
+                else None
+            ),
+            "hypothesis_brainstorming_manifest_path": (
+                str(hypothesis_brainstorming_manifest_path)
+                if hypothesis_result is not None
+                else None
+            ),
+            "brainstorm_review_items_path": (
+                str(brainstorm_review_items_path)
+                if hypothesis_result is not None
                 else None
             ),
         },
@@ -963,6 +1167,47 @@ def extract_kg_material_to_structured_records(
                 ),
             },
         )
+    if hypothesis_result is not None:
+        for artifact_type, path, media_type, payload in (
+            (
+                "hypothesis_brainstorming_manifest",
+                hypothesis_brainstorming_manifest_path,
+                "application/json",
+                hypothesis_result.manifest,
+            ),
+            (
+                "brainstorm_hypotheses",
+                brainstorm_hypotheses_path,
+                "application/jsonl",
+                {"hypothesis_count": len(hypothesis_result.hypotheses)},
+            ),
+            (
+                "brainstorm_review_items",
+                brainstorm_review_items_path,
+                "application/json",
+                {"review_item_count": len(hypothesis_result.review_items)},
+            ),
+            (
+                "alignment_suggestions",
+                alignment_suggestions_path,
+                "application/jsonl",
+                {"suggestion_count": len(hypothesis_result.alignment_suggestions)},
+            ),
+            (
+                "semantic_layer_suggestions",
+                semantic_layer_suggestions_path,
+                "application/jsonl",
+                {"suggestion_count": len(hypothesis_result.semantic_layer_suggestions)},
+            ),
+        ):
+            store.save_extraction_artifact(
+                material_id=updated.material_id,
+                extraction_run_id=extraction_run.get("extraction_run_id"),
+                artifact_type=artifact_type,
+                uri=str(path),
+                media_type=media_type,
+                payload=payload,
+            )
     return KGMaterialExtractionRunResponse(
         material=updated,
         structured_records_path=str(records_path),
@@ -978,6 +1223,17 @@ def extract_kg_material_to_structured_records(
             str(chunk_prompt_context_path)
             if document_understanding_map is not None
             else None
+        ),
+        hypothesis_brainstorming_manifest_path=(
+            str(hypothesis_brainstorming_manifest_path)
+            if hypothesis_result is not None
+            else None
+        ),
+        brainstorm_hypotheses_path=(
+            str(brainstorm_hypotheses_path) if hypothesis_result is not None else None
+        ),
+        brainstorm_review_items_path=(
+            str(brainstorm_review_items_path) if hypothesis_result is not None else None
         ),
         chunk_count=extraction_result.chunk_count,
         error_count=extraction_result.error_count,
@@ -1027,6 +1283,10 @@ def _construction_source_from_material(
         metadata["prompt_version"] = extraction.prompt_version
     if extraction.document_understanding_mode:
         metadata["document_understanding_mode"] = extraction.document_understanding_mode
+    if extraction.hypothesis_mode:
+        metadata["hypothesis_mode"] = extraction.hypothesis_mode
+        metadata["hypothesis_provider"] = extraction.hypothesis_provider
+        metadata["hypothesis_influence"] = extraction.hypothesis_influence
     if extraction.record_count is not None:
         metadata["record_count"] = extraction.record_count
     if extraction.chunk_count is not None:
@@ -1041,6 +1301,24 @@ def _construction_source_from_material(
         metadata["document_understanding_map_path"] = extraction.document_understanding_map_path
     if extraction.chunk_prompt_context_path:
         metadata["chunk_prompt_context_path"] = extraction.chunk_prompt_context_path
+    if extraction.hypothesis_brainstorming_manifest_path:
+        metadata["hypothesis_brainstorming_manifest_path"] = (
+            extraction.hypothesis_brainstorming_manifest_path
+        )
+    if extraction.brainstorm_hypotheses_path:
+        metadata["brainstorm_hypotheses_path"] = extraction.brainstorm_hypotheses_path
+    if extraction.brainstorm_review_items_path:
+        metadata["brainstorm_review_items_path"] = extraction.brainstorm_review_items_path
+    if extraction.brainstorm_evidence_tasks_path:
+        metadata["brainstorm_evidence_tasks_path"] = extraction.brainstorm_evidence_tasks_path
+    if extraction.brainstorm_profile_gaps_path:
+        metadata["brainstorm_profile_gaps_path"] = extraction.brainstorm_profile_gaps_path
+    if extraction.alignment_suggestions_path:
+        metadata["alignment_suggestions_path"] = extraction.alignment_suggestions_path
+    if extraction.semantic_layer_suggestions_path:
+        metadata["semantic_layer_suggestions_path"] = extraction.semantic_layer_suggestions_path
+    if extraction.profile_gap_suggestions_path:
+        metadata["profile_gap_suggestions_path"] = extraction.profile_gap_suggestions_path
     return KGConstructionSourceInput(
         source_id=source_id,
         source_type=source_type,
@@ -1082,6 +1360,22 @@ def _document_understanding_client_for_request(
         return OpenAICompatibleDocumentUnderstandingClient()
     fixture = _offline_document_understanding_fixture(material=material, request=request)
     return OfflineDocumentUnderstandingFixtureClient(fixture)
+
+
+def _hypothesis_client_for_request(
+    *,
+    material: KGMaterialRecord,
+    request: KGMaterialExtractionRunRequest,
+    client: HypothesisBrainstormingClient | None,
+) -> HypothesisBrainstormingClient | None:
+    if client is not None:
+        return client
+    if request.hypothesis_provider == "none":
+        return None
+    if request.hypothesis_provider == "openai":
+        return OpenAICompatibleHypothesisBrainstormingClient()
+    fixture = _offline_hypothesis_fixture(material=material, request=request)
+    return OfflineHypothesisFixtureClient(fixture)
 
 
 def _offline_document_ie_fixture(
@@ -1144,6 +1438,36 @@ def _offline_document_understanding_fixture(
         "document_understanding_payload, document_understanding_fixture_path, or "
         "material.metadata['document_understanding_payload']/"
         "['document_understanding_fixture_path']"
+    )
+
+
+def _offline_hypothesis_fixture(
+    *,
+    material: KGMaterialRecord,
+    request: KGMaterialExtractionRunRequest,
+) -> dict[str, Any]:
+    if request.hypothesis_payload is not None:
+        return request.hypothesis_payload
+    fixture_path = request.hypothesis_fixture_path or _first_metadata_text(
+        material.metadata,
+        "hypothesis_fixture_path",
+        "hypothesis_fixture",
+    )
+    if fixture_path:
+        path = Path(fixture_path)
+        if not path.is_file():
+            raise ValueError(f"offline hypothesis fixture not found: {path}")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            return payload
+        raise ValueError(f"offline hypothesis fixture must be a JSON object: {path}")
+    inline = material.metadata.get("hypothesis_payload")
+    if isinstance(inline, dict):
+        return inline
+    raise ValueError(
+        "hypothesis_provider=offline_fixture requires hypothesis_payload, "
+        "hypothesis_fixture_path, or material.metadata['hypothesis_payload']/"
+        "['hypothesis_fixture_path']"
     )
 
 
@@ -1262,6 +1586,8 @@ def _material_extraction_manifest(
     document_understanding_map_path: Path | None,
     chunk_prompt_context_path: Path | None,
     document_understanding_map: dict[str, Any] | None,
+    hypothesis_result_manifest: dict[str, Any] | None,
+    hypothesis_artifact_paths: Mapping[str, Path] | None,
     extraction_run_id: str,
     provider: str,
     request: KGMaterialExtractionRunRequest,
@@ -1346,6 +1672,19 @@ def _material_extraction_manifest(
                 )
             ),
         },
+        "hypothesis_brainstorming": (
+            hypothesis_result_manifest
+            if hypothesis_result_manifest is not None
+            else {
+                "mode": request.hypothesis_mode,
+                "provider": request.hypothesis_provider,
+                "influence": request.hypothesis_influence,
+                "claim_boundary": (
+                    "hypothesis brainstorming disabled; no hypothesis artifacts "
+                    "participated in extraction"
+                ),
+            }
+        ),
         "summary": {
             "record_count": len(records),
             "entity_count": entity_count,
@@ -1368,6 +1707,9 @@ def _material_extraction_manifest(
                 if chunk_prompt_context_path is not None
                 else None
             ),
+            "hypothesis_brainstorming": {
+                key: str(path) for key, path in (hypothesis_artifact_paths or {}).items()
+            },
         },
     }
 

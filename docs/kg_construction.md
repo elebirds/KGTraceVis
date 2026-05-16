@@ -358,6 +358,44 @@ explicit `review_acceptance_policy` or `rca_policy` to request propagation/RCA
 fields, but those requests are applied only after review accept, only for
 whitelisted RCA relation/family combinations, and with conservative caps.
 
+Material extraction also supports an independent hypothesis brainstorming axis:
+
+- `hypothesis_mode=none` is the default and writes no brainstorming artifacts.
+- `hypothesis_mode=brainstorm` runs advisory RCA hypothesis discovery after
+  chunk IE has produced DraftKG candidates. It can be combined with any
+  `document_understanding_mode`, including `agentic`.
+- `hypothesis_provider=none` uses a deterministic no-key fallback that records
+  missing-evidence tasks instead of fabricating facts.
+- `hypothesis_provider=offline_fixture` replays a JSON fixture for tests and
+  demos, and `hypothesis_provider=openai` uses the OpenAI-compatible
+  brainstorming client.
+- `hypothesis_influence=review_only` is the implemented safe default. The
+  `prompt_context` and `profile_suggestions` values are request/schema/manifest
+  placeholders for future guarded behavior.
+
+Brainstorming writes `brainstorm_hypotheses.jsonl`,
+`brainstorm_evidence_tasks.jsonl`, `brainstorm_profile_gaps.json`,
+`brainstorm_review_items.json`, `hypothesis_brainstorming_manifest.json`,
+`alignment_suggestions.jsonl`, `semantic_layer_suggestions.jsonl`, and
+`profile_gap_suggestions.json`. Build workflows aggregate these into the build
+directory and merge review items into `review_queue.json`. New review item
+types include `hypothesis_candidate`, `causal_chain_candidate`,
+`missing_evidence_request`, `profile_gap_candidate`,
+`alias_mapping_candidate`, `variable_mapping_candidate`, and
+`semantic_policy_candidate`.
+
+The review queue is the boundary between LLM suggestion and KG mutation.
+Accepting a plain hypothesis records it in `accepted_hypotheses.json` and does
+not write an edge. Accepting an alias or variable mapping records an accepted
+override for a future rerun; it does not rewrite current canonical IDs.
+Accepting a profile gap records the gap and does not mutate the active profile.
+Accepting a causal-chain candidate stages reviewed edges only when every
+proposed edge has existing endpoints, an allowed relation, and source spans.
+Accepting semantic/RCA policy suggestions can update only existing edge policy
+fields, only for whitelisted relation/family combinations, and with the same
+caps used by reviewed cross-chunk RCA staging (`rca_score <= 0.7`,
+`propagation_priority <= 0.75`, `source_trust <= 0.8`).
+
 The product boundary is therefore not "LLM returned triples". The product
 experience is the audited construction workspace: source registration, parser
 and chunk audit, source-grounded candidate generation, DraftKG conversion,

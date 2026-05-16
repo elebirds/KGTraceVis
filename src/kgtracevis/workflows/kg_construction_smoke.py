@@ -15,6 +15,7 @@ from kgtracevis.kg_construction import KGConstructionSource, load_source_library
 from kgtracevis.kg_construction.models import KG_CONSTRUCTION_REQUIRED_ARTIFACT_KEYS
 from kgtracevis.schema.evidence_schema import Evidence
 from kgtracevis.service.kg_materials import (
+    KGMaterialExtractionRunRequest,
     KGMaterialExtractionState,
     KGMaterialRegisterRequest,
     register_kg_material,
@@ -106,6 +107,7 @@ def run_kg_construction_acceptance_smoke(
     ]
     material_path, material_result = _run_material_direct_smoke(config)
     paths.append(material_path)
+    paths.append(_run_material_brainstorm_smoke(config))
     paths.append(_run_runtime_overlay_smoke(material_result))
     tep_path, tep_result = _run_tep_smoke(config)
     paths.append(tep_path)
@@ -241,6 +243,67 @@ def _run_material_direct_smoke(
     metadata["material_ids"] = list(result.material_ids)
     metadata["extraction_mode"] = result.summary["material_library"]["extraction_mode"]
     return _passed_path("material_direct", result, metadata=metadata), result
+
+
+def _run_material_brainstorm_smoke(
+    config: KGConstructionSmokeConfig,
+) -> KGConstructionSmokePath:
+    material_root = config.output_dir / "material_brainstorm_library"
+    source_dir = config.output_dir / "material_brainstorm_sources"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    note_path = source_dir / "brainstorm_note.txt"
+    note_path.write_text(
+        "Cooling alert suggests pump seal wear. Seal wear should be reviewed.",
+        encoding="utf-8",
+    )
+    register_kg_material(
+        KGMaterialRegisterRequest(
+            material_id="smoke_brainstorm_note",
+            title="Smoke brainstorm note",
+            source_kind="local_path",
+            source_uri=str(note_path),
+            scenario="shared",
+            material_type="text",
+        ),
+        material_root=material_root,
+        overwrite=config.overwrite,
+    )
+    result = run_material_kg_construction_workflow(
+        MaterialKGConstructionWorkflowConfig(
+            material_ids=("smoke_brainstorm_note",),
+            material_root=material_root,
+            output_dir=config.output_dir / "material_brainstorm",
+            overwrite=config.overwrite,
+            run_id="kgbuild_smoke_material_brainstorm",
+            extraction_mode="always",
+            extraction_request=KGMaterialExtractionRunRequest(
+                provider="offline_fixture",
+                document_ie_payload=_material_brainstorm_document_fixture(),
+                hypothesis_mode="brainstorm",
+                hypothesis_provider="offline_fixture",
+                hypothesis_payload=_material_brainstorm_hypothesis_fixture(),
+                overwrite=True,
+            ),
+        )
+    )
+    metadata = _validate_required_material_artifacts(result)
+    review_queue = json.loads(result.review_queue_path.read_text(encoding="utf-8"))
+    item_types = sorted(
+        {
+            str(item.get("item_type"))
+            for item in review_queue
+            if isinstance(item, dict)
+        }
+    )
+    if "alias_mapping_candidate" not in item_types:
+        raise ValueError("brainstorm smoke did not produce alias_mapping_candidate")
+    if "causal_chain_candidate" not in item_types:
+        raise ValueError("brainstorm smoke did not produce causal_chain_candidate")
+    metadata["material_root"] = str(material_root)
+    metadata["material_ids"] = list(result.material_ids)
+    metadata["extraction_mode"] = result.summary["material_library"]["extraction_mode"]
+    metadata["review_item_types"] = item_types
+    return _passed_path("material_brainstorm", result, metadata=metadata)
 
 
 def _run_runtime_overlay_smoke(
@@ -528,3 +591,75 @@ def _material_direct_records_jsonl() -> str:
         },
     ]
     return "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n"
+
+
+def _material_brainstorm_document_fixture() -> dict[str, Any]:
+    return {
+        "entities": [
+            {
+                "id": "BrainstormCoolingAlert",
+                "name": "Brainstorm cooling alert",
+                "label": "Alert",
+                "evidence": "Cooling alert",
+            },
+            {
+                "id": "BrainstormPumpSealWear",
+                "name": "Brainstorm pump seal wear",
+                "label": "RootCause",
+                "evidence": "pump seal wear",
+            },
+        ],
+        "relations": [
+            {
+                "head": "BrainstormCoolingAlert",
+                "relation": "SUGGESTS_ROOT_CAUSE",
+                "tail": "BrainstormPumpSealWear",
+                "evidence": "Cooling alert suggests pump seal wear.",
+                "confidence": 0.52,
+            }
+        ],
+    }
+
+
+def _material_brainstorm_hypothesis_fixture() -> dict[str, Any]:
+    return {
+        "hypotheses": [
+            {
+                "hypothesis_type": "causal_chain",
+                "claim": "Cooling alert may indicate pump seal wear.",
+                "candidate_relations": [
+                    {
+                        "head": "BrainstormCoolingAlert",
+                        "relation": "CAUSES",
+                        "tail": "BrainstormPumpSealWear",
+                        "relation_family": "CAUSES",
+                        "confidence": 0.48,
+                    }
+                ],
+                "supporting_spans": [
+                    {
+                        "chunk_id": "smoke_brainstorm_note:chunk:1",
+                        "text": "Cooling alert suggests pump seal wear.",
+                    }
+                ],
+                "risk": "medium",
+                "recommended_review_action": "stage_candidate_edges",
+            }
+        ],
+        "alignment_suggestions": [
+            {
+                "suggestion_type": "alias_mapping",
+                "candidate_alias": "seal wear",
+                "candidate_canonical_id": "BrainstormPumpSealWear",
+                "candidate_canonical_label": "RootCause",
+                "supporting_spans": [
+                    {
+                        "chunk_id": "smoke_brainstorm_note:chunk:1",
+                        "text": "pump seal wear",
+                    }
+                ],
+                "confidence": 0.5,
+                "rationale": "No-key fixture exercises review-only alias suggestions.",
+            }
+        ],
+    }

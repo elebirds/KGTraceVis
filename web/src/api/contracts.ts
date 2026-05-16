@@ -251,6 +251,9 @@ export interface KGMaterialExtractionState {
   extractor_version?: string | null;
   prompt_version?: string | null;
   document_understanding_mode?: "chunk" | "long_context" | "agentic" | null;
+  hypothesis_mode?: "none" | "brainstorm" | null;
+  hypothesis_provider?: "none" | "openai" | "offline_fixture" | null;
+  hypothesis_influence?: "review_only" | "prompt_context" | "profile_suggestions" | null;
   extracted_at?: string | null;
   record_count?: number | null;
   chunk_count?: number | null;
@@ -259,6 +262,14 @@ export interface KGMaterialExtractionState {
   chunk_results_path?: string | null;
   document_understanding_map_path?: string | null;
   chunk_prompt_context_path?: string | null;
+  hypothesis_brainstorming_manifest_path?: string | null;
+  brainstorm_hypotheses_path?: string | null;
+  brainstorm_review_items_path?: string | null;
+  brainstorm_evidence_tasks_path?: string | null;
+  brainstorm_profile_gaps_path?: string | null;
+  alignment_suggestions_path?: string | null;
+  semantic_layer_suggestions_path?: string | null;
+  profile_gap_suggestions_path?: string | null;
   error_message?: string | null;
 }
 
@@ -309,6 +320,10 @@ export interface KGMaterialExtractionRequest {
   document_understanding_mode?: "chunk" | "long_context" | "agentic";
   document_understanding_provider?: "none" | "openai" | "offline_fixture";
   document_understanding_prompt_version?: string;
+  hypothesis_mode?: "none" | "brainstorm";
+  hypothesis_provider?: "none" | "openai" | "offline_fixture";
+  hypothesis_influence?: "review_only" | "prompt_context" | "profile_suggestions";
+  hypothesis_prompt_version?: string;
   default_confidence?: number;
   strict_grounding?: boolean;
   continue_on_chunk_error?: boolean;
@@ -316,6 +331,8 @@ export interface KGMaterialExtractionRequest {
   document_ie_payload?: Record<string, unknown> | null;
   document_understanding_fixture_path?: string | null;
   document_understanding_payload?: Record<string, unknown> | null;
+  hypothesis_fixture_path?: string | null;
+  hypothesis_payload?: Record<string, unknown> | null;
   overwrite?: boolean;
 }
 
@@ -328,6 +345,9 @@ export interface KGMaterialExtractionResponse {
   chunk_results_path: string;
   document_understanding_map_path?: string | null;
   chunk_prompt_context_path?: string | null;
+  hypothesis_brainstorming_manifest_path?: string | null;
+  brainstorm_hypotheses_path?: string | null;
+  brainstorm_review_items_path?: string | null;
   chunk_count: number;
   error_count: number;
   provider: "openai" | "offline_fixture";
@@ -463,6 +483,12 @@ export interface KGConstructionBuildResponse {
   document_map_path?: string | null;
   chunk_prompt_context_path?: string | null;
   cross_chunk_proposals_path?: string | null;
+  hypothesis_brainstorming_manifest_path?: string | null;
+  brainstorm_hypotheses_path?: string | null;
+  brainstorm_review_items_path?: string | null;
+  alignment_suggestions_path?: string | null;
+  semantic_layer_suggestions_path?: string | null;
+  profile_gap_suggestions_path?: string | null;
   publish_manifest_path?: string | null;
   publish_report_path?: string | null;
   diff_path?: string | null;
@@ -493,6 +519,12 @@ export interface KGConstructionBuildRecord {
   document_map_path?: string | null;
   chunk_prompt_context_path?: string | null;
   cross_chunk_proposals_path?: string | null;
+  hypothesis_brainstorming_manifest_path?: string | null;
+  brainstorm_hypotheses_path?: string | null;
+  brainstorm_review_items_path?: string | null;
+  alignment_suggestions_path?: string | null;
+  semantic_layer_suggestions_path?: string | null;
+  profile_gap_suggestions_path?: string | null;
   publish_manifest_path?: string | null;
   publish_report_path?: string | null;
   diff_path?: string | null;

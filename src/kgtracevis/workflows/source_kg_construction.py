@@ -86,6 +86,12 @@ class SourceKGConstructionWorkflowResult:
     document_map_path: Path
     chunk_prompt_context_path: Path
     cross_chunk_proposals_path: Path
+    hypothesis_brainstorming_manifest_path: Path
+    brainstorm_hypotheses_path: Path
+    brainstorm_review_items_path: Path
+    alignment_suggestions_path: Path
+    semantic_layer_suggestions_path: Path
+    profile_gap_suggestions_path: Path
     publish_manifest_path: Path
     publish_report_path: Path
     diff_path: Path
@@ -153,6 +159,13 @@ def run_source_kg_construction_workflow(
         review_queue_path=layer_artifacts["review_queue"],
     )
     artifact_paths.update(document_understanding_artifacts)
+    advisory_artifacts = _write_advisory_llm_artifacts(
+        sources=sources,
+        run_id=result.run_id,
+        artifact_paths=artifact_paths,
+        review_queue_path=layer_artifacts["review_queue"],
+    )
+    artifact_paths.update(advisory_artifacts)
     summary_path = artifact_paths["summary"]
     manifest_path = artifact_paths["manifest"]
     summary = {
@@ -177,6 +190,14 @@ def run_source_kg_construction_workflow(
             "source_audit_graph": result.audit_graph.manifest(),
             "semantic_layer": result.semantic_layer.manifest,
             "rca_view": result.rca_view.manifest,
+            "hypothesis_brainstorming": json.loads(
+                artifact_paths["hypothesis_brainstorming_manifest"].read_text(
+                    encoding="utf-8"
+                )
+            ),
+            "profile_gap_suggestions": json.loads(
+                artifact_paths["profile_gap_suggestions"].read_text(encoding="utf-8")
+            ),
             "publish": result.publish_manifest.model_dump(),
             "source_library": json.loads(
                 source_library_manifest_path.read_text(encoding="utf-8")
@@ -224,6 +245,14 @@ def run_source_kg_construction_workflow(
         document_map_path=artifact_paths["document_map"],
         chunk_prompt_context_path=artifact_paths["chunk_prompt_context"],
         cross_chunk_proposals_path=artifact_paths["cross_chunk_proposals"],
+        hypothesis_brainstorming_manifest_path=artifact_paths[
+            "hypothesis_brainstorming_manifest"
+        ],
+        brainstorm_hypotheses_path=artifact_paths["brainstorm_hypotheses"],
+        brainstorm_review_items_path=artifact_paths["brainstorm_review_items"],
+        alignment_suggestions_path=artifact_paths["alignment_suggestions"],
+        semantic_layer_suggestions_path=artifact_paths["semantic_layer_suggestions"],
+        profile_gap_suggestions_path=artifact_paths["profile_gap_suggestions"],
         publish_manifest_path=layer_artifacts["publish_manifest"],
         publish_report_path=publish_report_path,
         diff_path=diff_path,
@@ -292,6 +321,114 @@ def _write_document_understanding_artifacts(
         "document_map": artifact_paths["document_map"],
         "chunk_prompt_context": artifact_paths["chunk_prompt_context"],
         "cross_chunk_proposals": artifact_paths["cross_chunk_proposals"],
+    }
+
+
+def _write_advisory_llm_artifacts(
+    *,
+    sources: tuple[KGConstructionSource, ...],
+    run_id: str,
+    artifact_paths: dict[str, Path],
+    review_queue_path: Path,
+) -> dict[str, Path]:
+    hypotheses = _load_jsonl_metadata_rows(sources, "brainstorm_hypotheses_path")
+    evidence_tasks = _load_jsonl_metadata_rows(sources, "brainstorm_evidence_tasks_path")
+    alignment_suggestions = _load_jsonl_metadata_rows(sources, "alignment_suggestions_path")
+    semantic_suggestions = _load_jsonl_metadata_rows(
+        sources,
+        "semantic_layer_suggestions_path",
+    )
+    profile_gaps = _load_profile_gap_suggestions(sources)
+    review_items = _load_brainstorm_review_items(sources)
+    manifests = _load_json_metadata_objects(
+        sources,
+        "hypothesis_brainstorming_manifest_path",
+    )
+    aggregate_manifest = {
+        "artifact_type": "hypothesis_brainstorming_manifest_v1",
+        "run_id": run_id,
+        "source_ids": [source.source_id for source in sources],
+        "source_manifest_count": len(manifests),
+        "mode_counts": _count_field(manifests, "mode"),
+        "provider_counts": _count_field(manifests, "provider"),
+        "influence_counts": _count_field(manifests, "influence"),
+        "hypothesis_count": len(hypotheses),
+        "evidence_task_count": len(evidence_tasks),
+        "profile_gap_count": len(profile_gaps),
+        "alignment_suggestion_count": len(alignment_suggestions),
+        "semantic_layer_suggestion_count": len(semantic_suggestions),
+        "review_item_count": len(review_items),
+        "source_manifests": manifests,
+        "claim_boundary": (
+            "LLM-assisted brainstorming, alignment, and semantic suggestions "
+            "are advisory review inputs. They do not mutate KG files unless a "
+            "review workflow explicitly accepts an eligible item."
+        ),
+    }
+    _write_jsonl(artifact_paths["brainstorm_hypotheses"], hypotheses)
+    _write_jsonl(artifact_paths["brainstorm_evidence_tasks"], evidence_tasks)
+    _write_json_object(
+        artifact_paths["brainstorm_profile_gaps"],
+        {
+            "artifact_type": "brainstorm_profile_gaps_v1",
+            "run_id": run_id,
+            "profile_gaps": profile_gaps,
+        },
+    )
+    _write_json_list(artifact_paths["brainstorm_review_items"], review_items)
+    _write_json_object(
+        artifact_paths["hypothesis_brainstorming_manifest"],
+        aggregate_manifest,
+    )
+    _write_jsonl(artifact_paths["alignment_suggestions"], alignment_suggestions)
+    _write_jsonl(artifact_paths["semantic_layer_suggestions"], semantic_suggestions)
+    _write_json_object(
+        artifact_paths["profile_gap_suggestions"],
+        {
+            "artifact_type": "profile_gap_suggestions_v1",
+            "run_id": run_id,
+            "profile_gaps": profile_gaps,
+            "claim_boundary": "profile gaps are recorded but do not mutate profiles",
+        },
+    )
+    for key, artifact_type in (
+        ("accepted_alignment_overrides", "accepted_alignment_overrides_v1"),
+        ("accepted_profile_gaps", "accepted_profile_gaps_v1"),
+        ("accepted_hypotheses", "accepted_hypotheses_v1"),
+        ("accepted_evidence_tasks", "accepted_evidence_tasks_v1"),
+    ):
+        _write_json_object(
+            artifact_paths[key],
+            {"artifact_type": artifact_type, "run_id": run_id, "items": []},
+        )
+    if review_items:
+        existing_queue = json.loads(review_queue_path.read_text(encoding="utf-8"))
+        if not isinstance(existing_queue, list):
+            raise ValueError(f"review queue artifact must be a JSON array: {review_queue_path}")
+        existing_queue.extend(review_items)
+        existing_queue = sorted(
+            existing_queue,
+            key=lambda item: (
+                -int(item.get("priority", 0)) if isinstance(item, Mapping) else 0,
+                str(item.get("target_key", "")) if isinstance(item, Mapping) else "",
+            ),
+        )
+        _write_json_list(review_queue_path, existing_queue)
+    return {
+        "brainstorm_hypotheses": artifact_paths["brainstorm_hypotheses"],
+        "brainstorm_evidence_tasks": artifact_paths["brainstorm_evidence_tasks"],
+        "brainstorm_profile_gaps": artifact_paths["brainstorm_profile_gaps"],
+        "brainstorm_review_items": artifact_paths["brainstorm_review_items"],
+        "hypothesis_brainstorming_manifest": artifact_paths[
+            "hypothesis_brainstorming_manifest"
+        ],
+        "alignment_suggestions": artifact_paths["alignment_suggestions"],
+        "semantic_layer_suggestions": artifact_paths["semantic_layer_suggestions"],
+        "profile_gap_suggestions": artifact_paths["profile_gap_suggestions"],
+        "accepted_alignment_overrides": artifact_paths["accepted_alignment_overrides"],
+        "accepted_profile_gaps": artifact_paths["accepted_profile_gaps"],
+        "accepted_hypotheses": artifact_paths["accepted_hypotheses"],
+        "accepted_evidence_tasks": artifact_paths["accepted_evidence_tasks"],
     }
 
 
@@ -435,6 +572,95 @@ def _cross_chunk_review_item(record: Mapping[str, Any]) -> ReviewQueueItem:
     )
 
 
+def _load_jsonl_metadata_rows(
+    sources: tuple[KGConstructionSource, ...],
+    metadata_key: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for source in sources:
+        path = _metadata_path(source.metadata, metadata_key)
+        if path is None:
+            continue
+        for row in _read_jsonl_objects(path):
+            row.setdefault("source_id", source.source_id)
+            row["source_metadata_path"] = str(path)
+            rows.append(row)
+    return rows
+
+
+def _load_json_metadata_objects(
+    sources: tuple[KGConstructionSource, ...],
+    metadata_key: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for source in sources:
+        path = _metadata_path(source.metadata, metadata_key)
+        if path is None:
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"{metadata_key} artifact must be a JSON object: {path}")
+        payload.setdefault("source_id", source.source_id)
+        payload["source_metadata_path"] = str(path)
+        rows.append(payload)
+    return rows
+
+
+def _load_profile_gap_suggestions(
+    sources: tuple[KGConstructionSource, ...],
+) -> list[dict[str, Any]]:
+    gaps: list[dict[str, Any]] = []
+    for source in sources:
+        path = _metadata_path(source.metadata, "profile_gap_suggestions_path")
+        if path is None:
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"profile gap suggestions must be a JSON object: {path}")
+        records = payload.get("profile_gaps", [])
+        if not isinstance(records, list):
+            raise ValueError(f"profile_gaps must be a list: {path}")
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            record.setdefault("source_id", source.source_id)
+            record["source_metadata_path"] = str(path)
+            gaps.append(record)
+    return gaps
+
+
+def _load_brainstorm_review_items(
+    sources: tuple[KGConstructionSource, ...],
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for source in sources:
+        path = _metadata_path(source.metadata, "brainstorm_review_items_path")
+        if path is None:
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            rows = payload.get("items", [])
+        else:
+            rows = payload
+        if not isinstance(rows, list):
+            raise ValueError(f"brainstorm review items must be a JSON array/list: {path}")
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            row.setdefault("source", source.source_id)
+            row["source_metadata_path"] = str(path)
+            items.append(row)
+    return items
+
+
+def _count_field(rows: Sequence[Mapping[str, Any]], key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(key) or "unknown")
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def _metadata_path(metadata: Mapping[str, Any], key: str) -> Path | None:
     value = metadata.get(key)
     if not value:
@@ -517,7 +743,7 @@ def _write_json_object(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def _write_json_list(path: Path, rows: list[Mapping[str, Any]]) -> None:
+def _write_json_list(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(rows, indent=2, sort_keys=True), encoding="utf-8")
 

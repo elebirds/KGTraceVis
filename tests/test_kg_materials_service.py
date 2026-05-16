@@ -197,6 +197,154 @@ def test_material_extraction_supports_no_key_offline_fixture_provider(
     assert source_text not in json.dumps(manifest)
 
 
+def test_material_extraction_brainstorm_none_provider_writes_review_only_artifacts(
+    tmp_path: Path,
+) -> None:
+    """No-key brainstorming should write audit artifacts without an external call."""
+    save_kg_material_upload(
+        material_id="brainstorm_none_note",
+        title="Brainstorm none note",
+        filename="brainstorm_none_note.txt",
+        content=b"Pump cavitation indicates seal wear.",
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+
+    response = extract_kg_material_to_structured_records(
+        "brainstorm_none_note",
+        KGMaterialExtractionRunRequest(
+            hypothesis_mode="brainstorm",
+            hypothesis_provider="none",
+            overwrite=True,
+        ),
+        client=EmptyIEClient(),
+        material_root=tmp_path,
+    )
+
+    assert response.hypothesis_brainstorming_manifest_path is not None
+    assert response.brainstorm_hypotheses_path is not None
+    assert response.brainstorm_review_items_path is not None
+    manifest = json.loads(
+        Path(response.hypothesis_brainstorming_manifest_path).read_text(encoding="utf-8")
+    )
+    review_items = json.loads(
+        Path(response.brainstorm_review_items_path).read_text(encoding="utf-8")
+    )
+
+    assert manifest["mode"] == "brainstorm"
+    assert manifest["provider"] == "none"
+    assert manifest["influence"] == "review_only"
+    assert manifest["generator_type"] == "deterministic_fallback"
+    assert manifest["evidence_task_count"] == 1
+    assert review_items["items"][0]["item_type"] == "missing_evidence_request"
+    assert response.material.extraction.hypothesis_mode == "brainstorm"
+    assert response.material.extraction.hypothesis_provider == "none"
+
+
+def test_material_extraction_mixes_agentic_understanding_and_brainstorm_fixture(
+    tmp_path: Path,
+) -> None:
+    """Document understanding and brainstorming should be independent axes."""
+    save_kg_material_upload(
+        material_id="mixed_note",
+        title="Mixed note",
+        filename="mixed_note.txt",
+        content=(
+            b"Agentic PumpFault appears in the source. "
+            b"Agentic SealWear is discussed as a possible mechanism. "
+            b"Pump cavitation indicates seal wear."
+        ),
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+
+    response = extract_kg_material_to_structured_records(
+        "mixed_note",
+        KGMaterialExtractionRunRequest(
+            provider="offline_fixture",
+            document_ie_payload=_offline_pump_fixture(),
+            document_understanding_mode="agentic",
+            hypothesis_mode="brainstorm",
+            hypothesis_provider="offline_fixture",
+            hypothesis_payload=_hypothesis_fixture(),
+            overwrite=True,
+        ),
+        document_understanding_client=StepDocumentUnderstandingClient(),
+        material_root=tmp_path,
+    )
+
+    assert response.document_understanding_map_path is not None
+    assert response.hypothesis_brainstorming_manifest_path is not None
+    document_map = json.loads(
+        Path(response.document_understanding_map_path).read_text(encoding="utf-8")
+    )
+    brainstorm_manifest = json.loads(
+        Path(response.hypothesis_brainstorming_manifest_path).read_text(encoding="utf-8")
+    )
+    review_items = json.loads(
+        Path(response.brainstorm_review_items_path or "").read_text(encoding="utf-8")
+    )
+    records = [
+        json.loads(line)
+        for line in Path(response.structured_records_path).read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert document_map["mode"] == "agentic"
+    assert brainstorm_manifest["provider"] == "offline_fixture"
+    assert brainstorm_manifest["hypothesis_count"] == 1
+    assert {item["item_type"] for item in review_items["items"]} >= {
+        "causal_chain_candidate",
+        "alias_mapping_candidate",
+        "semantic_policy_candidate",
+        "profile_gap_candidate",
+    }
+    assert {record["metadata"]["chunk_id"] for record in records} == {
+        records[0]["metadata"]["chunk_id"]
+    }
+
+    build_sources = prepare_kg_material_construction_build(
+        KGMaterialSelectedBuildRequest(material_ids=["mixed_note"]),
+        material_root=tmp_path,
+    )
+    source_metadata = build_sources.sources[0].metadata
+    assert source_metadata["document_understanding_mode"] == "agentic"
+    assert source_metadata["hypothesis_mode"] == "brainstorm"
+    assert source_metadata["brainstorm_review_items_path"] == (
+        response.brainstorm_review_items_path
+    )
+
+
+def test_hypothesis_fixture_payload_errors_are_precise(tmp_path: Path) -> None:
+    """Invalid brainstorming fixtures should fail at the advisory boundary."""
+    save_kg_material_upload(
+        material_id="bad_hypothesis_note",
+        title="Bad hypothesis note",
+        filename="bad_hypothesis_note.txt",
+        content=b"Pump cavitation indicates seal wear.",
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="invalid hypothesis brainstorming payload \\(source_id='bad_hypothesis_note'\\)",
+    ):
+        extract_kg_material_to_structured_records(
+            "bad_hypothesis_note",
+            KGMaterialExtractionRunRequest(
+                hypothesis_mode="brainstorm",
+                hypothesis_provider="offline_fixture",
+                hypothesis_payload={"hypotheses": "not-a-list"},
+                overwrite=True,
+            ),
+            client=EmptyIEClient(),
+            material_root=tmp_path,
+        )
+
+
 @pytest.mark.parametrize("mode", ["long_context", "agentic"])
 def test_material_extraction_document_understanding_writes_document_map(
     tmp_path: Path,
@@ -951,6 +1099,69 @@ def _offline_pump_fixture() -> dict[str, Any]:
                 "tail": "SealWear",
                 "evidence": "Pump cavitation indicates seal wear.",
                 "confidence": 0.55,
+            }
+        ],
+    }
+
+
+def _hypothesis_fixture() -> dict[str, Any]:
+    return {
+        "hypotheses": [
+            {
+                "hypothesis_type": "causal_chain",
+                "claim": "Pump cavitation may lead to seal wear.",
+                "candidate_relations": [
+                    {
+                        "head": "PumpCavitation",
+                        "relation": "CAUSES",
+                        "tail": "SealWear",
+                        "relation_family": "CAUSES",
+                        "confidence": 0.5,
+                    }
+                ],
+                "supporting_spans": [
+                    {
+                        "chunk_id": "mixed:chunk:1",
+                        "text": "Pump cavitation indicates seal wear.",
+                    }
+                ],
+                "risk": "medium",
+                "recommended_review_action": "stage_candidate_edges",
+            }
+        ],
+        "alignment_suggestions": [
+            {
+                "suggestion_type": "alias_mapping",
+                "candidate_alias": "seal wear",
+                "candidate_canonical_id": "SealWear",
+                "candidate_canonical_label": "RootCause",
+                "supporting_spans": [
+                    {"chunk_id": "mixed:chunk:1", "text": "seal wear"}
+                ],
+                "confidence": 0.55,
+                "rationale": "Alias appears in source text.",
+            }
+        ],
+        "semantic_layer_suggestions": [
+            {
+                "suggestion_type": "relation_family_candidate",
+                "edge_key": "PumpCavitation|SUGGESTS_ROOT_CAUSE|SealWear|tep",
+                "proposed_relation_family": "CAUSES",
+                "proposed_propagation_enabled": True,
+                "proposed_rca_score": 0.6,
+                "supporting_spans": [
+                    {"chunk_id": "mixed:chunk:1", "text": "indicates seal wear"}
+                ],
+                "confidence": 0.5,
+                "rationale": "Review-only policy suggestion.",
+            }
+        ],
+        "profile_gaps": [
+            {
+                "suggestion_type": "missing_relation_type_candidate",
+                "rationale": "Profile may need a pump degradation relation family.",
+                "missing_evidence": ["reviewed profile owner approval"],
+                "confidence": 0.2,
             }
         ],
     }

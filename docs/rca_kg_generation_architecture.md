@@ -5,11 +5,13 @@ KGTraceVis KG construction is moving from a candidate CSV builder to an RCA-orie
 ```text
 Source Library
 -> Parse / Chunk
--> Extractor Registry
+-> Document Understanding (optional)
+-> Extractor Registry / Chunk IE
 -> Draft KG
--> Entity Alignment
+-> Hypothesis Brainstorming (optional, review-only)
+-> Entity Alignment (+ advisory mapping suggestions)
 -> Source Audit Graph
--> Semantic Layer
+-> Semantic Layer (+ advisory policy/profile-gap suggestions)
 -> RCA Reasoning View
 -> Review Queue
 -> Versioned Publish
@@ -45,12 +47,27 @@ relations are audit/provenance artifacts by default; they do not become RCA
 runtime propagation edges unless a source extractor explicitly emits such a
 semantic relation.
 
+LLM-assisted alignment suggestions are advisory. They may enter
+`alignment_suggestions.jsonl` and the review queue as
+`alias_mapping_candidate` or `variable_mapping_candidate`, but deterministic
+profile/mapping data remains authoritative. Accepting a suggestion records a
+future override candidate and does not rewrite current canonical IDs or
+historical KG rows.
+
 `Source Audit Graph` preserves the full provenance-rich extraction state for debug and drill-down. It is not the default RCA runtime graph.
 
 `Semantic Layer` projects aligned drafts through a domain profile. It keeps
 task-relevant labels, applies profile semantic projection rules, rewrites
 relations, can swap endpoints when a source relation has the opposite
 direction, and assigns relation families.
+
+LLM-assisted semantic suggestions are also advisory. They may identify
+`relation_family_candidate`, `semantic_policy_gap_candidate`,
+`rca_policy_candidate`, missing entity types, or missing relation types. These
+outputs are written as suggestion artifacts and review items. They do not
+modify profile files, `edges.csv`, propagation flags, or RCA scores before
+review. Accepted policy suggestions are constrained to existing edges,
+whitelisted relation/family combinations, and capped fields.
 
 `RCA Reasoning View` annotates the semantic layer with RCA metadata:
 `relation_family`, `propagation_enabled`, `propagation_direction`,
@@ -60,6 +77,14 @@ come from the profile policy; extractor/import metadata may still override
 those defaults when it is source-backed.
 
 `Review Queue` prioritizes candidates that need human attention, especially causal/root-cause edges, low-confidence propagation edges, new anchors, merge candidates, unresolved entities, alignment conflicts, and facts that can affect Top-K RCA paths. Every item carries `review_status`, `priority`, `reason`, and `recommended_action`. Edge decisions can refresh the publish snapshot; non-edge alignment decisions are recorded and synchronized in the queue first, without automatically changing KG facts. KG Studio consumes the same build registry, review queue, review action, and overlay validation APIs so the UI is an artifact client rather than a separate review system.
+
+Hypothesis brainstorming is a separate optional layer, not a document
+understanding mode. It can run alongside `chunk`, `long_context`, or `agentic`
+document understanding. It writes hypothesis pools, missing-evidence tasks,
+profile gaps, and review items, but it does not write DraftKG, SemanticKG, or
+PublishedKG rows. A reviewed `causal_chain_candidate` can stage edges only
+after endpoint, relation, and evidence validation; other hypothesis/profile
+gap/alignment items are recorded for future rerun or profile maintenance.
 
 `Versioned Publish` prepares build metadata for runtime publication. Neo4j remains the runtime KG target; CSV/JSON artifacts are reproducible experiment snapshots.
 
@@ -146,6 +171,22 @@ and serves the saved report with the stable artifact key
 LLMs may extract source-grounded candidate entities and relations from documents, propose aliases, summarize review items, explain conflicts, or generate RCA path explanation text.
 
 LLMs must not directly publish KG facts, decide canonical IDs, decide propagation direction, overwrite reviewed facts, train edge weights, or replace RCA ranking algorithms. LLM output stays in DraftKG with source evidence and `auto` review status.
+
+The current advisory surface is broader but still bounded:
+
+- Document understanding produces `document_understanding_map.json`,
+  `chunk_prompt_context.jsonl`, and cross-chunk proposals.
+- Chunk IE produces source-grounded DraftKG candidates.
+- Hypothesis brainstorming produces `brainstorm_hypotheses.jsonl`,
+  `brainstorm_evidence_tasks.jsonl`, profile gaps, and review items.
+- Alignment and semantic/RCA suggestions produce suggestion artifacts and
+  review queue items.
+
+Review is the mutation boundary. Any LLM output that could change graph facts,
+canonical mappings, relation family, propagation, or RCA scoring must pass
+through `review_queue.json` and `review_decisions.jsonl`. RCA policy opt-in is
+still capped and whitelisted; unsupported relation families are recorded as
+ignored or profile-gap work, not silently enabled.
 
 Document IE is deliberately not the final product experience. A live or fake
 LLM call only fills candidate DraftKG rows. The user-facing construction

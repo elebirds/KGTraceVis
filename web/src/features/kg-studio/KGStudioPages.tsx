@@ -359,8 +359,14 @@ function KGSources({
     useState<"chunk" | "long_context" | "agentic">("chunk");
   const [documentUnderstandingProvider, setDocumentUnderstandingProvider] =
     useState<"none" | "openai" | "offline_fixture">("none");
+  const [hypothesisMode, setHypothesisMode] = useState<"none" | "brainstorm">("none");
+  const [hypothesisProvider, setHypothesisProvider] =
+    useState<"none" | "openai" | "offline_fixture">("none");
+  const [hypothesisInfluence, setHypothesisInfluence] =
+    useState<"review_only" | "prompt_context" | "profile_suggestions">("review_only");
   const [documentIEFixturePath, setDocumentIEFixturePath] = useState("");
   const [documentUnderstandingFixturePath, setDocumentUnderstandingFixturePath] = useState("");
+  const [hypothesisFixturePath, setHypothesisFixturePath] = useState("");
   const [extractOverwrite, setExtractOverwrite] = useState(false);
   const [materialBuildOverwrite, setMaterialBuildOverwrite] = useState(false);
   const [materialOutputName, setMaterialOutputName] = useState("material_library");
@@ -520,6 +526,9 @@ function KGSources({
           document_understanding_mode: documentUnderstandingMode,
           document_understanding_provider:
             documentUnderstandingMode === "chunk" ? "none" : documentUnderstandingProvider,
+          hypothesis_mode: hypothesisMode,
+          hypothesis_provider: hypothesisMode === "none" ? "none" : hypothesisProvider,
+          hypothesis_influence: hypothesisInfluence,
           document_ie_fixture_path:
             materialExtractionProvider === "offline_fixture" && documentIEFixturePath.trim()
               ? documentIEFixturePath.trim()
@@ -529,6 +538,12 @@ function KGSources({
             documentUnderstandingProvider === "offline_fixture" &&
             documentUnderstandingFixturePath.trim()
               ? documentUnderstandingFixturePath.trim()
+              : undefined,
+          hypothesis_fixture_path:
+            hypothesisMode === "brainstorm" &&
+            hypothesisProvider === "offline_fixture" &&
+            hypothesisFixturePath.trim()
+              ? hypothesisFixturePath.trim()
               : undefined
         });
         recordCount += response.record_count;
@@ -746,6 +761,71 @@ function KGSources({
                       <Input
                         value={documentUnderstandingFixturePath}
                         onChange={setDocumentUnderstandingFixturePath}
+                        placeholder="optional if material metadata includes fixture"
+                      />
+                    </label>
+                  )}
+                <label className="form-field">
+                  <span>Hypothesis mode</span>
+                  <Select
+                    value={hypothesisMode}
+                    onChange={(value) => {
+                      const nextMode = value as "none" | "brainstorm";
+                      setHypothesisMode(nextMode);
+                      if (nextMode === "none") {
+                        setHypothesisProvider("none");
+                        setHypothesisInfluence("review_only");
+                      }
+                    }}
+                    options={[
+                      { label: "None", value: "none" },
+                      { label: "Brainstorm", value: "brainstorm" }
+                    ]}
+                  />
+                </label>
+                {hypothesisMode === "brainstorm" && (
+                  <>
+                    <label className="form-field">
+                      <span>Hypothesis provider</span>
+                      <Select
+                        value={hypothesisProvider}
+                        onChange={(value) =>
+                          setHypothesisProvider(
+                            value as "none" | "openai" | "offline_fixture"
+                          )
+                        }
+                        options={[
+                          { label: "Deterministic fallback", value: "none" },
+                          { label: "OpenAI", value: "openai" },
+                          { label: "Offline fixture", value: "offline_fixture" }
+                        ]}
+                      />
+                    </label>
+                    <label className="form-field">
+                      <span>Hypothesis influence</span>
+                      <Select
+                        value={hypothesisInfluence}
+                        onChange={(value) =>
+                          setHypothesisInfluence(
+                            value as "review_only" | "prompt_context" | "profile_suggestions"
+                          )
+                        }
+                        options={[
+                          { label: "Review only", value: "review_only" },
+                          { label: "Prompt context", value: "prompt_context" },
+                          { label: "Profile suggestions", value: "profile_suggestions" }
+                        ]}
+                      />
+                    </label>
+                  </>
+                )}
+                {hypothesisMode === "brainstorm" &&
+                  hypothesisProvider === "offline_fixture" && (
+                    <label className="form-field">
+                      <span>Hypothesis fixture path</span>
+                      <Input
+                        value={hypothesisFixturePath}
+                        onChange={setHypothesisFixturePath}
                         placeholder="optional if material metadata includes fixture"
                       />
                     </label>
@@ -1002,12 +1082,16 @@ function SelectedMaterialPanel({ material }: { material: KGMaterialRecord | unde
         <span>extractor</span><strong>{valueText(material.extraction?.extractor_name)}</strong>
         <span>prompt</span><strong>{valueText(material.extraction?.prompt_version)}</strong>
         <span>understanding</span><strong>{valueText(material.extraction?.document_understanding_mode)}</strong>
+        <span>hypothesis</span><strong>{valueText(material.extraction?.hypothesis_mode)}</strong>
+        <span>hypothesis provider</span><strong>{valueText(material.extraction?.hypothesis_provider)}</strong>
         <span>records</span><strong>{valueText(materialRecordCount(material))}</strong>
         <span>chunks</span><strong>{valueText(material.extraction?.chunk_count ?? material.chunk_count)}</strong>
         <span>errors</span><strong>{valueText(material.extraction?.error_count)}</strong>
         <span>structured_records</span><strong>{valueText(materialStructuredRecordsPath(material))}</strong>
         <span>chunk_results</span><strong>{valueText(material.extraction?.chunk_results_path)}</strong>
         <span>document_map</span><strong>{valueText(material.extraction?.document_understanding_map_path)}</strong>
+        <span>brainstorm_manifest</span><strong>{valueText(material.extraction?.hypothesis_brainstorming_manifest_path)}</strong>
+        <span>brainstorm_review</span><strong>{valueText(material.extraction?.brainstorm_review_items_path)}</strong>
         <span>manifest</span><strong>{valueText(material.extraction?.extraction_manifest_path)}</strong>
         <span>pages</span><strong>{valueText(material.page_count)}</strong>
         <span>size</span><strong>{formatBytes(material.size_bytes)}</strong>

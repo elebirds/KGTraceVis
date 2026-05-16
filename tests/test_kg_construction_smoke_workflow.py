@@ -32,7 +32,7 @@ def test_kg_construction_smoke_builds_toy_material_and_tep_paths(
     payload = result.payload()
     paths = {path["name"]: path for path in payload["paths"]}
 
-    assert payload["passed"] == 5
+    assert payload["passed"] == 6
     assert payload["skipped"] == 0
     assert paths["toy_generic"]["status"] == "passed"
     assert paths["toy_generic"]["metadata"]["source_ids"] == ["toy_generic_source"]
@@ -50,6 +50,17 @@ def test_kg_construction_smoke_builds_toy_material_and_tep_paths(
     assert paths["material_direct"]["artifacts"]["kg_construction_diff"].endswith(
         "kg_construction_diff.json"
     )
+    assert paths["material_brainstorm"]["status"] == "passed"
+    assert paths["material_brainstorm"]["metadata"]["extraction_mode"] == "always"
+    assert "alias_mapping_candidate" in paths["material_brainstorm"]["metadata"][
+        "review_item_types"
+    ]
+    assert "causal_chain_candidate" in paths["material_brainstorm"]["metadata"][
+        "review_item_types"
+    ]
+    assert paths["material_brainstorm"]["artifacts"][
+        "hypothesis_brainstorming_manifest"
+    ].endswith("hypothesis_brainstorming_manifest.json")
     assert paths["runtime_overlay"]["status"] == "passed"
     assert paths["runtime_overlay"]["metadata"]["target_entity_id"] == (
         "MaterialPumpSealWear"
@@ -111,14 +122,16 @@ def test_smoke_rca_kg_construction_cli_builds_fixture_paths(tmp_path: Path) -> N
     payload = json.loads(completed.stdout)
     paths = {path["name"]: path for path in payload["paths"]}
     assert payload["artifact_type"] == "rca_kg_construction_smoke_result_v1"
-    assert payload["passed"] == 5
+    assert payload["passed"] == 6
     assert paths["toy_generic"]["status"] == "passed"
     assert paths["material_direct"]["status"] == "passed"
+    assert paths["material_brainstorm"]["status"] == "passed"
     assert paths["runtime_overlay"]["status"] == "passed"
     assert paths["tep"]["status"] == "passed"
     assert paths["tep_runtime_overlay"]["status"] == "passed"
     assert Path(payload["summary_path"]).is_file()
     assert Path(paths["material_direct"]["artifacts"]["review_queue"]).is_file()
+    assert Path(paths["material_brainstorm"]["artifacts"]["brainstorm_review_items"]).is_file()
     assert Path(paths["tep"]["artifacts"]["review_queue"]).is_file()
 
 

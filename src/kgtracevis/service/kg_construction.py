@@ -170,6 +170,12 @@ class KGConstructionBuildResponse(BaseModel):
     document_map_path: str | None = None
     chunk_prompt_context_path: str | None = None
     cross_chunk_proposals_path: str | None = None
+    hypothesis_brainstorming_manifest_path: str | None = None
+    brainstorm_hypotheses_path: str | None = None
+    brainstorm_review_items_path: str | None = None
+    alignment_suggestions_path: str | None = None
+    semantic_layer_suggestions_path: str | None = None
+    profile_gap_suggestions_path: str | None = None
     publish_manifest_path: str | None = None
     publish_report_path: str | None = None
     diff_path: str | None = None
@@ -274,6 +280,12 @@ class KGConstructionBuildRecord(BaseModel):
     document_map_path: str | None = None
     chunk_prompt_context_path: str | None = None
     cross_chunk_proposals_path: str | None = None
+    hypothesis_brainstorming_manifest_path: str | None = None
+    brainstorm_hypotheses_path: str | None = None
+    brainstorm_review_items_path: str | None = None
+    alignment_suggestions_path: str | None = None
+    semantic_layer_suggestions_path: str | None = None
+    profile_gap_suggestions_path: str | None = None
     publish_manifest_path: str | None = None
     publish_report_path: str | None = None
     diff_path: str | None = None
@@ -564,6 +576,14 @@ def run_kg_construction_build(
         document_map_path=str(result.document_map_path),
         chunk_prompt_context_path=str(result.chunk_prompt_context_path),
         cross_chunk_proposals_path=str(result.cross_chunk_proposals_path),
+        hypothesis_brainstorming_manifest_path=str(
+            result.hypothesis_brainstorming_manifest_path
+        ),
+        brainstorm_hypotheses_path=str(result.brainstorm_hypotheses_path),
+        brainstorm_review_items_path=str(result.brainstorm_review_items_path),
+        alignment_suggestions_path=str(result.alignment_suggestions_path),
+        semantic_layer_suggestions_path=str(result.semantic_layer_suggestions_path),
+        profile_gap_suggestions_path=str(result.profile_gap_suggestions_path),
         publish_manifest_path=str(result.publish_manifest_path),
         publish_report_path=str(result.publish_report_path),
         diff_path=str(result.diff_path),
@@ -1032,6 +1052,36 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
             artifacts,
             "cross_chunk_proposals",
             fallback=default_artifacts["cross_chunk_proposals"],
+        ),
+        hypothesis_brainstorming_manifest_path=_artifact_path(
+            artifacts,
+            "hypothesis_brainstorming_manifest",
+            fallback=default_artifacts["hypothesis_brainstorming_manifest"],
+        ),
+        brainstorm_hypotheses_path=_artifact_path(
+            artifacts,
+            "brainstorm_hypotheses",
+            fallback=default_artifacts["brainstorm_hypotheses"],
+        ),
+        brainstorm_review_items_path=_artifact_path(
+            artifacts,
+            "brainstorm_review_items",
+            fallback=default_artifacts["brainstorm_review_items"],
+        ),
+        alignment_suggestions_path=_artifact_path(
+            artifacts,
+            "alignment_suggestions",
+            fallback=default_artifacts["alignment_suggestions"],
+        ),
+        semantic_layer_suggestions_path=_artifact_path(
+            artifacts,
+            "semantic_layer_suggestions",
+            fallback=default_artifacts["semantic_layer_suggestions"],
+        ),
+        profile_gap_suggestions_path=_artifact_path(
+            artifacts,
+            "profile_gap_suggestions",
+            fallback=default_artifacts["profile_gap_suggestions"],
         ),
         publish_manifest_path=_artifact_path(
             artifacts,

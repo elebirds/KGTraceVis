@@ -137,6 +137,26 @@ uv run python scripts/import_kg.py \
 
 - LLM output is candidate DraftKG only. It remains source-grounded and
   `review_status=auto` until reviewed or policy-allowed.
+- Document understanding and hypothesis brainstorming are independent axes:
+  `chunk`, `long_context`, and `agentic` can be mixed with
+  `hypothesis_mode=brainstorm`.
+- LLM-assisted alignment, semantic policy, RCA policy, and brainstorming output
+  is advisory. It may suggest, explain, rank, and create review items, but it
+  cannot directly publish facts, change canonical IDs, mutate profiles, or
+  enable RCA propagation.
+- Brainstorming artifacts are recorded as
+  `brainstorm_hypotheses.jsonl`, `brainstorm_evidence_tasks.jsonl`,
+  `brainstorm_profile_gaps.json`, `brainstorm_review_items.json`, and
+  `hypothesis_brainstorming_manifest.json`.
+- Accepted `hypothesis_candidate`, `profile_gap_candidate`, and
+  `alias_mapping_candidate` items record decisions/accepted artifacts only.
+  Accepted `causal_chain_candidate` items stage reviewed edges only when every
+  proposed edge validates against existing endpoints, allowed relations, and
+  source spans.
+- Accepted semantic/RCA policy suggestions only affect existing edges after
+  whitelist checks and caps (`rca_score <= 0.7`,
+  `propagation_priority <= 0.75`, `source_trust <= 0.8`). Unsupported
+  relation/family suggestions are ignored or recorded as profile gaps.
 - TEP_KG is integrated through TEP extractors and profile/domain-pack behavior,
   not copied into the global schema.
 - TEP external `accept` does not become KGTraceVis `reviewed`.

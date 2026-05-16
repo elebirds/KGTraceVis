@@ -411,6 +411,226 @@ def test_review_workflow_ignores_unsupported_cross_chunk_rca_policy(
     ] == "ignored"
 
 
+def test_review_workflow_accepts_hypothesis_without_writing_edge(
+    tmp_path: Path,
+) -> None:
+    """Accepted plain hypotheses should be decision records, not KG edges."""
+    review_items_path = _write_brainstorm_review_items(
+        tmp_path,
+        [
+            {
+                "target_key": "hypothesis_candidate:hyp_1",
+                "item_type": "hypothesis_candidate",
+                "priority": 72,
+                "reason": "review-only RCA hypothesis",
+                "candidate_payload": {
+                    "hypothesis_id": "hyp_1",
+                    "claim": "Pump fault may need more RCA evidence.",
+                    "missing_evidence": ["source span proving the mechanism"],
+                },
+                "source": "brainstorm_source",
+                "evidence": "source span proving the mechanism",
+                "confidence": 0.2,
+                "review_status": "auto",
+                "scenario": "shared",
+                "relation_family": "HYPOTHESIS",
+                "graph_impact": "records hypothesis only",
+                "recommended_action": "accept_as_hypothesis",
+            }
+        ],
+    )
+    build = run_source_kg_construction_workflow(
+        SourceKGConstructionWorkflowConfig(
+            output_dir=tmp_path / "hypothesis_candidate",
+            sources=(
+                KGConstructionSource(
+                    source_id="brainstorm_source",
+                    source_type="manual_table",
+                    scenario="shared",
+                    text=_cross_chunk_entity_source_csv(),
+                    metadata={
+                        "source_format": "csv",
+                        "brainstorm_review_items_path": str(review_items_path),
+                    },
+                ),
+            ),
+            run_id="kgbuild_review_hypothesis",
+        )
+    )
+
+    result = review_kg_construction_item_artifact(
+        ReviewKGConstructionItemConfig(
+            output_dir=build.output_dir,
+            action="accept",
+            target_key="hypothesis_candidate:hyp_1",
+            item_type="hypothesis_candidate",
+            reviewer="unit-test",
+        )
+    )
+
+    accepted = json.loads((build.output_dir / "accepted_hypotheses.json").read_text())
+    assert _read_csv_rows(build.edges_path) == []
+    assert _read_csv_rows(result.published_edges_path) == []
+    assert accepted["items"][0]["target_key"] == "hypothesis_candidate:hyp_1"
+    assert result.summary["review_decision_target_type_counts"] == {
+        "hypothesis_candidate": 1
+    }
+
+
+def test_review_workflow_stages_valid_causal_chain_candidate_edges(
+    tmp_path: Path,
+) -> None:
+    """Accepted causal-chain hypotheses stage edges only after validation."""
+    review_items_path = _write_brainstorm_review_items(
+        tmp_path,
+        [
+            {
+                "target_key": "causal_chain_candidate:hyp_chain",
+                "item_type": "causal_chain_candidate",
+                "priority": 86,
+                "reason": "review-only causal chain",
+                "candidate_payload": {
+                    "hypothesis_id": "hyp_chain",
+                    "source_id": "brainstorm_source",
+                    "scenario": "shared",
+                    "candidate_relations": [
+                        {
+                            "head": "PumpFault",
+                            "relation": "CAUSES",
+                            "tail": "SealWear",
+                            "relation_family": "CAUSES",
+                            "confidence": 0.52,
+                        }
+                    ],
+                    "supporting_spans": [
+                        {"chunk_id": "c1", "text": "Pump fault starts the event."}
+                    ],
+                },
+                "source": "brainstorm_source",
+                "evidence": "Pump fault starts the event.",
+                "confidence": 0.52,
+                "review_status": "auto",
+                "scenario": "shared",
+                "relation_family": "HYPOTHESIS",
+                "graph_impact": "can stage edges after review",
+                "recommended_action": "stage_candidate_edges",
+            }
+        ],
+    )
+    build = run_source_kg_construction_workflow(
+        SourceKGConstructionWorkflowConfig(
+            output_dir=tmp_path / "causal_chain_candidate",
+            sources=(
+                KGConstructionSource(
+                    source_id="brainstorm_source",
+                    source_type="manual_table",
+                    scenario="shared",
+                    text=_cross_chunk_entity_source_csv(),
+                    metadata={
+                        "source_format": "csv",
+                        "brainstorm_review_items_path": str(review_items_path),
+                    },
+                ),
+            ),
+            run_id="kgbuild_review_causal_chain",
+        )
+    )
+
+    result = review_kg_construction_item_artifact(
+        ReviewKGConstructionItemConfig(
+            output_dir=build.output_dir,
+            action="accept",
+            target_key="causal_chain_candidate:hyp_chain",
+            item_type="causal_chain_candidate",
+            reviewer="unit-test",
+        )
+    )
+
+    edge_rows = _read_csv_rows(build.edges_path)
+    published_edges = _read_csv_rows(result.published_edges_path)
+    assert len(edge_rows) == 1
+    assert edge_rows[0]["head"] == "PumpFault"
+    assert edge_rows[0]["relation"] == "CAUSES"
+    assert edge_rows[0]["tail"] == "SealWear"
+    assert edge_rows[0]["review_status"] == "reviewed"
+    assert edge_rows[0]["confidence_policy"] == "human_reviewed_hypothesis_chain"
+    assert published_edges[0]["review_status"] == "reviewed"
+    assert result.item["candidate_payload"]["staging_result"]["status"] == (
+        "staged_reviewed_edges"
+    )
+
+
+def test_review_workflow_applies_capped_semantic_policy_candidate(
+    tmp_path: Path,
+) -> None:
+    """Semantic suggestions should only update existing edges after cap checks."""
+    review_items_path = _write_brainstorm_review_items(
+        tmp_path,
+        [
+            {
+                "target_key": "semantic_policy_candidate:sem_1",
+                "item_type": "semantic_policy_candidate",
+                "priority": 84,
+                "reason": "review-only semantic policy suggestion",
+                "candidate_payload": {
+                    "suggestion_id": "sem_1",
+                    "edge_key": "PumpFault|CAUSES|SealWear|shared",
+                    "proposed_relation_family": "CAUSES",
+                    "proposed_propagation_enabled": True,
+                    "proposed_propagation_direction": "forward",
+                    "proposed_propagation_priority": 0.99,
+                    "proposed_rca_score": 0.95,
+                    "confidence": 0.9,
+                    "source_trust": 0.95,
+                },
+                "source": "brainstorm_source",
+                "evidence": "policy suggestion evidence",
+                "confidence": 0.9,
+                "review_status": "auto",
+                "scenario": "shared",
+                "relation_family": "SEMANTIC_POLICY",
+                "graph_impact": "can update RCA staging fields after cap checks",
+                "recommended_action": "accept_or_reject_review_only",
+            }
+        ],
+    )
+    build = run_source_kg_construction_workflow(
+        SourceKGConstructionWorkflowConfig(
+            output_dir=tmp_path / "semantic_policy_candidate",
+            sources=(
+                KGConstructionSource(
+                    source_id="brainstorm_source",
+                    source_type="manual_table",
+                    scenario="shared",
+                    text=_semantic_policy_source_csv(),
+                    metadata={
+                        "source_format": "csv",
+                        "brainstorm_review_items_path": str(review_items_path),
+                    },
+                ),
+            ),
+            run_id="kgbuild_review_semantic_policy",
+        )
+    )
+
+    result = review_kg_construction_item_artifact(
+        ReviewKGConstructionItemConfig(
+            output_dir=build.output_dir,
+            action="accept",
+            target_key="semantic_policy_candidate:sem_1",
+            item_type="semantic_policy_candidate",
+            reviewer="unit-test",
+        )
+    )
+
+    edge_rows = _read_csv_rows(build.edges_path)
+    assert edge_rows[0]["propagation_enabled"] == "true"
+    assert edge_rows[0]["propagation_priority"] == "0.75"
+    assert edge_rows[0]["rca_score"] == "0.7"
+    assert edge_rows[0]["source_trust"] == "0.8"
+    assert result.item["candidate_payload"]["policy_result"]["status"] == "applied"
+
+
 def test_review_source_kg_cli_accepts_non_edge_review_item(
     tmp_path: Path,
 ) -> None:
@@ -558,6 +778,18 @@ def _cross_chunk_entity_source_csv(*, scenario: str = "shared") -> str:
     )
 
 
+def _semantic_policy_source_csv() -> str:
+    return "\n".join(
+        [
+            "id,name,label,head,relation,tail,scenario,evidence,confidence",
+            "PumpFault,Pump fault,Fault,,,,shared,pump fault row,0.82",
+            "SealWear,Seal wear,RootCause,,,,shared,seal wear row,0.82",
+            ",,,PumpFault,CAUSES,SealWear,shared,reviewed source edge,0.62",
+            "",
+        ]
+    )
+
+
 def _cross_chunk_proposal(**overrides: object) -> dict[str, Any]:
     proposal: dict[str, Any] = {
         "head": "PumpFault",
@@ -626,6 +858,18 @@ def _build_cross_chunk_review_case(
         if item["item_type"] == "cross_chunk_relation_candidate"
     )
     return build, proposal_item
+
+
+def _write_brainstorm_review_items(
+    tmp_path: Path,
+    rows: list[dict[str, Any]],
+) -> Path:
+    path = tmp_path / f"brainstorm_review_items_{len(rows)}.json"
+    path.write_text(
+        json.dumps({"artifact_type": "brainstorm_review_items_v1", "items": rows}),
+        encoding="utf-8",
+    )
+    return path
 
 
 def _write_alignment_source_library(tmp_path: Path, source_path: Path) -> Path:

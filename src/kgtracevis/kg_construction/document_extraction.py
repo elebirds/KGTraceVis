@@ -1411,7 +1411,7 @@ class OpenAICompatibleKGExtractionClient:
                 "OpenAI-compatible document IE requires the optional `openai` dependency. "
                 "Install the project with the `llm` extra."
             ) from exc
-        kwargs: dict[str, str] = {"api_key": self.api_key}
+        kwargs: dict[str, Any] = {"api_key": self.api_key}
         if self.base_url:
             kwargs["base_url"] = self.base_url
         self._client = OpenAI(**kwargs)
@@ -1501,7 +1501,7 @@ class OpenAICompatibleDocumentUnderstandingClient:
                 "OpenAI-compatible document understanding requires the optional "
                 "`openai` dependency. Install the project with the `llm` extra."
             ) from exc
-        kwargs: dict[str, str] = {"api_key": self.api_key}
+        kwargs: dict[str, Any] = {"api_key": self.api_key}
         if self.base_url:
             kwargs["base_url"] = self.base_url
         self._client = OpenAI(**kwargs)
