@@ -1779,3 +1779,38 @@ Implemented real document-understanding mode with OpenAI/fixture clients, retrie
 ### Next Steps
 
 - None - task complete
+
+
+## Session 47: KG generation pipeline refactor
+
+**Date**: 2026-05-16
+**Task**: KG generation pipeline refactor
+**Branch**: `codex/kg-generation-pipeline-refactor`
+
+### Summary
+
+Refactored the KG generation path toward a KGBuilder-style source compiler, added source KG evaluation/runtime observability, investigated TEP_KG Root-KGD asset generation, and routed source KG evaluation through RCA provider selection so TEP evidence can exercise the Root-KGD reasoner contract.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ccd3a4f` | (see git log) |
+| `7f7c766` | (see git log) |
+| `46b60a3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

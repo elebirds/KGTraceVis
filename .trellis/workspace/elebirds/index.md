@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 46
+- **Total Sessions**: 47
 - **Last Active**: 2026-05-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1781 | Active |
+| `journal-1.md` | ~1816 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 47 | 2026-05-16 | KG generation pipeline refactor | `ccd3a4f`, `7f7c766`, `46b60a3` | `codex/kg-generation-pipeline-refactor` |
 | 46 | 2026-05-16 | Complete retrieval-backed document understanding reader | `bb6c313`, `461bb78`, `558f6c4` | `main` |
 | 45 | 2026-05-16 | Complete document understanding review artifacts | `0542132`, `ce58023` | `main` |
 | 44 | 2026-05-15 | M33 document understanding mode scaffold | `fbd2478` | `main` |
