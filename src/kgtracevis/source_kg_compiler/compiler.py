@@ -9,9 +9,12 @@ import re
 import shutil
 import time
 from collections import Counter, defaultdict
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, cast
+from threading import Lock
+from typing import Any, TypeVar, cast
 
 from kgtracevis.kg.graph import KnowledgeGraph
 from kgtracevis.source_kg_compiler.llm import safe_json_parse
@@ -36,6 +39,9 @@ from kgtracevis.source_kg_compiler.models import (
 SUPPORTED_SOURCE_SUFFIXES = {".csv", ".html", ".json", ".jsonl", ".md", ".txt"}
 DEFAULT_CHUNK_SIZE = 8000
 DEFAULT_CHUNK_OVERLAP = 800
+DEFAULT_LLM_CONCURRENCY = 4
+_TaskInput = TypeVar("_TaskInput")
+_TaskOutput = TypeVar("_TaskOutput")
 EXPLICIT_RELATIONS = {
     "ACTS_ON",
     "AFFECTS_VARIABLE",
@@ -152,6 +158,7 @@ def compile_source_kg(
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
     overwrite: bool = False,
     source_limit: int | None = None,
+    llm_concurrency: int = DEFAULT_LLM_CONCURRENCY,
     progress_callback: SourceKGProgressCallback | None = None,
 ) -> tuple[SourceKGArtifacts, SourceKGArtifactPaths, dict[str, Any], dict[str, Any]]:
     """Compile source files into KGBuilder-style LLM KG artifacts and reports."""
@@ -160,6 +167,8 @@ def compile_source_kg(
         raise ValueError(
             "source_kg_compiler requires an LLM client; deterministic mode is disabled"
         )
+    if llm_concurrency < 1:
+        raise ValueError("llm_concurrency must be >= 1")
     if default_scenario not in VALID_SCENARIOS:
         raise ValueError(f"invalid default scenario: {default_scenario}")
     paths = artifact_paths(output_dir)
@@ -171,6 +180,7 @@ def compile_source_kg(
         source_path_count=len(source_paths),
         output_dir=output_dir.as_posix(),
         source_limit=source_limit,
+        llm_concurrency=llm_concurrency,
     )
     _prepare_output_dir(output_dir, overwrite=overwrite)
 
@@ -181,6 +191,7 @@ def compile_source_kg(
         elapsed_seconds=_elapsed(started),
         source_path_count=len(source_paths),
         source_limit=source_limit,
+        llm_concurrency=llm_concurrency,
     )
     source_units = load_source_units(
         source_paths,
@@ -207,6 +218,7 @@ def compile_source_kg(
     knowledge_cards = build_knowledge_cards(
         source_units,
         llm_client=llm_client,
+        llm_concurrency=llm_concurrency,
         progress_callback=progress_callback,
         started_at=started,
     )
@@ -227,6 +239,7 @@ def compile_source_kg(
     entities = build_canonical_entities(
         knowledge_cards,
         llm_client=llm_client,
+        llm_concurrency=llm_concurrency,
         progress_callback=progress_callback,
         started_at=started,
     )
@@ -249,6 +262,7 @@ def compile_source_kg(
         knowledge_cards,
         entities,
         llm_client=llm_client,
+        llm_concurrency=llm_concurrency,
         progress_callback=progress_callback,
         started_at=started,
     )
@@ -419,14 +433,18 @@ def build_knowledge_cards(
     source_units: list[SourceUnit],
     *,
     llm_client: SourceKGLLMClient,
+    llm_concurrency: int = DEFAULT_LLM_CONCURRENCY,
     progress_callback: SourceKGProgressCallback | None = None,
     started_at: float | None = None,
 ) -> list[KnowledgeCard]:
     """Extract KGBuilder-style knowledge cards with LLM-first source grounding."""
     cards: list[KnowledgeCard] = []
     started = time.perf_counter() if started_at is None else started_at
-    for index, unit in enumerate(source_units, start=1):
-        cards.extend(_cards_from_unit(unit))
+
+    synchronized_progress = _synchronized_progress_callback(progress_callback)
+
+    def extract_unit(index: int, unit: SourceUnit) -> list[KnowledgeCard]:
+        unit_cards = _cards_from_unit(unit)
         item_label = f"{index}/{len(source_units)}:{unit.unit_id}"
         raw = _complete_json_with_progress(
             llm_client,
@@ -434,7 +452,7 @@ def build_knowledge_cards(
             user_prompt=_knowledge_card_user_prompt(unit),
             stage="knowledge_cards",
             item=item_label,
-            progress_callback=progress_callback,
+            progress_callback=synchronized_progress,
             started_at=started,
         )
         payload = safe_json_parse(
@@ -445,7 +463,7 @@ def build_knowledge_cards(
                 error=error,
                 stage="knowledge_cards",
                 item=item_label,
-                progress_callback=progress_callback,
+                progress_callback=synchronized_progress,
                 started_at=started,
             ),
         )
@@ -453,7 +471,15 @@ def build_knowledge_cards(
             if isinstance(item, dict):
                 card = _normalize_llm_card(item, unit)
                 if card is not None:
-                    cards.append(card)
+                    unit_cards.append(card)
+        return unit_cards
+
+    for unit_cards in _run_ordered_parallel(
+        source_units,
+        worker=extract_unit,
+        concurrency=llm_concurrency,
+    ):
+        cards.extend(unit_cards)
     return _dedupe_knowledge_cards(cards)
 
 
@@ -461,6 +487,7 @@ def build_canonical_entities(
     knowledge_cards: list[KnowledgeCard],
     *,
     llm_client: SourceKGLLMClient,
+    llm_concurrency: int = DEFAULT_LLM_CONCURRENCY,
     progress_callback: SourceKGProgressCallback | None = None,
     started_at: float | None = None,
 ) -> list[CanonicalEntity]:
@@ -512,7 +539,9 @@ def build_canonical_entities(
         return entities_by_key[key]
 
     batches = list(_card_batches(knowledge_cards, batch_size=25))
-    for index, batch in enumerate(batches, start=1):
+    synchronized_progress = _synchronized_progress_callback(progress_callback)
+
+    def extract_batch(index: int, batch: list[KnowledgeCard]) -> list[Any]:
         item_label = f"{index}/{len(batches)}"
         raw = _complete_json_with_progress(
             llm_client,
@@ -520,7 +549,7 @@ def build_canonical_entities(
             user_prompt=_entity_user_prompt(batch),
             stage="entities",
             item=item_label,
-            progress_callback=progress_callback,
+            progress_callback=synchronized_progress,
             started_at=started,
         )
         payload = safe_json_parse(
@@ -531,11 +560,18 @@ def build_canonical_entities(
                 error=error,
                 stage="entities",
                 item=item_label,
-                progress_callback=progress_callback,
+                progress_callback=synchronized_progress,
                 started_at=started,
             ),
         )
-        for item in _as_list(payload.get("entities") if isinstance(payload, dict) else payload):
+        return _as_list(payload.get("entities") if isinstance(payload, dict) else payload)
+
+    for batch_items in _run_ordered_parallel(
+        batches,
+        worker=extract_batch,
+        concurrency=llm_concurrency,
+    ):
+        for item in batch_items:
             if not isinstance(item, dict):
                 continue
             entity = _normalize_llm_entity(item, knowledge_cards)
@@ -603,6 +639,7 @@ def build_canonical_edges(
     entities: list[CanonicalEntity],
     *,
     llm_client: SourceKGLLMClient,
+    llm_concurrency: int = DEFAULT_LLM_CONCURRENCY,
     progress_callback: SourceKGProgressCallback | None = None,
     started_at: float | None = None,
 ) -> list[CanonicalEdge]:
@@ -633,7 +670,13 @@ def build_canonical_edges(
         )
 
     batches = list(_edge_batches(knowledge_cards, entities, batch_size=25))
-    for index, (batch_cards, batch_entities) in enumerate(batches, start=1):
+    synchronized_progress = _synchronized_progress_callback(progress_callback)
+
+    def extract_batch(
+        index: int,
+        batch: tuple[list[KnowledgeCard], list[CanonicalEntity]],
+    ) -> list[CanonicalEdge]:
+        batch_cards, batch_entities = batch
         item_label = f"{index}/{len(batches)}"
         raw = _complete_json_with_progress(
             llm_client,
@@ -641,7 +684,7 @@ def build_canonical_edges(
             user_prompt=_edge_user_prompt(batch_cards, batch_entities),
             stage="edges",
             item=item_label,
-            progress_callback=progress_callback,
+            progress_callback=synchronized_progress,
             started_at=started,
         )
         payload = safe_json_parse(
@@ -652,16 +695,26 @@ def build_canonical_edges(
                 error=error,
                 stage="edges",
                 item=item_label,
-                progress_callback=progress_callback,
+                progress_callback=synchronized_progress,
                 started_at=started,
             ),
         )
+        batch_edges: list[CanonicalEdge] = []
         for item in _as_list(payload.get("edges") if isinstance(payload, dict) else payload):
             if not isinstance(item, dict):
                 continue
             edge = _normalize_llm_edge(item, knowledge_cards)
             if edge is not None:
-                upsert_edge(edge)
+                batch_edges.append(edge)
+        return batch_edges
+
+    for batch_edges in _run_ordered_parallel(
+        batches,
+        worker=extract_batch,
+        concurrency=llm_concurrency,
+    ):
+        for edge in batch_edges:
+            upsert_edge(edge)
 
     for card in sorted(knowledge_cards, key=lambda item: item.card_id):
         for hint in _relation_hints(card):
@@ -2074,6 +2127,39 @@ def _emit_progress(
 ) -> None:
     if progress_callback is not None:
         progress_callback(event)
+
+
+def _synchronized_progress_callback(
+    progress_callback: SourceKGProgressCallback | None,
+) -> SourceKGProgressCallback | None:
+    if progress_callback is None:
+        return None
+    lock = Lock()
+
+    def emit(event: dict[str, Any]) -> None:
+        with lock:
+            progress_callback(event)
+
+    return emit
+
+
+def _run_ordered_parallel(
+    items: list[_TaskInput],
+    *,
+    worker: Callable[[int, _TaskInput], _TaskOutput],
+    concurrency: int,
+) -> list[_TaskOutput]:
+    if concurrency < 1:
+        raise ValueError("llm_concurrency must be >= 1")
+    if concurrency == 1 or len(items) <= 1:
+        return [worker(index, item) for index, item in enumerate(items, start=1)]
+    max_workers = min(concurrency, len(items))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(worker, index, item)
+            for index, item in enumerate(items, start=1)
+        ]
+        return [future.result() for future in futures]
 
 
 def _elapsed(started_at: float) -> float:

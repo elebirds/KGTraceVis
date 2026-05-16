@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Focused tests and lint for backend changes"}
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Verify scripts/services remain workflow clients"}

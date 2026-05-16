@@ -236,6 +236,10 @@ Compile source materials into KG CSV files:
 uv run python scripts/compile_source_kg.py --source docs/sources --output-dir runs/source_kg/manual --overwrite
 ```
 
+Source KG compilation runs independent LLM calls inside each compiler stage with
+`--llm-concurrency 4` by default. Lower it when your provider rate-limits
+parallel requests.
+
 Import KG into Neo4j:
 
 ```bash

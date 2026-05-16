@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from kgtracevis.source_kg_compiler.compiler import compile_source_kg
+from kgtracevis.source_kg_compiler.compiler import (
+    DEFAULT_LLM_CONCURRENCY,
+    compile_source_kg,
+)
 from kgtracevis.source_kg_compiler.models import (
     SourceKGArtifactPaths,
     SourceKGLLMClient,
@@ -26,6 +29,7 @@ class SourceKGCompilerConfig:
     chunk_overlap: int = 800
     overwrite: bool = False
     source_limit: int | None = None
+    llm_concurrency: int = DEFAULT_LLM_CONCURRENCY
     progress_callback: SourceKGProgressCallback | None = None
 
 
@@ -51,6 +55,7 @@ def run_source_kg_compiler_workflow(config: SourceKGCompilerConfig) -> SourceKGC
         chunk_overlap=config.chunk_overlap,
         overwrite=config.overwrite,
         source_limit=config.source_limit,
+        llm_concurrency=config.llm_concurrency,
         progress_callback=config.progress_callback,
     )
     summary = {
@@ -62,6 +67,7 @@ def run_source_kg_compiler_workflow(config: SourceKGCompilerConfig) -> SourceKGC
             "entities": len(artifacts.entities),
             "edges": len(artifacts.edges),
         },
+        "llm_concurrency": config.llm_concurrency,
         "qa_status": qa_report["status"],
         "validation_status": validation_report["status"],
         "strict_generated_only": validation_report["strict_generated_only"],

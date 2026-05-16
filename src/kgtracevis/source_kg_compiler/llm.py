@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -45,11 +46,13 @@ class OpenAICompatibleSourceKGLLM:
         self.input_tokens = 0
         self.output_tokens = 0
         self._client: Any | None = None
+        self._lock = threading.Lock()
 
     @property
     def total_tokens(self) -> int:
         """Return total recorded provider tokens."""
-        return self.input_tokens + self.output_tokens
+        with self._lock:
+            return self.input_tokens + self.output_tokens
 
     def complete_json(self, *, system_prompt: str, user_prompt: str) -> str:
         """Call the configured chat model and return raw JSON text."""
@@ -71,11 +74,12 @@ class OpenAICompatibleSourceKGLLM:
         if "deepseek" in f"{self.base_url} {self.model}".lower():
             kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
         completion = self._resolved_client().chat.completions.create(**kwargs)
-        self.calls += 1
         usage = getattr(completion, "usage", None)
-        if usage is not None:
-            self.input_tokens += int(getattr(usage, "prompt_tokens", 0) or 0)
-            self.output_tokens += int(getattr(usage, "completion_tokens", 0) or 0)
+        with self._lock:
+            self.calls += 1
+            if usage is not None:
+                self.input_tokens += int(getattr(usage, "prompt_tokens", 0) or 0)
+                self.output_tokens += int(getattr(usage, "completion_tokens", 0) or 0)
         content = completion.choices[0].message.content
         if not content:
             raise ValueError("LLM returned empty content")
@@ -96,12 +100,15 @@ class OpenAICompatibleSourceKGLLM:
     def _resolved_client(self) -> Any:
         if self._client is not None:
             return self._client
-        try:
-            from openai import OpenAI
-        except ImportError as exc:  # pragma: no cover - optional dependency guard.
-            raise ImportError("Install the llm extra with: uv sync --extra llm") from exc
-        self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-        return self._client
+        with self._lock:
+            if self._client is not None:
+                return self._client
+            try:
+                from openai import OpenAI
+            except ImportError as exc:  # pragma: no cover - optional dependency guard.
+                raise ImportError("Install the llm extra with: uv sync --extra llm") from exc
+            self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+            return self._client
 
 
 def load_source_kg_env() -> None:

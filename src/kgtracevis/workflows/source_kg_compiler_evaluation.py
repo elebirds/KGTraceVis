@@ -15,6 +15,7 @@ from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, Knowledg
 from kgtracevis.schema.validators import load_evidence_json
 from kgtracevis.source_kg_compiler.models import SourceKGLLMClient, SourceKGProgressCallback
 from kgtracevis.source_kg_compiler.workflow import (
+    DEFAULT_LLM_CONCURRENCY,
     SourceKGCompilerConfig,
     run_source_kg_compiler_workflow,
 )
@@ -46,6 +47,7 @@ class SourceKGCompilerEvaluationConfig:
     top_k: int = 5
     overwrite: bool = False
     source_limit: int | None = None
+    llm_concurrency: int = DEFAULT_LLM_CONCURRENCY
     progress_callback: SourceKGProgressCallback | None = None
 
 
@@ -88,6 +90,7 @@ def run_source_kg_compiler_evaluation(
         top_k=config.top_k,
         overwrite=config.overwrite,
         source_limit=config.source_limit,
+        llm_concurrency=config.llm_concurrency,
     )
     _emit_progress(
         config.progress_callback,
@@ -106,6 +109,7 @@ def run_source_kg_compiler_evaluation(
             chunk_overlap=config.chunk_overlap,
             overwrite=config.overwrite,
             source_limit=config.source_limit,
+            llm_concurrency=config.llm_concurrency,
             progress_callback=config.progress_callback,
         )
     )
@@ -342,6 +346,7 @@ def _evaluation_report(
             "top_k": config.top_k,
             "overwrite": config.overwrite,
             "source_limit": config.source_limit,
+            "llm_concurrency": config.llm_concurrency,
         },
         "compiled_output_dir": compiled_output_dir.as_posix(),
         "summary": {

@@ -20,6 +20,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from kgtracevis.source_kg_compiler import (
+    DEFAULT_LLM_CONCURRENCY,
     OpenAICompatibleSourceKGLLM,
     SourceKGCompilerConfig,
     run_source_kg_compiler_workflow,
@@ -83,6 +84,7 @@ class KGConstructionBuildRequest(BaseModel):
     output_name: str = "source_kg"
     overwrite: bool = False
     run_id: str | None = None
+    llm_concurrency: int = Field(default=DEFAULT_LLM_CONCURRENCY, ge=1)
 
     @model_validator(mode="after")
     def validate_build_shape(self) -> KGConstructionBuildRequest:
@@ -405,6 +407,7 @@ def run_kg_construction_build(
             llm_client=OpenAICompatibleSourceKGLLM(),
             default_scenario=default_scenario,
             overwrite=request.overwrite,
+            llm_concurrency=request.llm_concurrency,
             progress_callback=progress_callback,
         )
     )
@@ -761,6 +764,7 @@ def _build_summary(
         "output_dir": output_dir.as_posix(),
         "source_count": len(request.sources),
         "source_ids": [source.source_id for source in request.sources],
+        "llm_concurrency": request.llm_concurrency,
         "node_count": int(counts.get("entities") or 0),
         "edge_count": int(counts.get("edges") or 0),
         "counts": {

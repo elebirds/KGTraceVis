@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from kgtracevis.source_kg_compiler import (
+    DEFAULT_LLM_CONCURRENCY,
     OpenAICompatibleSourceKGLLM,
     SourceKGCompilerConfig,
     run_source_kg_compiler_workflow,
@@ -50,6 +51,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-tokens", type=int, default=8192)
     parser.add_argument("--chunk-size", type=int, default=8000)
     parser.add_argument("--chunk-overlap", type=int, default=800)
+    parser.add_argument(
+        "--llm-concurrency",
+        type=int,
+        default=DEFAULT_LLM_CONCURRENCY,
+        help="Maximum concurrent LLM calls within independent compiler stages.",
+    )
     return parser.parse_args()
 
 
@@ -72,6 +79,7 @@ def main() -> None:
                 default_scenario=args.scenario,
                 chunk_size=args.chunk_size,
                 chunk_overlap=args.chunk_overlap,
+                llm_concurrency=args.llm_concurrency,
                 overwrite=bool(args.overwrite),
             )
         )

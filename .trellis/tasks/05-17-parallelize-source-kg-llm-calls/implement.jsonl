@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/workflow-architecture.md", "reason": "Source KG compiler workflow and CLI/API boundaries"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Invalid concurrency should fail explicitly"}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Progress callbacks and CLI logs must stay concise"}

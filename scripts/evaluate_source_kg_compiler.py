@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
-from kgtracevis.source_kg_compiler import OpenAICompatibleSourceKGLLM
+from kgtracevis.source_kg_compiler import DEFAULT_LLM_CONCURRENCY, OpenAICompatibleSourceKGLLM
 from kgtracevis.source_kg_compiler.models import SourceKGProgressCallback
 from kgtracevis.workflows.source_kg_compiler_evaluation import (
     DEFAULT_KGBUILDER_MATERIALS_DIR,
@@ -78,6 +78,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--chunk-size", type=int, default=8000)
     parser.add_argument("--chunk-overlap", type=int, default=800)
     parser.add_argument(
+        "--llm-concurrency",
+        type=int,
+        default=DEFAULT_LLM_CONCURRENCY,
+        help="Maximum concurrent LLM calls within independent compiler stages.",
+    )
+    parser.add_argument(
         "--limit-sources",
         type=int,
         default=None,
@@ -117,6 +123,7 @@ def main() -> None:
                 default_scenario=args.scenario,
                 chunk_size=args.chunk_size,
                 chunk_overlap=args.chunk_overlap,
+                llm_concurrency=args.llm_concurrency,
                 top_k=args.top_k,
                 overwrite=bool(args.overwrite),
                 source_limit=args.limit_sources,
@@ -187,6 +194,7 @@ def make_progress_logger(stream: TextIO) -> SourceKGProgressCallback:
                 "default_scenario",
                 "chunk_size",
                 "chunk_overlap",
+                "llm_concurrency",
                 "top_k",
                 "overwrite",
             ):

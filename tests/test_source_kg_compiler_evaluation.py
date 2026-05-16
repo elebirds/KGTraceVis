@@ -139,6 +139,7 @@ def test_source_kg_compiler_evaluation_progress_logs_key_stages_and_limit(
             sample_paths=(Path("data/examples/ds_mvtec_example.json"),),
             llm_client=EmptyGraphLLM(),
             source_limit=1,
+            llm_concurrency=3,
             progress_callback=evaluate_cli.make_progress_logger(stream),
         )
     )
@@ -162,8 +163,10 @@ def test_source_kg_compiler_evaluation_progress_logs_key_stages_and_limit(
     assert "calls=" in log
     assert "tokens=" in log
     assert "source_limit=1" in log
+    assert "llm_concurrency=3" in log
     assert "smoke_hint=" in log
     assert result.report["config"]["source_limit"] == 1
+    assert result.report["config"]["llm_concurrency"] == 3
     assert result.report["summary"]["counts"]["source_units"] == 1
 
 
@@ -208,6 +211,7 @@ def test_evaluation_cli_quiet_suppresses_progress(
         config: SourceKGCompilerEvaluationConfig,
     ) -> SourceKGCompilerEvaluationResult:
         seen["progress_callback"] = config.progress_callback
+        seen["llm_concurrency"] = config.llm_concurrency
         return SourceKGCompilerEvaluationResult(
             report={"summary": {"sample_count": 0}},
             report_path=output_dir / "source_kg_compiler_evaluation_report.json",
@@ -238,6 +242,7 @@ def test_evaluation_cli_quiet_suppresses_progress(
 
     captured = capsys.readouterr()
     assert seen["progress_callback"] is None
+    assert seen["llm_concurrency"] == 4
     assert captured.err == ""
     assert "source_kg_compiler_evaluation_report.json" in captured.out
 

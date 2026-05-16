@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import csv
 import json
+import time
 from pathlib import Path
+from threading import Lock
 
 import pytest
 
@@ -145,6 +147,49 @@ class FakeKGBuilderLLM:
         return broken_json
 
 
+class ConcurrencyTrackingLLM:
+    """Fake LLM that records active calls while emitting an empty LLM graph."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.input_tokens = 0
+        self.output_tokens = 0
+        self.active_calls = 0
+        self.max_active_calls = 0
+        self._lock = Lock()
+
+    @property
+    def total_tokens(self) -> int:
+        with self._lock:
+            return self.input_tokens + self.output_tokens
+
+    def complete_json(self, *, system_prompt: str, user_prompt: str) -> str:
+        with self._lock:
+            self.active_calls += 1
+            self.max_active_calls = max(self.max_active_calls, self.active_calls)
+        try:
+            time.sleep(0.02)
+            with self._lock:
+                self.calls += 1
+                self.input_tokens += len(user_prompt.split())
+                self.output_tokens += 4
+            if "knowledge cards" in system_prompt:
+                return json.dumps({"cards": []})
+            if "canonical entities" in system_prompt:
+                return json.dumps({"entities": []})
+            if "construct edges" in system_prompt:
+                return json.dumps({"edges": []})
+            if "reasoning profiles" in system_prompt:
+                return json.dumps({"profiles": {}})
+            raise AssertionError(system_prompt)
+        finally:
+            with self._lock:
+                self.active_calls -= 1
+
+    def repair_json(self, broken_json: str, error: str) -> str:
+        return broken_json
+
+
 def test_source_kg_compiler_writes_llm_artifact_chain(tmp_path: Path) -> None:
     """LLM cards/entities/edges should produce generated-only KG artifacts."""
     source_dir = tmp_path / "sources"
@@ -236,6 +281,31 @@ def test_source_kg_compiler_writes_llm_artifact_chain(tmp_path: Path) -> None:
     )
     assert domain_profiles["llm_profile_extraction_ok"] is True
     assert domain_manifest["status"] == "generated"
+
+
+def test_source_kg_compiler_caps_parallel_llm_calls(tmp_path: Path) -> None:
+    """Independent LLM calls should run concurrently up to the configured cap."""
+    source_dir = tmp_path / "sources"
+    source_dir.mkdir()
+    for index in range(8):
+        (source_dir / f"source_{index}.md").write_text(
+            f"SCENARIO: mvtec\nENTITY: GeneratedThing{index} | label=Other\n",
+            encoding="utf-8",
+        )
+    llm = ConcurrencyTrackingLLM()
+
+    result = run_source_kg_compiler_workflow(
+        SourceKGCompilerConfig(
+            source_paths=(source_dir,),
+            output_dir=tmp_path / "compiled",
+            llm_client=llm,
+            llm_concurrency=2,
+        )
+    )
+
+    assert llm.max_active_calls == 2
+    assert result.summary["llm_concurrency"] == 2
+    assert result.validation_report["metrics"]["llm_calls"] == llm.calls
 
 
 def test_source_kg_compiler_requires_llm_client(tmp_path: Path) -> None:
