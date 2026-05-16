@@ -433,6 +433,108 @@ def test_openai_compatible_client_uses_json_schema_response_format() -> None:
     assert request["response_format"]["json_schema"]["name"] == "kgtracevis_document_ie"
 
 
+def test_openai_compatible_deepseek_ie_disables_thinking_by_default() -> None:
+    """Source-grounded IE should use fast deterministic DeepSeek defaults."""
+    fake_openai = FakeOpenAIChatClient()
+    chunk = SourceTextChunk(
+        chunk_id="source:chunk:0001:abc",
+        source_id="source",
+        source_type="plain_text",
+        scenario="shared",
+        text="A source sentence.",
+        start_char=0,
+        end_char=18,
+        index=1,
+    )
+    client = OpenAICompatibleKGExtractionClient(
+        api_key="unit-key",
+        base_url="https://api.deepseek.com",
+        model="deepseek-v4-flash",
+        client=fake_openai,
+        use_json_schema=False,
+    )
+
+    client.extract_candidates(
+        chunk,
+        prompt="Extract.",
+        response_schema=extraction_response_schema(),
+    )
+
+    request = fake_openai.requests[0]
+    assert request["extra_body"] == {"thinking": {"type": "disabled"}}
+
+
+def test_openai_compatible_deepseek_thinking_can_use_provider_default() -> None:
+    """Open-ended stages can opt out of forcing DeepSeek thinking disabled."""
+    fake_openai = FakeOpenAIChatClient()
+    chunk = SourceTextChunk(
+        chunk_id="source:chunk:0001:abc",
+        source_id="source",
+        source_type="plain_text",
+        scenario="shared",
+        text="A source sentence.",
+        start_char=0,
+        end_char=18,
+        index=1,
+    )
+    client = OpenAICompatibleKGExtractionClient(
+        api_key="unit-key",
+        base_url="https://api.deepseek.com",
+        model="deepseek-v4-flash",
+        client=fake_openai,
+        use_json_schema=False,
+        deepseek_thinking="default",
+    )
+
+    client.extract_candidates(
+        chunk,
+        prompt="Extract.",
+        response_schema=extraction_response_schema(),
+    )
+
+    assert "extra_body" not in fake_openai.requests[0]
+
+
+def test_chunk_ie_continue_on_error_skips_invalid_candidates() -> None:
+    """Malformed candidates should be audited without failing the whole chunk."""
+    chunk = SourceTextChunk(
+        chunk_id="source:chunk:0001:abc",
+        source_id="source",
+        source_type="plain_text",
+        scenario="shared",
+        text="Pump cavitation indicates seal wear.",
+        start_char=0,
+        end_char=36,
+        index=1,
+    )
+    client = FakeIEClient(
+        {
+            "entities": [
+                {"text": "bad shape"},
+                {
+                    "id": "PumpCavitation",
+                    "name": "Pump cavitation",
+                    "label": "FaultEvent",
+                    "evidence": "Pump cavitation",
+                },
+            ],
+            "relations": [],
+        }
+    )
+
+    result = extract_draft_kg_from_chunks_with_report(
+        (chunk,),
+        client,
+        continue_on_chunk_error=True,
+    )
+
+    assert len(result.draft.entities) == 1
+    assert result.chunk_summaries[0].status == "partial"
+    assert "skipped 1 invalid IE candidate" in (
+        result.chunk_summaries[0].error_message or ""
+    )
+
+
 class FakeIEClient:
     def __init__(self, payload: dict[str, Any] | str) -> None:
         self.payload = payload

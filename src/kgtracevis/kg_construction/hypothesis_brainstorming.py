@@ -13,8 +13,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from kgtracevis.kg_construction.document_extraction import (
     ALLOWED_DOCUMENT_IE_RELATIONS,
+    DeepSeekThinkingPolicy,
     ParsedSourceDocument,
     SourceTextChunk,
+    _loads_json_object_payload,
+    _openai_compatible_request_options,
+    _stage_deepseek_thinking_policy,
 )
 from kgtracevis.kg_construction.draft import DraftKG
 from kgtracevis.kg_construction.review_queue import ReviewQueueItem
@@ -208,12 +212,17 @@ class OpenAICompatibleHypothesisBrainstormingClient:
         temperature: float = 0.2,
         use_json_schema: bool = True,
         client: Any | None = None,
+        deepseek_thinking: DeepSeekThinkingPolicy | None = None,
     ) -> None:
         self.api_key = api_key if api_key is not None else os.environ.get("OPENAI_API_KEY")
         self.base_url = base_url if base_url is not None else os.environ.get("OPENAI_BASE_URL")
         self.model = model if model is not None else os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
         self.temperature = temperature
         self.use_json_schema = use_json_schema
+        self.deepseek_thinking = _stage_deepseek_thinking_policy(
+            env_name="KGTRACEVIS_HYPOTHESIS_DEEPSEEK_THINKING",
+            default=deepseek_thinking or "default",
+        )
         self._client = client
 
     def brainstorm(
@@ -244,6 +253,11 @@ class OpenAICompatibleHypothesisBrainstormingClient:
                 {"role": "user", "content": prompt},
             ],
             response_format=self._response_format(response_schema),
+            **_openai_compatible_request_options(
+                model=self.model,
+                base_url=self.base_url,
+                deepseek_thinking=self.deepseek_thinking,
+            ),
         )
         content = completion.choices[0].message.content
         if not content:
@@ -251,7 +265,7 @@ class OpenAICompatibleHypothesisBrainstormingClient:
                 "OpenAI-compatible hypothesis brainstorming returned empty "
                 f"content for {document.source_id}"
             )
-        return json.loads(content)
+        return _loads_json_object_payload(content)
 
     def _resolved_client(self) -> Any:
         if self._client is not None:
@@ -414,6 +428,7 @@ def _coerce_brainstorming_payload(
             raise TypeError(type(response).__name__)
         if not isinstance(raw, Mapping):
             raise TypeError(type(raw).__name__)
+        raw = _normalize_brainstorming_response(raw)
         return BrainstormingPayload.model_validate(raw)
     except (TypeError, json.JSONDecodeError, ValidationError) as exc:
         raise ValueError(
@@ -421,6 +436,243 @@ def _coerce_brainstorming_payload(
             f"(source_id={source_id!r}): expected a JSON object matching "
             "hypothesis_brainstorming_v1"
         ) from exc
+
+
+def _normalize_brainstorming_response(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize common JSON-object LLM shapes before schema validation."""
+    normalized = dict(raw)
+    normalized["hypotheses"] = _normalize_mapping_list(
+        raw.get("hypotheses"),
+        normalizer=_normalize_hypothesis_row,
+    )
+    normalized["evidence_tasks"] = _normalize_mapping_list(
+        raw.get("evidence_tasks"),
+        normalizer=_normalize_evidence_task_row,
+    )
+    normalized["profile_gaps"] = _normalize_mapping_list(
+        raw.get("profile_gaps"),
+        normalizer=lambda row: _normalize_suggestion_row(row, "profile_gap"),
+    )
+    normalized["alignment_suggestions"] = _normalize_mapping_list(
+        raw.get("alignment_suggestions"),
+        normalizer=lambda row: _normalize_suggestion_row(row, "alias_mapping"),
+    )
+    normalized["semantic_layer_suggestions"] = _normalize_mapping_list(
+        raw.get("semantic_layer_suggestions"),
+        normalizer=lambda row: _normalize_suggestion_row(
+            row, "semantic_policy_gap_candidate"
+        ),
+    )
+    if raw.get("review_items") is None:
+        normalized["review_items"] = []
+    return normalized
+
+
+def _normalize_mapping_list(
+    value: Any,
+    *,
+    normalizer: Any,
+) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise TypeError(type(value).__name__)
+    rows: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, Mapping):
+            rows.append(normalizer(dict(item)))
+    return rows
+
+
+def _normalize_hypothesis_row(row: dict[str, Any]) -> dict[str, Any]:
+    claim = _first_non_empty(
+        row.get("claim"),
+        row.get("hypothesis"),
+        row.get("hypothesis_claim"),
+        row.get("hypothesis_statement"),
+        row.get("proposed_hypothesis"),
+        row.get("description"),
+        row.get("summary"),
+        row.get("title"),
+        row.get("mechanism"),
+        row.get("rationale"),
+    )
+    row["claim"] = str(
+        claim
+        or _claim_from_relation_preview(row.get("candidate_relations"))
+        or _claim_from_span_preview(row.get("supporting_spans"))
+        or "Unspecified LLM brainstorming hypothesis; review source payload before use."
+    )
+    row.setdefault("hypothesis_type", "mechanism")
+    row["supporting_spans"] = _normalize_spans(row.get("supporting_spans"))
+    row["missing_evidence"] = _normalize_string_list(row.get("missing_evidence"))
+    row["candidate_entities"] = _normalize_candidate_entities(
+        row.get("candidate_entities")
+    )
+    row["candidate_relations"] = _normalize_candidate_relations(
+        row.get("candidate_relations")
+    )
+    row["risk"] = _normalize_risk(row.get("risk"))
+    row["recommended_review_action"] = str(
+        _first_non_empty(
+            row.get("recommended_review_action"),
+            row.get("recommended_action"),
+            row.get("suggested_review_action"),
+            "accept_as_hypothesis",
+        )
+    )
+    row.setdefault("validation_status", "review_required")
+    return row
+
+
+def _normalize_evidence_task_row(row: dict[str, Any]) -> dict[str, Any]:
+    question = _first_non_empty(
+        row.get("question"),
+        row.get("claim"),
+        row.get("description"),
+        row.get("summary"),
+        row.get("rationale"),
+    )
+    if question:
+        row["question"] = question
+    row["missing_evidence"] = _normalize_string_list(row.get("missing_evidence"))
+    row["risk"] = _normalize_risk(row.get("risk"))
+    row["recommended_review_action"] = str(
+        _first_non_empty(row.get("recommended_review_action"), "request_more_evidence")
+    )
+    row.setdefault("validation_status", "review_required")
+    return row
+
+
+def _normalize_suggestion_row(row: dict[str, Any], default_type: str) -> dict[str, Any]:
+    row["suggestion_type"] = str(
+        _first_non_empty(row.get("suggestion_type"), row.get("type"), default_type)
+    )
+    row["supporting_spans"] = _normalize_spans(row.get("supporting_spans"))
+    row["missing_evidence"] = _normalize_string_list(row.get("missing_evidence"))
+    row["risk"] = _normalize_risk(row.get("risk"))
+    row.setdefault("validation_status", "review_required")
+    return row
+
+
+def _normalize_spans(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if isinstance(value, Mapping):
+        value = [value]
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        value = [value]
+    spans: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, Mapping):
+            span = dict(item)
+            text = _first_non_empty(span.get("text"), span.get("evidence"), span.get("quote"))
+            if text:
+                span["text"] = str(text)
+            spans.append(span)
+        else:
+            text = str(item).strip()
+            if text:
+                spans.append({"text": text})
+    return spans
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped or stripped.lower() in {"none", "none.", "n/a", "na"}:
+            return []
+        return [stripped]
+    if not isinstance(value, Sequence) or isinstance(value, (bytes, bytearray)):
+        value = [value]
+    items: list[str] = []
+    for item in value:
+        stripped = str(item).strip()
+        if stripped and stripped.lower() not in {"none", "none.", "n/a", "na"}:
+            items.append(stripped)
+    return items
+
+
+def _normalize_candidate_entities(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if isinstance(value, Mapping):
+        value = [value]
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        value = [value]
+    entities: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, Mapping):
+            entities.append(dict(item))
+        else:
+            text = str(item).strip()
+            if text:
+                entities.append({"name": text})
+    return entities
+
+
+def _normalize_candidate_relations(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if isinstance(value, Mapping):
+        value = [value]
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    relations: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        relation = dict(item)
+        relation.setdefault("head", relation.get("source") or relation.get("from"))
+        relation.setdefault("tail", relation.get("target") or relation.get("to"))
+        relation.setdefault(
+            "relation",
+            relation.get("predicate") or relation.get("relation_type") or "RELATED_TO",
+        )
+        if relation.get("head") and relation.get("tail") and relation.get("relation"):
+            relations.append(relation)
+    return relations
+
+
+def _claim_from_relation_preview(value: Any) -> str | None:
+    relations = _normalize_candidate_relations(value)
+    if not relations:
+        return None
+    relation = relations[0]
+    return (
+        f"{relation.get('head')} {relation.get('relation')} {relation.get('tail')}"
+    )
+
+
+def _claim_from_span_preview(value: Any) -> str | None:
+    spans = _normalize_spans(value)
+    for span in spans:
+        text = str(span.get("text") or "").strip()
+        if text:
+            return text[:240]
+    return None
+
+
+def _normalize_risk(value: Any) -> Literal["low", "medium", "high"]:
+    normalized = str(value or "medium").strip().lower()
+    if normalized in {"low", "medium", "high"}:
+        return normalized  # type: ignore[return-value]
+    return "medium"
+
+
+def _first_non_empty(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+        else:
+            return value
+    return None
 
 
 def _deterministic_brainstorming_payload(

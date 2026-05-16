@@ -345,6 +345,65 @@ def test_hypothesis_fixture_payload_errors_are_precise(tmp_path: Path) -> None:
         )
 
 
+def test_hypothesis_fixture_normalizes_common_llm_json_shapes(
+    tmp_path: Path,
+) -> None:
+    """JSON-object LLM responses should coerce safe advisory shapes before review."""
+    save_kg_material_upload(
+        material_id="sloppy_hypothesis_note",
+        title="Sloppy hypothesis note",
+        filename="sloppy_hypothesis_note.txt",
+        content=b"Grano provides graph-based root cause analysis for anomaly diagnosis.",
+        scenario="shared",
+        material_type="text",
+        material_root=tmp_path,
+    )
+
+    response = extract_kg_material_to_structured_records(
+        "sloppy_hypothesis_note",
+        KGMaterialExtractionRunRequest(
+            hypothesis_mode="brainstorm",
+            hypothesis_provider="offline_fixture",
+            hypothesis_payload={
+                "hypotheses": [
+                    {
+                        "hypothesis_id": "H1",
+                        "description": "Graph context may explain anomaly root causes.",
+                        "supporting_spans": [
+                            "graph-based root cause analysis for anomaly diagnosis"
+                        ],
+                        "missing_evidence": "No production incident trace is provided.",
+                        "risk": "MEDIUM",
+                        "recommended_action": "accept_as_hypothesis",
+                    }
+                ]
+            },
+            overwrite=True,
+        ),
+        client=EmptyIEClient(),
+        material_root=tmp_path,
+    )
+
+    hypotheses = [
+        json.loads(line)
+        for line in Path(response.brainstorm_hypotheses_path or "").read_text(
+            encoding="utf-8"
+        ).splitlines()
+        if line.strip()
+    ]
+    review_payload = json.loads(
+        Path(response.brainstorm_review_items_path or "").read_text(encoding="utf-8")
+    )
+    assert hypotheses[0]["claim"] == "Graph context may explain anomaly root causes."
+    assert hypotheses[0]["supporting_spans"][0]["text"] == (
+        "graph-based root cause analysis for anomaly diagnosis"
+    )
+    assert hypotheses[0]["missing_evidence"] == [
+        "No production incident trace is provided."
+    ]
+    assert review_payload["items"][0]["item_type"] == "hypothesis_candidate"
+
+
 @pytest.mark.parametrize("mode", ["long_context", "agentic"])
 def test_material_extraction_document_understanding_writes_document_map(
     tmp_path: Path,

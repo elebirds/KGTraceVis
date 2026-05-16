@@ -29,6 +29,7 @@ DEFAULT_DOCUMENT_EXTRACTOR_VERSION = "v1"
 DEFAULT_DOCUMENT_IE_PROMPT_VERSION = "document_ie_prompt_v1"
 DEFAULT_DOCUMENT_UNDERSTANDING_PROMPT_VERSION = "document_understanding_prompt_v1"
 DocumentUnderstandingMode = Literal["chunk", "long_context", "agentic"]
+DeepSeekThinkingPolicy = Literal["default", "disabled"]
 AGENTIC_DOCUMENT_READER_STEPS = (
     "outline",
     "glossary",
@@ -587,32 +588,54 @@ def extract_draft_kg_from_chunks_with_report(
             )
             response = client.extract_candidates(chunk, prompt=prompt, response_schema=schema)
             payload = _coerce_extracted_payload(response, chunk_id=chunk.chunk_id)
-            chunk_entities = [
-                _entity_to_draft(
-                    entity,
+            if continue_on_chunk_error:
+                chunk_entities, entity_errors = _coerce_entity_candidates_for_chunk(
+                    payload.entities,
                     chunk=chunk,
-                    index=index,
                     extractor_name=extractor_name,
                     extractor_version=extractor_version,
                     default_confidence=default_confidence,
                     strict_grounding=strict_grounding,
                     prompt_version=prompt_version,
                 )
-                for index, entity in enumerate(payload.entities, start=1)
-            ]
-            chunk_relations = [
-                _relation_to_draft(
-                    relation,
+                chunk_relations, relation_errors = _coerce_relation_candidates_for_chunk(
+                    payload.relations,
                     chunk=chunk,
-                    index=index,
                     extractor_name=extractor_name,
                     extractor_version=extractor_version,
                     default_confidence=default_confidence,
                     strict_grounding=strict_grounding,
                     prompt_version=prompt_version,
                 )
-                for index, relation in enumerate(payload.relations, start=1)
-            ]
+            else:
+                entity_errors = []
+                relation_errors = []
+                chunk_entities = [
+                    _entity_to_draft(
+                        entity,
+                        chunk=chunk,
+                        index=index,
+                        extractor_name=extractor_name,
+                        extractor_version=extractor_version,
+                        default_confidence=default_confidence,
+                        strict_grounding=strict_grounding,
+                        prompt_version=prompt_version,
+                    )
+                    for index, entity in enumerate(payload.entities, start=1)
+                ]
+                chunk_relations = [
+                    _relation_to_draft(
+                        relation,
+                        chunk=chunk,
+                        index=index,
+                        extractor_name=extractor_name,
+                        extractor_version=extractor_version,
+                        default_confidence=default_confidence,
+                        strict_grounding=strict_grounding,
+                        prompt_version=prompt_version,
+                    )
+                    for index, relation in enumerate(payload.relations, start=1)
+                ]
         except Exception as exc:
             if not continue_on_chunk_error:
                 raise
@@ -634,9 +657,12 @@ def extract_draft_kg_from_chunks_with_report(
                 chunk_id=chunk.chunk_id,
                 source_id=chunk.source_id,
                 chunk_index=chunk.index,
-                status="extracted",
+                status="partial" if entity_errors or relation_errors else "extracted",
                 entity_count=len(chunk_entities),
                 relation_count=len(chunk_relations),
+                error_message=_skipped_candidate_error_message(
+                    entity_errors + relation_errors
+                ),
             )
         )
     return DocumentIEExtractionResult(
@@ -1361,12 +1387,17 @@ class OpenAICompatibleKGExtractionClient:
         temperature: float = 0.0,
         use_json_schema: bool = True,
         client: Any | None = None,
+        deepseek_thinking: DeepSeekThinkingPolicy | None = None,
     ) -> None:
         self.api_key = api_key if api_key is not None else os.environ.get("OPENAI_API_KEY")
         self.base_url = base_url if base_url is not None else os.environ.get("OPENAI_BASE_URL")
         self.model = model if model is not None else os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
         self.temperature = temperature
         self.use_json_schema = use_json_schema
+        self.deepseek_thinking = _stage_deepseek_thinking_policy(
+            env_name="KGTRACEVIS_DOCUMENT_IE_DEEPSEEK_THINKING",
+            default=deepseek_thinking or "disabled",
+        )
         self._client = client
 
     def extract_candidates(
@@ -1393,11 +1424,16 @@ class OpenAICompatibleKGExtractionClient:
                 {"role": "user", "content": prompt},
             ],
             response_format=response_format,
+            **_openai_compatible_request_options(
+                model=self.model,
+                base_url=self.base_url,
+                deepseek_thinking=self.deepseek_thinking,
+            ),
         )
         content = completion.choices[0].message.content
         if not content:
             raise ValueError(f"OpenAI-compatible IE returned empty content for {chunk.chunk_id}")
-        return json.loads(content)
+        return _loads_json_object_payload(content)
 
     def _resolved_client(self) -> Any:
         if self._client is not None:
@@ -1442,12 +1478,17 @@ class OpenAICompatibleDocumentUnderstandingClient:
         temperature: float = 0.0,
         use_json_schema: bool = True,
         client: Any | None = None,
+        deepseek_thinking: DeepSeekThinkingPolicy | None = None,
     ) -> None:
         self.api_key = api_key if api_key is not None else os.environ.get("OPENAI_API_KEY")
         self.base_url = base_url if base_url is not None else os.environ.get("OPENAI_BASE_URL")
         self.model = model if model is not None else os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
         self.temperature = temperature
         self.use_json_schema = use_json_schema
+        self.deepseek_thinking = _stage_deepseek_thinking_policy(
+            env_name="KGTRACEVIS_DOCUMENT_UNDERSTANDING_DEEPSEEK_THINKING",
+            default=deepseek_thinking or "disabled",
+        )
         self._client = client
 
     def understand_document(
@@ -1478,6 +1519,11 @@ class OpenAICompatibleDocumentUnderstandingClient:
                 {"role": "user", "content": prompt},
             ],
             response_format=self._response_format(response_schema),
+            **_openai_compatible_request_options(
+                model=self.model,
+                base_url=self.base_url,
+                deepseek_thinking=self.deepseek_thinking,
+            ),
         )
         content = completion.choices[0].message.content
         if not content:
@@ -1485,7 +1531,7 @@ class OpenAICompatibleDocumentUnderstandingClient:
                 "OpenAI-compatible document understanding returned empty content "
                 f"for {document.source_id}:{step_name}"
             )
-        return json.loads(content)
+        return _loads_json_object_payload(content)
 
     def _resolved_client(self) -> Any:
         if self._client is not None:
@@ -1518,6 +1564,92 @@ class OpenAICompatibleDocumentUnderstandingClient:
                 },
             }
         return {"type": "json_object"}
+
+
+def _openai_compatible_request_options(
+    *,
+    model: str,
+    base_url: str | None,
+    deepseek_thinking: DeepSeekThinkingPolicy,
+) -> dict[str, Any]:
+    provider_hint = f"{model} {base_url or ''}".lower()
+    if "deepseek" not in provider_hint or deepseek_thinking != "disabled":
+        return {}
+    return {"extra_body": {"thinking": {"type": "disabled"}}}
+
+
+def _stage_deepseek_thinking_policy(
+    *,
+    env_name: str,
+    default: DeepSeekThinkingPolicy,
+) -> DeepSeekThinkingPolicy:
+    raw = os.environ.get(env_name) or os.environ.get("KGTRACEVIS_DEEPSEEK_THINKING")
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"", "default", "provider_default", "none", "auto"}:
+        return "default"
+    if normalized == "disabled":
+        return "disabled"
+    raise ValueError(
+        f"{env_name} must be one of default or disabled; got {raw!r}"
+    )
+
+
+def _loads_json_object_payload(content: str) -> dict[str, Any]:
+    """Parse a JSON object, tolerating fenced or prefaced model output."""
+    try:
+        payload = json.loads(content)
+        if isinstance(payload, dict):
+            return payload
+    except json.JSONDecodeError:
+        pass
+    stripped = content.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        try:
+            payload = json.loads("\n".join(lines))
+            if isinstance(payload, dict):
+                return payload
+        except json.JSONDecodeError:
+            pass
+    candidate = _first_balanced_json_object(stripped)
+    if candidate is not None:
+        payload = json.loads(candidate)
+        if isinstance(payload, dict):
+            return payload
+    raise ValueError("OpenAI-compatible response did not contain a JSON object")
+
+
+def _first_balanced_json_object(content: str) -> str | None:
+    start = content.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for index, char in enumerate(content[start:], start=start):
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return content[start : index + 1]
+    return None
 
 
 def _document_context_prompt(
@@ -1942,6 +2074,77 @@ def _coerce_extracted_payload(
         return ExtractedKGPayload.model_validate(payload)
     except (TypeError, json.JSONDecodeError, ValidationError) as exc:
         raise ValueError(f"invalid IE payload for {chunk_id}") from exc
+
+
+def _coerce_entity_candidates_for_chunk(
+    candidate_entities: Sequence[ExtractedEntityPayload],
+    *,
+    chunk: SourceTextChunk,
+    extractor_name: str,
+    extractor_version: str,
+    default_confidence: float,
+    strict_grounding: bool,
+    prompt_version: str,
+) -> tuple[list[DraftEntity], list[str]]:
+    entities: list[DraftEntity] = []
+    errors: list[str] = []
+    for index, entity in enumerate(candidate_entities, start=1):
+        try:
+            entities.append(
+                _entity_to_draft(
+                    entity,
+                    chunk=chunk,
+                    index=index,
+                    extractor_name=extractor_name,
+                    extractor_version=extractor_version,
+                    default_confidence=default_confidence,
+                    strict_grounding=strict_grounding,
+                    prompt_version=prompt_version,
+                )
+            )
+        except ValueError as exc:
+            errors.append(str(exc))
+    return entities, errors
+
+
+def _coerce_relation_candidates_for_chunk(
+    candidate_relations: Sequence[ExtractedRelationPayload],
+    *,
+    chunk: SourceTextChunk,
+    extractor_name: str,
+    extractor_version: str,
+    default_confidence: float,
+    strict_grounding: bool,
+    prompt_version: str,
+) -> tuple[list[DraftRelation], list[str]]:
+    relations: list[DraftRelation] = []
+    errors: list[str] = []
+    for index, relation in enumerate(candidate_relations, start=1):
+        try:
+            relations.append(
+                _relation_to_draft(
+                    relation,
+                    chunk=chunk,
+                    index=index,
+                    extractor_name=extractor_name,
+                    extractor_version=extractor_version,
+                    default_confidence=default_confidence,
+                    strict_grounding=strict_grounding,
+                    prompt_version=prompt_version,
+                )
+            )
+        except ValueError as exc:
+            errors.append(str(exc))
+    return relations, errors
+
+
+def _skipped_candidate_error_message(errors: Sequence[str]) -> str | None:
+    if not errors:
+        return None
+    unique_errors = list(dict.fromkeys(errors))
+    preview = "; ".join(unique_errors[:3])
+    suffix = f"; +{len(unique_errors) - 3} more" if len(unique_errors) > 3 else ""
+    return f"skipped {len(errors)} invalid IE candidate(s): {preview}{suffix}"
 
 
 def _entity_to_draft(
