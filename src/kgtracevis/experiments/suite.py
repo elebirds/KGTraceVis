@@ -179,7 +179,6 @@ def build_default_command_specs(
     """Build the v0 command list from project defaults and config paths."""
     input_dir = Path(str(experiment_config.get("input_dir", "data/examples")))
     top_k = int(experiment_config.get("top_k", 5))
-    kg_qa_output = suite_output_dir / "kg_qa_report.json"
     path_ranking_output_dir = suite_output_dir / "path_ranking_v0"
     mvtec_adapter_output_dir = suite_output_dir / "adapter_pipeline_mvtec"
     wm811k_adapter_output_dir = suite_output_dir / "adapter_pipeline_wm811k"
@@ -193,20 +192,6 @@ def build_default_command_specs(
                 "--example-dir",
                 str(input_dir),
             ],
-        ),
-        CommandSpec(
-            name="kg_build_validation",
-            command=[sys.executable, "scripts/build_kg.py"],
-        ),
-        CommandSpec(
-            name="kg_qa",
-            command=[
-                sys.executable,
-                "scripts/run_kg_qa.py",
-                "--output",
-                str(kg_qa_output),
-            ],
-            expected_output=kg_qa_output,
         ),
         CommandSpec(
             name="neo4j_dry_run",

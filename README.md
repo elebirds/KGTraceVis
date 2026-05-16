@@ -230,10 +230,10 @@ TEP Root-KGD RCA is the single supported TEP RCA mode in `KGTracePipeline`.
 Generic adapter/upload workflows do not expose provider mode switches.
 `scripts/run_examples.py` remains a lightweight evidence/KG smoke.
 
-Build KG CSV files:
+Compile source materials into KG CSV files:
 
 ```bash
-uv run python scripts/build_kg.py
+uv run python scripts/compile_source_kg.py --source docs/sources --output-dir runs/source_kg/manual --overwrite
 ```
 
 Import KG into Neo4j:
@@ -254,10 +254,9 @@ Run noise experiment:
 uv run python scripts/run_noise_experiment.py
 ```
 
-Run KG QA and the consolidated v0 suite:
+Run the consolidated v0 suite:
 
 ```bash
-uv run python scripts/run_kg_qa.py --output outputs/kg_qa_report.json
 uv run python scripts/run_experiment_suite.py
 ```
 

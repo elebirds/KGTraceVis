@@ -1,340 +1,108 @@
-"""Service DTOs and handlers for source-to-KG construction builds."""
+"""Compatibility service for source KG compiler builds.
+
+This module keeps the web/API construction endpoints stable while routing build
+work to the current KGBuilder-style source KG compiler. It intentionally does
+not depend on the removed legacy ``kg_construction`` package.
+"""
 
 from __future__ import annotations
 
 import csv
 import json
 import re
+import uuid
 from collections import Counter
-from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from kgtracevis.kg.graph import (
-    DEFAULT_EDGE_PATHS,
-    DEFAULT_NODE_PATHS,
-    REQUIRED_EDGE_COLUMNS,
-    KnowledgeGraph,
-)
-from kgtracevis.kg.import_neo4j import (
-    DEFAULT_NEO4J_CONFIG_PATH,
-    dry_run_import,
-    import_knowledge_graph_with_config,
-    resolve_neo4j_config,
-)
-from kgtracevis.kg_construction import KGConstructionSource
-from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS
-from kgtracevis.kg_construction.models import (
-    KG_CONSTRUCTION_ARTIFACT_FILENAMES,
-    KGConstructionReviewDecision,
-    kg_construction_artifact_paths,
-)
-from kgtracevis.kg_construction.qa import run_kg_qa
-from kgtracevis.workflows.kg_construction_review import (
-    ReviewKGConstructionEdgeConfig,
-    ReviewKGConstructionItemConfig,
-    review_kg_construction_edge_artifact,
-    review_kg_construction_item_artifact,
-)
-from kgtracevis.workflows.kg_overlay_validation import (
-    KGOverlayValidationConfig,
-    run_kg_overlay_validation,
-)
-from kgtracevis.workflows.source_kg_construction import (
-    DEFAULT_SOURCE_KG_BUILD_DIR,
-    SourceKGConstructionWorkflowConfig,
-    run_source_kg_construction_workflow,
+from kgtracevis.source_kg_compiler import (
+    OpenAICompatibleSourceKGLLM,
+    SourceKGCompilerConfig,
+    run_source_kg_compiler_workflow,
 )
 
-DEFAULT_SOURCE_KG_SOURCE_DIR = Path("runs/source_kg_sources")
-KG_OVERLAY_VALIDATION_REPORT_ARTIFACT_KEY = "kg_overlay_validation_report"
-KG_OVERLAY_VALIDATION_REPORT_FILENAME = "kg_overlay_validation_report.json"
-MAX_SOURCE_UPLOAD_BYTES = 5_000_000
+DEFAULT_SOURCE_KG_BUILD_DIR = Path("runs/source_kg_builds")
+
 ConstructionSourceType = Literal[
     "structured_records",
     "manual_table",
+    "document",
     "tep_semantic_lift",
     "tep_variable_mapping",
     "tep_rca_graph",
 ]
-ConstructionSourceFormat = Literal["csv", "json", "jsonl"]
-SOURCE_UPLOAD_FORMATS: dict[str, ConstructionSourceFormat] = {
-    ".csv": "csv",
-    ".json": "json",
-    ".jsonl": "jsonl",
-}
+ConstructionSourceFormat = Literal["csv", "json", "jsonl", "text", "markdown"]
+
+CLAIM_BOUNDARY = (
+    "source KG compiler outputs are source-grounded candidate facts; they are "
+    "not reviewed industrial ground truth or a Neo4j publication"
+)
 
 
 class KGConstructionSourceInput(BaseModel):
-    """One supported source input for a construction build request."""
+    """Frontend-compatible source input for one compiler build."""
 
     model_config = ConfigDict(extra="forbid")
 
     source_id: str
-    source_type: ConstructionSourceType
+    source_type: ConstructionSourceType = "document"
     scenario: str = "shared"
     path: str | None = None
     source_text: str | None = None
-    source_format: ConstructionSourceFormat = "jsonl"
+    source_format: ConstructionSourceFormat | None = None
     semantic_nodes_path: str | None = None
     semantic_edges_path: str | None = None
-    rca_nodes_path: str | None = None
-    rca_edges_path: str | None = None
-    metadata: dict[str, object] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_supported_shape(self) -> KGConstructionSourceInput:
-        """Constrain runtime construction to explicit safe source shapes."""
-        if self.source_type in {"structured_records", "manual_table"}:
-            if not self.path and self.source_text is None:
-                raise ValueError(
-                    "structured_records/manual_table sources require path or source_text"
-                )
-            if self.path and self.source_text is not None:
-                raise ValueError("pass either path or source_text, not both")
+    def validate_source_shape(self) -> KGConstructionSourceInput:
+        """Require a file path, inline source text, or TEP semantic file pair."""
+        safe_output_name(self.source_id)
+        if self.path:
             return self
-        if self.source_type == "tep_semantic_lift":
-            has_pair = bool(self.semantic_nodes_path and self.semantic_edges_path)
-            if not self.path and not has_pair:
-                raise ValueError(
-                    "tep_semantic_lift requires path or semantic_nodes_path/"
-                    "semantic_edges_path"
-                )
-            if bool(self.semantic_nodes_path) != bool(self.semantic_edges_path):
-                raise ValueError(
-                    "semantic_nodes_path and semantic_edges_path must be provided together"
-                )
-            if self.source_text is not None:
-                raise ValueError("tep_semantic_lift does not accept source_text")
+        if self.source_text and self.source_text.strip():
             return self
-        if self.source_type == "tep_variable_mapping":
-            if not self.path:
-                raise ValueError("tep_variable_mapping requires path")
-            if self.source_text is not None:
-                raise ValueError("tep_variable_mapping does not accept source_text")
+        if self.semantic_nodes_path and self.semantic_edges_path:
             return self
-        if self.source_type == "tep_rca_graph":
-            has_pair = bool(self.rca_nodes_path and self.rca_edges_path)
-            if not self.path and not has_pair:
-                raise ValueError(
-                    "tep_rca_graph requires path or rca_nodes_path/rca_edges_path"
-                )
-            if bool(self.rca_nodes_path) != bool(self.rca_edges_path):
-                raise ValueError(
-                    "rca_nodes_path and rca_edges_path must be provided together"
-                )
-            if self.source_text is not None:
-                raise ValueError("tep_rca_graph does not accept source_text")
-            return self
-        raise ValueError(f"unsupported source_type={self.source_type}")
+        raise ValueError(
+            "construction source requires path, source_text, or semantic node/edge paths"
+        )
 
 
 class KGConstructionBuildRequest(BaseModel):
-    """Request to run a source-to-KG construction build."""
+    """Request body for one source KG compiler build."""
 
     model_config = ConfigDict(extra="forbid")
 
     sources: list[KGConstructionSourceInput]
-    output_name: str = "runtime"
+    output_name: str = "source_kg"
     overwrite: bool = False
     run_id: str | None = None
-    profile_path: str | None = None
-
-
-class KGConstructionBuildResponse(BaseModel):
-    """Response envelope for a completed source-to-KG build."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    status: str
-    run_id: str
-    output_dir: str
-    nodes_path: str
-    edges_path: str
-    published_nodes_path: str | None = None
-    published_edges_path: str | None = None
-    summary_path: str
-    manifest_path: str
-    source_library_manifest_path: str | None = None
-    draft_manifest_path: str | None = None
-    profile_manifest_path: str | None = None
-    alignment_manifest_path: str | None = None
-    source_audit_graph_manifest_path: str | None = None
-    semantic_layer_manifest_path: str | None = None
-    rca_view_manifest_path: str | None = None
-    review_queue_path: str | None = None
-    document_understanding_manifest_path: str | None = None
-    document_map_path: str | None = None
-    chunk_prompt_context_path: str | None = None
-    cross_chunk_proposals_path: str | None = None
-    hypothesis_brainstorming_manifest_path: str | None = None
-    brainstorm_hypotheses_path: str | None = None
-    brainstorm_review_items_path: str | None = None
-    alignment_suggestions_path: str | None = None
-    semantic_layer_suggestions_path: str | None = None
-    profile_gap_suggestions_path: str | None = None
-    publish_manifest_path: str | None = None
-    publish_report_path: str | None = None
-    diff_path: str | None = None
-    summary: dict[str, object]
-    claim_boundary: str = (
-        "source-to-KG outputs are candidate/reviewable KG rows; they are not "
-        "published to Neo4j automatically"
-    )
-
-
-class KGConstructionSourceUploadRequest(BaseModel):
-    """Metadata for a construction source file upload."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    source_id: str
-    source_type: ConstructionSourceType = "manual_table"
-    scenario: str = "shared"
-    source_format: ConstructionSourceFormat
-    filename: str
 
     @model_validator(mode="after")
-    def validate_upload_shape(self) -> KGConstructionSourceUploadRequest:
-        """Validate source uploads before bytes are persisted."""
-        _safe_path_component(self.source_id, field_name="source_id")
-        if self.source_type == "tep_semantic_lift":
-            raise ValueError(
-                "tep_semantic_lift upload requires a multi-file bundle; "
-                "register explicit semantic nodes/edges paths for now"
-            )
-        if self.source_type == "tep_rca_graph":
-            raise ValueError(
-                "tep_rca_graph upload requires a multi-file bundle; register "
-                "explicit RCA nodes/edges paths for now"
-            )
-        if not self.scenario.strip():
-            raise ValueError("scenario cannot be empty")
-        expected_format = _source_format_from_filename(self.filename)
-        if expected_format != self.source_format:
-            raise ValueError(
-                f"filename extension implies source_format={expected_format}; "
-                f"received source_format={self.source_format}"
-            )
+    def validate_build_shape(self) -> KGConstructionBuildRequest:
+        """Require at least one source."""
+        if not self.sources:
+            raise ValueError("sources must contain at least one source")
+        safe_output_name(self.output_name)
         return self
 
 
-class KGConstructionUploadedSource(BaseModel):
-    """Stored construction source metadata returned by the upload API."""
+class KGConstructionPublishRequest(BaseModel):
+    """Retained request DTO; source compiler builds are not published here."""
 
     model_config = ConfigDict(extra="forbid")
 
-    status: str = "uploaded"
-    source_id: str
-    source_type: ConstructionSourceType
-    scenario: str
-    source_format: ConstructionSourceFormat
-    filename: str
-    path: str
-    metadata_path: str
-    size_bytes: int
-    uploaded_at: str
-    build_source: KGConstructionSourceInput
-    claim_boundary: str = (
-        "uploaded sources are construction inputs only; they do not mutate KG "
-        "artifacts or Neo4j until an explicit build/import step runs"
-    )
-
-
-class KGConstructionSourceListResponse(BaseModel):
-    """List response for uploaded construction source artifacts."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    source_root: str
-    sources: list[KGConstructionUploadedSource]
-
-
-class KGConstructionBuildRecord(BaseModel):
-    """One source-to-KG construction build registry entry."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    run_id: str
-    status: str
-    created_at: str | None = None
-    output_dir: str
-    nodes_path: str
-    edges_path: str
-    published_nodes_path: str | None = None
-    published_edges_path: str | None = None
-    summary_path: str
-    manifest_path: str
-    source_library_manifest_path: str | None = None
-    draft_manifest_path: str | None = None
-    profile_manifest_path: str | None = None
-    alignment_manifest_path: str | None = None
-    source_audit_graph_manifest_path: str | None = None
-    semantic_layer_manifest_path: str | None = None
-    rca_view_manifest_path: str | None = None
-    review_queue_path: str | None = None
-    document_understanding_manifest_path: str | None = None
-    document_map_path: str | None = None
-    chunk_prompt_context_path: str | None = None
-    cross_chunk_proposals_path: str | None = None
-    hypothesis_brainstorming_manifest_path: str | None = None
-    brainstorm_hypotheses_path: str | None = None
-    brainstorm_review_items_path: str | None = None
-    alignment_suggestions_path: str | None = None
-    semantic_layer_suggestions_path: str | None = None
-    profile_gap_suggestions_path: str | None = None
-    publish_manifest_path: str | None = None
-    publish_report_path: str | None = None
-    diff_path: str | None = None
-    source_ids: list[str] = Field(default_factory=list)
-    source_count: int = 0
-    node_count: int = 0
-    edge_count: int = 0
-    scenarios: dict[str, int] = Field(default_factory=dict)
-    review_status_counts: dict[str, int] = Field(default_factory=dict)
-    claim_boundary: str = (
-        "source-to-KG build registry entries are candidate/reviewable KG "
-        "snapshots; they are not published to Neo4j automatically"
-    )
-
-
-class KGConstructionBuildListResponse(BaseModel):
-    """List response for source-to-KG construction builds."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    build_root: str
-    builds: list[KGConstructionBuildRecord]
-
-
-class KGConstructionBuildDetail(BaseModel):
-    """Detail response for one source-to-KG construction build."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    build: KGConstructionBuildRecord
-    summary: dict[str, Any]
-    manifest: dict[str, Any]
-
-
-class KGConstructionBuildValidationResponse(BaseModel):
-    """Validation response for one source-to-KG construction build."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    build: KGConstructionBuildRecord
-    qa_report: dict[str, Any]
-    claim_boundary: str = (
-        "validation reports KG CSV contract issues and warnings; it does not "
-        "mutate KG files or publish to Neo4j"
-    )
+    dry_run: bool = True
+    confirm: bool = False
+    include_defaults: bool = True
 
 
 class KGConstructionOverlayValidationRequest(BaseModel):
-    """Request to validate a construction build as a runtime KG overlay."""
+    """Retained request DTO for compatibility with the web client."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -344,128 +112,21 @@ class KGConstructionOverlayValidationRequest(BaseModel):
     top_k: int = Field(default=5, ge=1)
 
 
-class KGConstructionOverlayValidationResponse(BaseModel):
-    """Response envelope for runtime KG overlay validation."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    build: KGConstructionBuildRecord
-    report: dict[str, Any]
-    report_path: str | None = None
-    claim_boundary: str = (
-        "overlay validation runs candidate/reviewable KG rows through runtime "
-        "RCA and import dry-run checks; it does not rebuild KG, review facts, "
-        "or publish to Neo4j"
-    )
-
-
-class KGConstructionPublishRequest(BaseModel):
-    """Request to dry-run or explicitly publish one construction build."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    dry_run: bool = True
-    include_defaults: bool = True
-    confirm_publish: bool = False
-    config_path: str = str(DEFAULT_NEO4J_CONFIG_PATH)
-    uri: str | None = None
-    user: str | None = None
-    password: str | None = None
-    database: str | None = None
-
-
-class KGConstructionImportSummary(BaseModel):
-    """Serializable import counts returned by construction publish."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    node_count: int
-    edge_count: int
-    dry_run: bool
-
-
-class KGConstructionPublishResponse(BaseModel):
-    """Response envelope for construction publish/dry-run."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    build: KGConstructionBuildRecord
-    import_summary: KGConstructionImportSummary
-    include_defaults: bool
-    node_paths: list[str]
-    edge_paths: list[str]
-    claim_boundary: str = (
-        "construction publish loads candidate/reviewable KG rows; real Neo4j "
-        "writes require explicit confirmation and do not upgrade auto rows to "
-        "ground truth"
-    )
-
-
 class KGConstructionEdgeReviewRequest(BaseModel):
-    """Request to review one candidate construction queue item."""
+    """Retained request DTO; compiler output review is read-only for now."""
 
     model_config = ConfigDict(extra="forbid")
 
     action: Literal["accept", "reject"]
     item_type: str = "edge"
-    target_key: str | None = None
-    head: str | None = None
-    relation: str | None = None
-    tail: str | None = None
-    scenario: str | None = None
+    target_key: str
     reviewer: str | None = None
     note: str | None = None
-    proposed_payload: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def validate_target(self) -> KGConstructionEdgeReviewRequest:
-        """Require a stable target shape for edge or non-edge review items."""
-        has_key = self.target_key is not None
-        has_parts = all((self.head, self.relation, self.tail, self.scenario))
-        if self.item_type == "edge":
-            if has_key == bool(has_parts):
-                raise ValueError(
-                    "pass either target_key or head/relation/tail/scenario for edge review"
-                )
-            return self
-        if not has_key:
-            raise ValueError("target_key is required for non-edge review items")
-        if has_parts or any((self.head, self.relation, self.tail, self.scenario)):
-            raise ValueError(
-                "head/relation/tail/scenario are only supported for edge review"
-            )
-        return self
-
-    def edge_key(self) -> str:
-        """Return the target edge key in KGEdge.edge_id format."""
-        if self.target_key is not None:
-            return _safe_edge_key(self.target_key)
-        return _safe_edge_key(
-            f"{self.head}|{self.relation}|{self.tail}|{self.scenario}"
-        )
-
-
-class KGConstructionEdgeReviewResponse(BaseModel):
-    """Response envelope for one construction review action."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    build: KGConstructionBuildRecord
-    decision: KGConstructionReviewDecision
-    edge: dict[str, Any]
-    item: dict[str, Any] = Field(default_factory=dict)
-    summary: dict[str, Any]
-    manifest_path: str
-    edges_path: str
-    claim_boundary: str = (
-        "review updates only the selected construction build artifacts; "
-        "Neo4j publication remains a separate explicit step"
-    )
 
 
 class KGConstructionReviewQueueRequest(BaseModel):
-    """Filters and pagination for construction edge review queues."""
+    """Filters for generated compiler edge inspection."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -478,8 +139,124 @@ class KGConstructionReviewQueueRequest(BaseModel):
     limit: int = Field(default=50, ge=1, le=500)
 
 
+class KGConstructionBuildResponse(BaseModel):
+    """Response envelope for one source KG compiler build."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["built"] = "built"
+    run_id: str
+    output_dir: str
+    nodes_path: str
+    edges_path: str
+    summary_path: str
+    manifest_path: str
+    source_library_manifest_path: str | None = None
+    draft_manifest_path: str | None = None
+    profile_manifest_path: str | None = None
+    alignment_manifest_path: str | None = None
+    source_audit_graph_manifest_path: str | None = None
+    semantic_layer_manifest_path: str | None = None
+    rca_view_manifest_path: str | None = None
+    review_queue_path: str | None = None
+    document_understanding_manifest_path: str | None = None
+    document_map_path: str | None = None
+    chunk_prompt_context_path: str | None = None
+    cross_chunk_proposals_path: str | None = None
+    publish_manifest_path: str | None = None
+    publish_report_path: str | None = None
+    diff_path: str | None = None
+    published_nodes_path: str | None = None
+    published_edges_path: str | None = None
+    summary: dict[str, Any]
+    claim_boundary: str = CLAIM_BOUNDARY
+
+
+class KGConstructionBuildRecord(BaseModel):
+    """Registry record for one source KG compiler build."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    status: str
+    created_at: str | None = None
+    output_dir: str
+    nodes_path: str
+    edges_path: str
+    summary_path: str
+    manifest_path: str
+    source_ids: list[str] = Field(default_factory=list)
+    source_count: int = 0
+    node_count: int = 0
+    edge_count: int = 0
+    scenarios: dict[str, int] = Field(default_factory=dict)
+    review_status_counts: dict[str, int] = Field(default_factory=dict)
+    claim_boundary: str = CLAIM_BOUNDARY
+
+
+class KGConstructionBuildListResponse(BaseModel):
+    """List response for compiler build registry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build_root: str
+    builds: list[KGConstructionBuildRecord]
+
+
+class KGConstructionBuildDetail(BaseModel):
+    """Detail response for a compiler build."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    summary: dict[str, Any]
+    manifest: dict[str, Any]
+
+
+class KGConstructionBuildValidationResponse(BaseModel):
+    """Validation response for a compiler build."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    report: dict[str, Any]
+    claim_boundary: str = CLAIM_BOUNDARY
+
+
+class KGConstructionOverlayValidationResponse(BaseModel):
+    """Runtime overlay validation compatibility response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    report: dict[str, Any]
+    report_path: str | None = None
+    claim_boundary: str = CLAIM_BOUNDARY
+
+
+class KGConstructionImportSummary(BaseModel):
+    """Compatibility summary for unsupported publish calls."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
+    dry_run: bool = True
+    node_count: int = 0
+    edge_count: int = 0
+
+
+class KGConstructionPublishResponse(BaseModel):
+    """Compatibility response for source compiler publish requests."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    import_summary: KGConstructionImportSummary
+    claim_boundary: str = CLAIM_BOUNDARY
+
+
 class KGConstructionReviewQueueEdge(BaseModel):
-    """One reviewable construction edge row."""
+    """Read-only generated edge review row."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -493,107 +270,149 @@ class KGConstructionReviewQueueEdge(BaseModel):
     confidence: float
     weight: float
     review_status: str
-    feedback_count: int
-    accepted_count: int
-    rejected_count: int
+    feedback_count: int = 0
+    accepted_count: int = 0
+    rejected_count: int = 0
     item_type: str = "edge"
     priority: int | None = None
-    reason: str = ""
-    relation_family: str = ""
-    graph_impact: str = ""
-    recommended_action: str = ""
+    reason: str = "generated by source_kg_compiler"
+    relation_family: str = "SOURCE_COMPILER"
+    graph_impact: str = "candidate_runtime_overlay"
+    recommended_action: str = "inspect generated source evidence before use"
     candidate_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class KGConstructionReviewQueueSummary(BaseModel):
-    """Facet counts for a construction review queue."""
+    """Aggregate counts for generated compiler edges."""
 
     model_config = ConfigDict(extra="forbid")
 
-    review_status_counts: dict[str, int] = Field(default_factory=dict)
-    relation_counts: dict[str, int] = Field(default_factory=dict)
-    scenario_counts: dict[str, int] = Field(default_factory=dict)
-    source_counts: dict[str, int] = Field(default_factory=dict)
+    review_status_counts: dict[str, int]
+    relation_counts: dict[str, int]
+    scenario_counts: dict[str, int]
+    source_counts: dict[str, int]
 
 
 class KGConstructionReviewQueueResponse(BaseModel):
-    """Read-only queue response for construction edge review."""
+    """Read-only review queue for generated compiler edges."""
 
     model_config = ConfigDict(extra="forbid")
 
     build: KGConstructionBuildRecord
-    filters: KGConstructionReviewQueueRequest
+    filters: dict[str, Any]
     total_count: int
     returned_count: int
     offset: int
     limit: int
     edges: list[KGConstructionReviewQueueEdge]
     summary: KGConstructionReviewQueueSummary
-    claim_boundary: str = (
-        "review queues are read-only views over candidate construction edges; "
-        "accept/reject and Neo4j publish are separate explicit actions"
-    )
+    claim_boundary: str = CLAIM_BOUNDARY
+
+
+class KGConstructionEdgeReviewResponse(BaseModel):
+    """Compatibility response for unsupported generated-edge mutation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    decision: dict[str, Any]
+    edge: dict[str, Any]
+    item: dict[str, Any]
+    summary: dict[str, Any]
+    manifest_path: str
+    edges_path: str
+    claim_boundary: str = CLAIM_BOUNDARY
+
+
+class KGConstructionSourceUploadRequest(BaseModel):
+    """Metadata for uploading a compiler source file."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str
+    source_type: ConstructionSourceType = "document"
+    scenario: str = "shared"
+    source_format: ConstructionSourceFormat | None = None
+
+
+class KGConstructionUploadedSource(BaseModel):
+    """Stored uploaded source descriptor."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str
+    source_type: ConstructionSourceType
+    scenario: str
+    source_format: ConstructionSourceFormat | None = None
+    path: str
+    uploaded_at: str
+    build_source: KGConstructionSourceInput
+
+
+class KGConstructionSourceListResponse(BaseModel):
+    """List response for uploaded compiler sources."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_root: str
+    sources: list[KGConstructionUploadedSource]
 
 
 def run_kg_construction_build(
     request: KGConstructionBuildRequest,
     *,
-    output_root: Path | None = None,
+    build_root: Path | None = None,
 ) -> KGConstructionBuildResponse:
-    """Run a construction build from a narrow API-safe request."""
-    sources = tuple(_source_from_input(source) for source in request.sources)
-    output_dir = (output_root or DEFAULT_SOURCE_KG_BUILD_DIR) / safe_output_name(
+    """Compile provided sources with the current source KG compiler."""
+    output_dir = (build_root or DEFAULT_SOURCE_KG_BUILD_DIR) / safe_output_name(
         request.output_name
     )
-    result = run_source_kg_construction_workflow(
-        SourceKGConstructionWorkflowConfig(
+    run_id = request.run_id or f"sourcekg_{uuid.uuid4().hex[:12]}"
+    source_paths = _materialize_source_inputs(request.sources, output_dir)
+    default_scenario = _default_scenario(request.sources)
+    result = run_source_kg_compiler_workflow(
+        SourceKGCompilerConfig(
+            source_paths=tuple(source_paths),
             output_dir=output_dir,
-            sources=sources,
+            llm_client=OpenAICompatibleSourceKGLLM(),
+            default_scenario=default_scenario,
             overwrite=request.overwrite,
-            run_id=request.run_id,
-            profile_path=Path(request.profile_path) if request.profile_path else None,
         )
     )
-    return KGConstructionBuildResponse(
-        status="built",
-        run_id=result.run_id,
-        output_dir=str(result.output_dir),
-        nodes_path=str(result.nodes_path),
-        edges_path=str(result.edges_path),
-        published_nodes_path=str(result.published_nodes_path),
-        published_edges_path=str(result.published_edges_path),
-        summary_path=str(result.summary_path),
-        manifest_path=str(result.manifest_path),
-        source_library_manifest_path=str(result.source_library_manifest_path),
-        draft_manifest_path=str(result.draft_manifest_path),
-        profile_manifest_path=str(result.profile_manifest_path),
-        alignment_manifest_path=str(result.alignment_manifest_path),
-        source_audit_graph_manifest_path=str(result.source_audit_graph_manifest_path),
-        semantic_layer_manifest_path=str(result.semantic_layer_manifest_path),
-        rca_view_manifest_path=str(result.rca_view_manifest_path),
-        review_queue_path=str(result.review_queue_path),
-        document_understanding_manifest_path=str(result.document_understanding_manifest_path),
-        document_map_path=str(result.document_map_path),
-        chunk_prompt_context_path=str(result.chunk_prompt_context_path),
-        cross_chunk_proposals_path=str(result.cross_chunk_proposals_path),
-        hypothesis_brainstorming_manifest_path=str(
-            result.hypothesis_brainstorming_manifest_path
-        ),
-        brainstorm_hypotheses_path=str(result.brainstorm_hypotheses_path),
-        brainstorm_review_items_path=str(result.brainstorm_review_items_path),
-        alignment_suggestions_path=str(result.alignment_suggestions_path),
-        semantic_layer_suggestions_path=str(result.semantic_layer_suggestions_path),
-        profile_gap_suggestions_path=str(result.profile_gap_suggestions_path),
-        publish_manifest_path=str(result.publish_manifest_path),
-        publish_report_path=str(result.publish_report_path),
-        diff_path=str(result.diff_path),
-        summary=result.summary,
+    summary = _build_summary(
+        run_id=run_id,
+        output_dir=output_dir,
+        request=request,
+        compiler_summary=result.summary,
     )
-
-
-def safe_output_name(value: str) -> str:
-    """Return a validated relative output directory name for construction builds."""
-    return _safe_output_name(value)
+    summary_path = output_dir / "source_kg_build_summary.json"
+    manifest_path = output_dir / "source_kg_build_manifest.json"
+    _write_json(summary_path, summary)
+    _write_json(
+        manifest_path,
+        {
+            "artifact_type": "source_kg_compiler_build_manifest_v1",
+            "run_id": run_id,
+            "created_at": summary["created_at"],
+            "source_ids": [source.source_id for source in request.sources],
+            "compiler_artifacts": result.summary["artifacts"],
+            "summary_path": summary_path.as_posix(),
+            "claim_boundary": CLAIM_BOUNDARY,
+        },
+    )
+    return KGConstructionBuildResponse(
+        run_id=run_id,
+        output_dir=output_dir.as_posix(),
+        nodes_path=result.artifact_paths.nodes_csv.as_posix(),
+        edges_path=result.artifact_paths.edges_csv.as_posix(),
+        summary_path=summary_path.as_posix(),
+        manifest_path=manifest_path.as_posix(),
+        source_library_manifest_path=result.artifact_paths.source_units.as_posix(),
+        draft_manifest_path=result.artifact_paths.knowledge_cards.as_posix(),
+        profile_manifest_path=result.artifact_paths.domain_profiles_manifest.as_posix(),
+        rca_view_manifest_path=result.artifact_paths.runtime_views_manifest.as_posix(),
+        summary=summary,
+    )
 
 
 def save_kg_construction_source_upload(
@@ -606,90 +425,59 @@ def save_kg_construction_source_upload(
     source_format: ConstructionSourceFormat | None = None,
     source_root: Path | None = None,
 ) -> KGConstructionUploadedSource:
-    """Persist an uploaded source artifact and return a build-ready reference."""
-    resolved_format = source_format or _source_format_from_filename(filename)
-    request = KGConstructionSourceUploadRequest(
+    """Store an uploaded compiler source and return a build-ready descriptor."""
+    if not content:
+        raise ValueError("uploaded construction source cannot be empty")
+    root = source_root or DEFAULT_SOURCE_KG_BUILD_DIR / "uploaded_sources"
+    source_dir = root / safe_output_name(source_id)
+    source_dir.mkdir(parents=True, exist_ok=True)
+    stored_name = _safe_filename(filename)
+    path = source_dir / stored_name
+    path.write_bytes(content)
+    payload = KGConstructionUploadedSource(
         source_id=source_id,
         source_type=source_type,
         scenario=scenario,
-        source_format=resolved_format,
-        filename=filename,
+        source_format=source_format,
+        path=path.as_posix(),
+        uploaded_at=_utc_now(),
+        build_source=KGConstructionSourceInput(
+            source_id=source_id,
+            source_type=source_type,
+            scenario=scenario,
+            path=path.as_posix(),
+            source_format=source_format,
+        ),
     )
-    if not content:
-        raise ValueError("uploaded source file cannot be empty")
-    if len(content) > MAX_SOURCE_UPLOAD_BYTES:
-        raise ValueError(
-            f"uploaded source file exceeds {MAX_SOURCE_UPLOAD_BYTES} bytes: {len(content)}"
-        )
-
-    root = source_root or DEFAULT_SOURCE_KG_SOURCE_DIR
-    source_dir = root / _safe_path_component(request.source_id, field_name="source_id")
-    source_dir.mkdir(parents=True, exist_ok=True)
-    stored_filename = _safe_upload_filename(request.filename)
-    source_path = source_dir / stored_filename
-    metadata_path = source_dir / "metadata.json"
-    source_path.write_bytes(content)
-
-    uploaded_at = datetime.now(UTC).isoformat()
-    build_source = KGConstructionSourceInput(
-        source_id=request.source_id,
-        source_type=request.source_type,
-        scenario=request.scenario,
-        path=str(source_path),
-        source_format=request.source_format,
-        metadata={
-            "uploaded_at": uploaded_at,
-            "uploaded_filename": request.filename,
-            "source_upload_path": str(source_path),
-        },
-    )
-    uploaded = KGConstructionUploadedSource(
-        source_id=request.source_id,
-        source_type=request.source_type,
-        scenario=request.scenario,
-        source_format=request.source_format,
-        filename=request.filename,
-        path=str(source_path),
-        metadata_path=str(metadata_path),
-        size_bytes=len(content),
-        uploaded_at=uploaded_at,
-        build_source=build_source,
-    )
-    metadata_path.write_text(
-        json.dumps(uploaded.model_dump(mode="json"), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    return uploaded
+    _write_json(source_dir / "metadata.json", payload.model_dump(mode="json"))
+    return payload
 
 
 def list_kg_construction_source_uploads(
     *,
     source_root: Path | None = None,
 ) -> KGConstructionSourceListResponse:
-    """List stored construction source uploads from the runtime source directory."""
-    root = source_root or DEFAULT_SOURCE_KG_SOURCE_DIR
-    if not root.exists():
-        return KGConstructionSourceListResponse(source_root=str(root), sources=[])
-    sources: list[KGConstructionUploadedSource] = []
-    for metadata_path in sorted(root.glob("*/metadata.json")):
-        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-        sources.append(KGConstructionUploadedSource.model_validate(payload))
-    sources.sort(key=lambda item: item.uploaded_at, reverse=True)
-    return KGConstructionSourceListResponse(source_root=str(root), sources=sources)
+    """List uploaded compiler sources."""
+    root = source_root or DEFAULT_SOURCE_KG_BUILD_DIR / "uploaded_sources"
+    sources = [
+        KGConstructionUploadedSource.model_validate(json.loads(path.read_text()))
+        for path in sorted(root.glob("*/metadata.json"))
+    ] if root.exists() else []
+    return KGConstructionSourceListResponse(source_root=root.as_posix(), sources=sources)
 
 
 def list_kg_construction_builds(
     *,
     build_root: Path | None = None,
 ) -> KGConstructionBuildListResponse:
-    """List source-to-KG build artifacts discovered under the build root."""
+    """List source compiler builds."""
     root = build_root or DEFAULT_SOURCE_KG_BUILD_DIR
     builds = [
-        _build_record_from_manifest_path(manifest_path)
-        for manifest_path in _build_manifest_paths(root)
-    ]
-    builds.sort(key=lambda item: item.created_at or "", reverse=True)
-    return KGConstructionBuildListResponse(build_root=str(root), builds=builds)
+        _build_record_from_dir(path.parent)
+        for path in sorted(root.glob("*/source_kg_build_manifest.json"))
+    ] if root.exists() else []
+    builds.sort(key=lambda build: build.created_at or "", reverse=True)
+    return KGConstructionBuildListResponse(build_root=root.as_posix(), builds=builds)
 
 
 def get_kg_construction_build(
@@ -697,20 +485,10 @@ def get_kg_construction_build(
     *,
     build_root: Path | None = None,
 ) -> KGConstructionBuildDetail:
-    """Return summary and manifest payload for one construction build."""
-    build = _find_build_record(run_id, build_root=build_root)
-    summary_path = Path(build.summary_path)
-    manifest_path = Path(build.manifest_path)
-    if not summary_path.is_file():
-        raise ValueError(f"construction build summary not found: {summary_path}")
-    if not manifest_path.is_file():
-        raise ValueError(f"construction build manifest not found: {manifest_path}")
-    summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if not isinstance(summary, dict):
-        raise ValueError(f"construction build summary must be an object: {summary_path}")
-    if not isinstance(manifest, dict):
-        raise ValueError(f"construction build manifest must be an object: {manifest_path}")
+    """Return one source compiler build detail."""
+    build = _find_build(run_id, build_root=build_root)
+    summary = _read_json(Path(build.summary_path))
+    manifest = _read_json(Path(build.manifest_path))
     return KGConstructionBuildDetail(build=build, summary=summary, manifest=manifest)
 
 
@@ -720,17 +498,27 @@ def get_kg_construction_build_artifact_path(
     *,
     build_root: Path | None = None,
 ) -> Path:
-    """Return a safe local file path for one construction build artifact key."""
-    key = _safe_artifact_key(artifact_key)
-    if not _known_construction_artifact_key(key):
+    """Resolve a stable artifact key for one compiler build."""
+    build = _find_build(run_id, build_root=build_root)
+    output_dir = Path(build.output_dir)
+    artifacts = {
+        "nodes": Path(build.nodes_path),
+        "edges": Path(build.edges_path),
+        "summary": Path(build.summary_path),
+        "manifest": Path(build.manifest_path),
+        "source_units": output_dir / "source_units.jsonl",
+        "knowledge_cards": output_dir / "knowledge_cards.jsonl",
+        "entities": output_dir / "entities.jsonl",
+        "qa_report": output_dir / "qa_report.json",
+        "validation_report": output_dir / "validation_report.json",
+        "domain_profiles": output_dir / "domain_profiles.json",
+    }
+    if "/" in artifact_key or "\\" in artifact_key or artifact_key not in artifacts:
         raise ValueError(f"unknown construction artifact key: {artifact_key}")
-    build = _find_build_record(run_id, build_root=build_root)
-    artifact_path = _resolved_construction_artifact_path(build, key)
-    if artifact_path.is_dir():
-        raise ValueError(f"construction build artifact is a directory: {key}")
-    if not artifact_path.is_file():
-        raise ValueError(f"construction build artifact not found: {key}")
-    return artifact_path
+    path = artifacts[artifact_key]
+    if not path.is_file():
+        raise ValueError(f"construction build artifact not found: {artifact_key}")
+    return path
 
 
 def validate_kg_construction_build(
@@ -738,12 +526,12 @@ def validate_kg_construction_build(
     *,
     build_root: Path | None = None,
 ) -> KGConstructionBuildValidationResponse:
-    """Run structured KG QA for one construction build."""
-    build = _find_build_record(run_id, build_root=build_root)
-    report = run_kg_qa([build.nodes_path], [build.edges_path])
+    """Return the compiler validation report for one build."""
+    build = _find_build(run_id, build_root=build_root)
+    report_path = Path(build.output_dir) / "validation_report.json"
     return KGConstructionBuildValidationResponse(
         build=build,
-        qa_report=report.model_dump(),
+        report=_read_json(report_path) if report_path.is_file() else {},
     )
 
 
@@ -753,22 +541,23 @@ def validate_kg_construction_overlay(
     *,
     build_root: Path | None = None,
 ) -> KGConstructionOverlayValidationResponse:
-    """Validate one construction build as an explicit runtime KG overlay."""
-    build = _find_build_record(run_id, build_root=build_root)
-    _require_build_artifacts(build)
-    result = run_kg_overlay_validation(
-        KGOverlayValidationConfig(
-            build_dir=Path(build.output_dir),
-            example_dir=Path(request.example_dir),
-            include_defaults_for_runtime=not request.overlay_only_runtime,
-            include_defaults_for_import=not request.overlay_only_import,
-            top_k=request.top_k,
-        )
-    )
+    """Return a lightweight overlay validation report for generated CSVs."""
+    build = _find_build(run_id, build_root=build_root)
+    report = {
+        "artifact_type": "source_kg_compiler_overlay_validation_v1",
+        "validated": Path(build.nodes_path).is_file() and Path(build.edges_path).is_file(),
+        "overlay_contributed": None,
+        "node_count": build.node_count,
+        "edge_count": build.edge_count,
+        "request": request.model_dump(mode="json"),
+        "note": "full runtime contribution validation is handled by source KG evaluation scripts",
+    }
+    report_path = Path(build.output_dir) / "kg_overlay_validation_report.json"
+    _write_json(report_path, report)
     return KGConstructionOverlayValidationResponse(
         build=build,
-        report=result.report,
-        report_path=str(result.output_path) if result.output_path is not None else None,
+        report=report,
+        report_path=report_path.as_posix(),
     )
 
 
@@ -778,39 +567,16 @@ def publish_kg_construction_build(
     *,
     build_root: Path | None = None,
 ) -> KGConstructionPublishResponse:
-    """Dry-run or explicitly publish one construction build to Neo4j."""
-    build = _find_build_record(run_id, build_root=build_root)
-    _require_build_artifacts(build)
-    if not request.dry_run and not request.confirm_publish:
-        raise ValueError(
-            "confirmed Neo4j publication requires confirm_publish=true when "
-            "dry_run=false"
-        )
-
-    node_paths, edge_paths = _publish_paths(build, include_defaults=request.include_defaults)
-    graph = KnowledgeGraph.from_paths(node_paths, edge_paths, skip_missing=True)
-    if request.dry_run:
-        summary = dry_run_import(graph)
-    else:
-        config = resolve_neo4j_config(
-            uri=request.uri,
-            user=request.user,
-            password=request.password,
-            database=request.database,
-            config_path=request.config_path,
-        )
-        summary = import_knowledge_graph_with_config(graph, config)
-
+    """Return an explicit no-publish response for source compiler builds."""
+    build = _find_build(run_id, build_root=build_root)
     return KGConstructionPublishResponse(
         build=build,
         import_summary=KGConstructionImportSummary(
-            node_count=summary.node_count,
-            edge_count=summary.edge_count,
-            dry_run=summary.dry_run,
+            status="not_supported_source_compiler_build",
+            dry_run=True,
+            node_count=build.node_count,
+            edge_count=build.edge_count,
         ),
-        include_defaults=request.include_defaults,
-        node_paths=[str(path) for path in node_paths],
-        edge_paths=[str(path) for path in edge_paths],
     )
 
 
@@ -820,56 +586,12 @@ def review_kg_construction_edge(
     *,
     build_root: Path | None = None,
 ) -> KGConstructionEdgeReviewResponse:
-    """Record an accept/reject decision for one candidate construction item."""
-    build = _find_build_record(run_id, build_root=build_root)
-    _require_build_artifacts(build)
-    if request.item_type != "edge":
-        item_result = review_kg_construction_item_artifact(
-            ReviewKGConstructionItemConfig(
-                output_dir=Path(build.output_dir),
-                target_key=request.target_key or "",
-                item_type=request.item_type,
-                action=request.action,
-                reviewer=request.reviewer,
-                note=request.note,
-                proposed_payload=request.proposed_payload,
-                metadata=request.metadata,
-            )
-        )
-        refreshed_build = _build_record_from_manifest_path(Path(build.manifest_path))
-        return KGConstructionEdgeReviewResponse(
-            build=refreshed_build,
-            decision=item_result.decision,
-            edge={},
-            item=item_result.item,
-            summary=item_result.summary,
-            manifest_path=build.manifest_path,
-            edges_path=build.edges_path,
-        )
-
-    result = review_kg_construction_edge_artifact(
-        ReviewKGConstructionEdgeConfig(
-            output_dir=Path(build.output_dir),
-            target_key=request.target_key,
-            head=request.head,
-            relation=request.relation,
-            tail=request.tail,
-            scenario=request.scenario,
-            action=request.action,
-            reviewer=request.reviewer,
-            note=request.note,
-            proposed_payload=request.proposed_payload,
-            metadata=request.metadata,
-        )
-    )
-    refreshed_build = _build_record_from_manifest_path(Path(build.manifest_path))
-    return KGConstructionEdgeReviewResponse(
-        build=refreshed_build,
-        decision=result.decision,
-        edge=result.edge,
-        summary=result.summary,
-        manifest_path=build.manifest_path,
-        edges_path=build.edges_path,
+    """Reject mutation of generated compiler edges through the legacy endpoint."""
+    build = _find_build(run_id, build_root=build_root)
+    raise ValueError(
+        "source KG compiler builds are read-only here; regenerate sources or use "
+        f"material/compiler review workflows later. target_key={request.target_key}; "
+        f"build={build.run_id}"
     )
 
 
@@ -879,687 +601,242 @@ def get_kg_construction_review_queue(
     *,
     build_root: Path | None = None,
 ) -> KGConstructionReviewQueueResponse:
-    """Return a filtered, paginated review queue for construction edges."""
-    build = _find_build_record(run_id, build_root=build_root)
-    _require_build_artifacts(build)
-    rows = _read_review_queue_edges(build)
-    filtered_rows = [
-        edge
-        for edge in rows
-        if _matches_review_queue_filters(edge, request)
-    ]
-    page = filtered_rows[request.offset : request.offset + request.limit]
+    """Expose generated edges as a read-only inspection queue."""
+    build = _find_build(run_id, build_root=build_root)
+    edges = [_queue_edge_from_row(index, row) for index, row in enumerate(_read_edges(build))]
+    edges = _filter_edges(edges, request)
+    sliced = edges[request.offset : request.offset + request.limit]
     return KGConstructionReviewQueueResponse(
         build=build,
-        filters=request,
-        total_count=len(filtered_rows),
-        returned_count=len(page),
+        filters=request.model_dump(mode="json"),
+        total_count=len(edges),
+        returned_count=len(sliced),
         offset=request.offset,
         limit=request.limit,
-        edges=page,
-        summary=_review_queue_summary(filtered_rows),
+        edges=sliced,
+        summary=_queue_summary(edges),
     )
 
 
-def _source_from_input(source: KGConstructionSourceInput) -> KGConstructionSource:
-    metadata = dict(source.metadata)
-    path = Path(source.path) if source.path else None
-    if source.source_text is not None:
-        metadata["source_format"] = source.source_format
-    if source.source_type == "tep_semantic_lift":
+def safe_output_name(value: str) -> str:
+    """Return a safe filesystem slug."""
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip()).strip("._")
+    if not slug:
+        raise ValueError("output/source name cannot be empty")
+    return slug
+
+
+def _default_scenario(sources: list[KGConstructionSourceInput]) -> str:
+    scenarios = [source.scenario for source in sources if source.scenario]
+    return scenarios[0] if scenarios else "shared"
+
+
+def _materialize_source_inputs(
+    sources: list[KGConstructionSourceInput],
+    output_dir: Path,
+) -> list[Path]:
+    source_paths: list[Path] = []
+    inline_dir = output_dir.parent / "_compiler_inputs" / output_dir.name
+    for source in sources:
+        if source.path:
+            source_paths.append(Path(source.path).expanduser())
+            continue
         if source.semantic_nodes_path and source.semantic_edges_path:
-            metadata["nodes_path"] = Path(source.semantic_nodes_path)
-            metadata["edges_path"] = Path(source.semantic_edges_path)
-    if source.source_type == "tep_rca_graph":
-        if source.rca_nodes_path and source.rca_edges_path:
-            metadata["nodes_path"] = Path(source.rca_nodes_path)
-            metadata["edges_path"] = Path(source.rca_edges_path)
-    return KGConstructionSource(
-        source_id=source.source_id,
-        source_type=source.source_type,
-        scenario=source.scenario,
-        path=path,
-        text=source.source_text,
-        metadata=metadata,
+            source_paths.extend(
+                [
+                    Path(source.semantic_nodes_path).expanduser(),
+                    Path(source.semantic_edges_path).expanduser(),
+                ]
+            )
+            continue
+        inline_dir.mkdir(parents=True, exist_ok=True)
+        suffix = source.source_format or "txt"
+        inline_path = inline_dir / f"{safe_output_name(source.source_id)}.{suffix}"
+        inline_path.write_text(
+            f"SCENARIO: {source.scenario}\nSOURCE_ID: {source.source_id}\n\n"
+            f"{source.source_text or ''}",
+            encoding="utf-8",
+        )
+        source_paths.append(inline_path)
+    return source_paths
+
+
+def _build_summary(
+    *,
+    run_id: str,
+    output_dir: Path,
+    request: KGConstructionBuildRequest,
+    compiler_summary: dict[str, Any],
+) -> dict[str, Any]:
+    counts = dict(compiler_summary.get("counts") or {})
+    return {
+        "artifact_type": "source_kg_compiler_build_summary_v1",
+        "run_id": run_id,
+        "status": "built",
+        "created_at": _utc_now(),
+        "output_dir": output_dir.as_posix(),
+        "source_count": len(request.sources),
+        "source_ids": [source.source_id for source in request.sources],
+        "node_count": int(counts.get("entities") or 0),
+        "edge_count": int(counts.get("edges") or 0),
+        "counts": {
+            **counts,
+            "node_count": int(counts.get("entities") or 0),
+            "edge_count": int(counts.get("edges") or 0),
+            "source_count": len(request.sources),
+        },
+        "compiler_summary": compiler_summary,
+        "claim_boundary": CLAIM_BOUNDARY,
+    }
+
+
+def _build_record_from_dir(output_dir: Path) -> KGConstructionBuildRecord:
+    summary_path = output_dir / "source_kg_build_summary.json"
+    manifest_path = output_dir / "source_kg_build_manifest.json"
+    summary = _read_json(summary_path)
+    edges = _edge_rows(output_dir / "edges.csv")
+    scenarios = Counter(row.get("scenario", "unknown") for row in edges)
+    statuses = Counter(row.get("review_status", "unknown") for row in edges)
+    return KGConstructionBuildRecord(
+        run_id=str(summary["run_id"]),
+        status=str(summary.get("status") or "built"),
+        created_at=summary.get("created_at"),
+        output_dir=output_dir.as_posix(),
+        nodes_path=(output_dir / "nodes.csv").as_posix(),
+        edges_path=(output_dir / "edges.csv").as_posix(),
+        summary_path=summary_path.as_posix(),
+        manifest_path=manifest_path.as_posix(),
+        source_ids=list(summary.get("source_ids") or []),
+        source_count=int(summary.get("source_count") or 0),
+        node_count=int(summary.get("node_count") or 0),
+        edge_count=int(summary.get("edge_count") or len(edges)),
+        scenarios=dict(scenarios),
+        review_status_counts=dict(statuses),
     )
 
 
-def _safe_output_name(value: str) -> str:
-    stripped = value.strip()
-    if not stripped:
-        raise ValueError("output_name cannot be empty")
-    if Path(stripped).is_absolute() or ".." in Path(stripped).parts:
-        raise ValueError("output_name must be a relative directory name")
-    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", stripped).strip("._")
-    if not safe:
-        raise ValueError("output_name must contain at least one safe filename character")
-    if safe != stripped:
-        raise ValueError("output_name may contain only letters, numbers, '.', '_', and '-'")
-    return safe
-
-
-def _build_manifest_paths(root: Path) -> list[Path]:
-    if not root.exists():
-        return []
-    if root.is_file():
-        return [root] if root.name == "kg_construction_manifest.json" else []
-    return sorted(root.glob("*/kg_construction_manifest.json"))
-
-
-def _find_build_record(
-    run_id: str,
-    *,
-    build_root: Path | None,
-) -> KGConstructionBuildRecord:
-    requested = _safe_path_component(run_id, field_name="run_id")
+def _find_build(run_id: str, *, build_root: Path | None = None) -> KGConstructionBuildRecord:
     for build in list_kg_construction_builds(build_root=build_root).builds:
-        if build.run_id == requested:
+        if build.run_id == run_id:
             return build
     raise ValueError(f"unknown construction build run_id: {run_id}")
 
 
-def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuildRecord:
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if not isinstance(manifest, dict):
-        raise ValueError(f"construction manifest must be an object: {manifest_path}")
-    if manifest.get("artifact_type") != "source_to_kg_construction_manifest_v1":
-        raise ValueError(f"unsupported construction manifest: {manifest_path}")
-    run = _dict_value(manifest, "run")
-    summary = _dict_value(manifest, "summary")
-    artifacts = _dict_value(manifest, "artifacts")
-    run_id = str(run.get("run_id") or summary.get("run_id") or "")
-    if not run_id:
-        raise ValueError(f"construction manifest missing run_id: {manifest_path}")
-    default_artifacts = kg_construction_artifact_paths(manifest_path.parent)
-    output_dir = artifacts.get("output_dir") or manifest_path.parent
-    return KGConstructionBuildRecord(
-        run_id=run_id,
-        status=str(run.get("status") or "built"),
-        created_at=_str_or_none(run.get("created_at")),
-        output_dir=str(output_dir),
-        nodes_path=str(artifacts.get("nodes") or default_artifacts["nodes"]),
-        edges_path=str(artifacts.get("edges") or default_artifacts["edges"]),
-        published_nodes_path=_artifact_path(
-            artifacts,
-            "published_nodes",
-            fallback=default_artifacts["published_nodes"],
-        ),
-        published_edges_path=_artifact_path(
-            artifacts,
-            "published_edges",
-            fallback=default_artifacts["published_edges"],
-        ),
-        summary_path=str(
-            artifacts.get("summary") or default_artifacts["summary"]
-        ),
-        manifest_path=str(artifacts.get("manifest") or default_artifacts["manifest"]),
-        source_library_manifest_path=_artifact_path(
-            artifacts,
-            "source_library_manifest",
-            fallback=default_artifacts["source_library_manifest"],
-        ),
-        draft_manifest_path=_artifact_path(
-            artifacts,
-            "draft_manifest",
-            fallback=default_artifacts["draft_manifest"],
-        ),
-        profile_manifest_path=_artifact_path(
-            artifacts,
-            "profile_manifest",
-            fallback=default_artifacts["profile_manifest"],
-        ),
-        alignment_manifest_path=_artifact_path(
-            artifacts,
-            "alignment_manifest",
-            fallback=default_artifacts["alignment_manifest"],
-        ),
-        source_audit_graph_manifest_path=_artifact_path(
-            artifacts,
-            "source_audit_graph_manifest",
-            fallback=default_artifacts["source_audit_graph_manifest"],
-        ),
-        semantic_layer_manifest_path=_artifact_path(
-            artifacts,
-            "semantic_layer_manifest",
-            fallback=default_artifacts["semantic_layer_manifest"],
-        ),
-        rca_view_manifest_path=_artifact_path(
-            artifacts,
-            "rca_view_manifest",
-            fallback=default_artifacts["rca_view_manifest"],
-        ),
-        review_queue_path=_artifact_path(
-            artifacts,
-            "review_queue",
-            fallback=default_artifacts["review_queue"],
-        ),
-        document_understanding_manifest_path=_artifact_path(
-            artifacts,
-            "document_understanding_manifest",
-            fallback=default_artifacts["document_understanding_manifest"],
-        ),
-        document_map_path=_artifact_path(
-            artifacts,
-            "document_map",
-            fallback=default_artifacts["document_map"],
-        ),
-        chunk_prompt_context_path=_artifact_path(
-            artifacts,
-            "chunk_prompt_context",
-            fallback=default_artifacts["chunk_prompt_context"],
-        ),
-        cross_chunk_proposals_path=_artifact_path(
-            artifacts,
-            "cross_chunk_proposals",
-            fallback=default_artifacts["cross_chunk_proposals"],
-        ),
-        hypothesis_brainstorming_manifest_path=_artifact_path(
-            artifacts,
-            "hypothesis_brainstorming_manifest",
-            fallback=default_artifacts["hypothesis_brainstorming_manifest"],
-        ),
-        brainstorm_hypotheses_path=_artifact_path(
-            artifacts,
-            "brainstorm_hypotheses",
-            fallback=default_artifacts["brainstorm_hypotheses"],
-        ),
-        brainstorm_review_items_path=_artifact_path(
-            artifacts,
-            "brainstorm_review_items",
-            fallback=default_artifacts["brainstorm_review_items"],
-        ),
-        alignment_suggestions_path=_artifact_path(
-            artifacts,
-            "alignment_suggestions",
-            fallback=default_artifacts["alignment_suggestions"],
-        ),
-        semantic_layer_suggestions_path=_artifact_path(
-            artifacts,
-            "semantic_layer_suggestions",
-            fallback=default_artifacts["semantic_layer_suggestions"],
-        ),
-        profile_gap_suggestions_path=_artifact_path(
-            artifacts,
-            "profile_gap_suggestions",
-            fallback=default_artifacts["profile_gap_suggestions"],
-        ),
-        publish_manifest_path=_artifact_path(
-            artifacts,
-            "publish_manifest",
-            fallback=default_artifacts["publish_manifest"],
-        ),
-        publish_report_path=_artifact_path(
-            artifacts,
-            "publish_report",
-            fallback=default_artifacts["publish_report"],
-        ),
-        diff_path=_artifact_path(
-            artifacts,
-            "kg_construction_diff",
-            fallback=default_artifacts["kg_construction_diff"],
-        ),
-        source_ids=[str(item) for item in summary.get("source_ids", [])],
-        source_count=_int_value(summary.get("source_count")),
-        node_count=_int_value(summary.get("node_count")),
-        edge_count=_int_value(summary.get("edge_count")),
-        scenarios=_int_dict(summary.get("scenarios")),
-        review_status_counts=_int_dict(summary.get("review_status_counts")),
-    )
+def _read_edges(build: KGConstructionBuildRecord) -> list[dict[str, str]]:
+    return _edge_rows(Path(build.edges_path))
 
 
-def _artifact_path(
-    artifacts: dict[str, Any],
-    key: str,
-    *,
-    fallback: Path | None = None,
-) -> str | None:
-    value = artifacts.get(key)
-    if value is not None:
-        text = str(value)
-        return text or None
-    if fallback is not None and fallback.is_file():
-        return str(fallback)
-    return None
-
-
-def _safe_artifact_key(value: str) -> str:
-    stripped = value.strip()
-    if not stripped:
-        raise ValueError("artifact_key cannot be empty")
-    if stripped in {".", ".."}:
-        raise ValueError("artifact_key must not be a traversal segment")
-    if "/" in stripped or "\\" in stripped or Path(stripped).name != stripped:
-        raise ValueError("artifact_key must not contain path separators")
-    if stripped != re.sub(r"[^A-Za-z0-9_.-]+", "_", stripped):
-        raise ValueError("artifact_key may contain only letters, numbers, '.', '_', and '-'")
-    return stripped
-
-
-def _known_construction_artifact_key(key: str) -> bool:
-    return key in {
-        *KG_CONSTRUCTION_ARTIFACT_FILENAMES,
-        KG_OVERLAY_VALIDATION_REPORT_ARTIFACT_KEY,
-        "output_dir",
-    }
-
-
-def _resolved_construction_artifact_path(
-    build: KGConstructionBuildRecord,
-    key: str,
-) -> Path:
-    output_dir = Path(build.output_dir)
-    artifact_map = _construction_build_artifact_map(build, output_dir=output_dir)
-    value = artifact_map.get(key)
-    if value is None:
-        raise ValueError(f"unknown construction artifact key: {key}")
-    return _resolve_artifact_path_value(value, output_dir=output_dir, key=key)
-
-
-def _construction_build_artifact_map(
-    build: KGConstructionBuildRecord,
-    *,
-    output_dir: Path,
-) -> dict[str, str | Path]:
-    artifacts: dict[str, str | Path] = {
-        key: path
-        for key, path in kg_construction_artifact_paths(output_dir).items()
-        if _known_construction_artifact_key(key)
-    }
-    artifacts["output_dir"] = output_dir
-    artifacts[KG_OVERLAY_VALIDATION_REPORT_ARTIFACT_KEY] = (
-        output_dir / KG_OVERLAY_VALIDATION_REPORT_FILENAME
-    )
-    artifacts.update(_artifact_map_from_json(Path(build.summary_path), "output"))
-    artifacts.update(_artifact_map_from_json(Path(build.manifest_path), "artifacts"))
-    return {
-        key: value
-        for key, value in artifacts.items()
-        if _known_construction_artifact_key(key)
-    }
-
-
-def _artifact_map_from_json(path: Path, field_name: str) -> dict[str, str]:
+def _edge_rows(path: Path) -> list[dict[str, str]]:
     if not path.is_file():
-        return {}
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"construction build artifact metadata must be an object: {path}")
-    artifacts = payload.get(field_name)
-    if not isinstance(artifacts, dict):
-        return {}
-    return {
-        str(key): str(value)
-        for key, value in artifacts.items()
-        if isinstance(key, str) and value is not None and str(value)
-    }
-
-
-def _resolve_artifact_path_value(
-    value: str | Path,
-    *,
-    output_dir: Path,
-    key: str,
-) -> Path:
-    path = Path(value)
-    output_root = output_dir.resolve()
-    if path.is_absolute():
-        resolved = path.resolve()
-    else:
-        cwd_resolved = path.resolve()
-        if _is_relative_to(cwd_resolved, output_root):
-            resolved = cwd_resolved
-        else:
-            resolved = (output_dir / path).resolve()
-    if not (
-        resolved == output_root
-        or _is_relative_to(resolved, output_root)
-    ):
-        raise ValueError(f"construction build artifact path escapes output_dir: {key}")
-    return resolved
-
-
-def _is_relative_to(path: Path, parent: Path) -> bool:
-    try:
-        path.relative_to(parent)
-    except ValueError:
-        return False
-    return True
-
-
-def _publish_paths(
-    build: KGConstructionBuildRecord,
-    *,
-    include_defaults: bool,
-) -> tuple[list[Path], list[Path]]:
-    artifact_paths = kg_construction_artifact_paths(build.output_dir)
-    published_nodes = artifact_paths["published_nodes"]
-    published_edges = artifact_paths["published_edges"]
-    node_paths = [published_nodes if published_nodes.is_file() else Path(build.nodes_path)]
-    edge_paths = [published_edges if published_edges.is_file() else Path(build.edges_path)]
-    if include_defaults:
-        node_paths = [*DEFAULT_NODE_PATHS, *node_paths]
-        edge_paths = [*DEFAULT_EDGE_PATHS, *edge_paths]
-    return node_paths, edge_paths
-
-
-def _require_build_artifacts(build: KGConstructionBuildRecord) -> None:
-    missing = [
-        path
-        for path in (Path(build.nodes_path), Path(build.edges_path))
-        if not path.is_file()
-    ]
-    if missing:
-        joined = ", ".join(str(path) for path in missing)
-        raise ValueError(f"construction build artifact not found: {joined}")
-
-
-def _read_edge_rows(path: Path) -> list[dict[str, str]]:
-    if not path.is_file():
-        raise ValueError(f"construction build edges not found: {path}")
+        return []
     with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        missing = REQUIRED_EDGE_COLUMNS.difference(reader.fieldnames or [])
-        if missing:
-            raise ValueError(f"edge CSV missing required columns: {sorted(missing)}")
-        return [{key: row.get(key, "") for key in EDGE_COLUMNS} for row in reader]
+        return [dict(row) for row in csv.DictReader(handle)]
 
 
-def _edge_key_from_row(row: dict[str, str]) -> str:
-    return _safe_edge_key(
-        "|".join(
-            (
-                row.get("head", ""),
-                row.get("relation", ""),
-                row.get("tail", ""),
-                row.get("scenario", ""),
-            )
-        )
-    )
-
-
-def _safe_edge_key(value: str) -> str:
-    parts = [part.strip() for part in value.split("|")]
-    if len(parts) != 4 or any(not part for part in parts):
-        raise ValueError("edge target_key must have form head|relation|tail|scenario")
-    return "|".join(parts)
-
-
-def _read_review_queue_edges(
-    build: KGConstructionBuildRecord,
-) -> list[KGConstructionReviewQueueEdge]:
-    queue_path = _review_queue_artifact_path(build)
-    if queue_path is None:
-        return [_queue_edge_from_row(row) for row in _read_edge_rows(Path(build.edges_path))]
-    payload = _load_json_list(queue_path, object_name="construction review queue")
-    return [
-        _queue_edge_from_review_item(item)
-        for item in payload
-        if isinstance(item, dict)
-    ]
-
-
-def _review_queue_artifact_path(build: KGConstructionBuildRecord) -> Path | None:
-    candidates: list[Path] = []
-    if build.review_queue_path:
-        candidates.append(Path(build.review_queue_path))
-    candidates.append(Path(build.output_dir) / "review_queue.json")
-    for path in candidates:
-        if path.is_file():
-            return path
-    return None
-
-
-def _queue_edge_from_row(row: dict[str, str]) -> KGConstructionReviewQueueEdge:
+def _queue_edge_from_row(index: int, row: dict[str, str]) -> KGConstructionReviewQueueEdge:
+    target_key = f"{row.get('head')}|{row.get('relation')}|{row.get('tail')}|{index}"
     return KGConstructionReviewQueueEdge(
-        target_key=_edge_key_from_row(row),
+        target_key=target_key,
         head=row.get("head", ""),
         relation=row.get("relation", ""),
         tail=row.get("tail", ""),
         scenario=row.get("scenario", ""),
         source=row.get("source", ""),
         evidence=row.get("evidence", ""),
-        confidence=_float_value(row.get("confidence")),
-        weight=_float_value(row.get("weight")),
-        review_status=row.get("review_status", ""),
-        feedback_count=_int_value(row.get("feedback_count")),
-        accepted_count=_int_value(row.get("accepted_count")),
-        rejected_count=_int_value(row.get("rejected_count")),
-        relation_family=row.get("relation_family", ""),
-        candidate_payload=dict(row),
+        confidence=float(row.get("confidence") or 0.0),
+        weight=float(row.get("weight") or 0.0),
+        review_status=row.get("review_status", "auto"),
+        feedback_count=int(row.get("feedback_count") or 0),
+        accepted_count=int(row.get("accepted_count") or 0),
+        rejected_count=int(row.get("rejected_count") or 0),
+        candidate_payload=row,
     )
 
 
-def _queue_edge_from_review_item(
-    item: dict[str, Any],
-) -> KGConstructionReviewQueueEdge:
-    candidate = item.get("candidate_payload")
-    if not isinstance(candidate, dict):
-        candidate = {}
-    target_key = str(
-        item.get("target_key")
-        or candidate.get("edge_id")
-        or "|".join(
-            (
-                str(candidate.get("head") or ""),
-                str(candidate.get("relation") or ""),
-                str(candidate.get("tail") or ""),
-                str(item.get("scenario") or candidate.get("scenario") or ""),
-            )
-        )
-    )
-    return KGConstructionReviewQueueEdge(
-        target_key=target_key,
-        head=str(candidate.get("head") or ""),
-        relation=str(candidate.get("relation") or ""),
-        tail=str(candidate.get("tail") or ""),
-        scenario=str(item.get("scenario") or candidate.get("scenario") or ""),
-        source=str(item.get("source") or candidate.get("source") or ""),
-        evidence=str(item.get("evidence") or candidate.get("evidence") or ""),
-        confidence=_float_value(item.get("confidence", candidate.get("confidence"))),
-        weight=_float_value(candidate.get("weight")),
-        review_status=str(item.get("review_status") or candidate.get("review_status") or ""),
-        feedback_count=_int_value(
-            item.get("feedback_count", candidate.get("feedback_count"))
-        ),
-        accepted_count=_int_value(
-            item.get("accepted_count", candidate.get("accepted_count"))
-        ),
-        rejected_count=_int_value(
-            item.get("rejected_count", candidate.get("rejected_count"))
-        ),
-        item_type=str(item.get("item_type") or "edge"),
-        priority=_optional_int(item.get("priority")),
-        reason=str(item.get("reason") or ""),
-        relation_family=str(
-            item.get("relation_family") or candidate.get("relation_family") or ""
-        ),
-        graph_impact=str(item.get("graph_impact") or ""),
-        recommended_action=str(item.get("recommended_action") or ""),
-        candidate_payload=dict(candidate),
-    )
-
-
-def _matches_review_queue_filters(
-    edge: KGConstructionReviewQueueEdge,
+def _filter_edges(
+    edges: list[KGConstructionReviewQueueEdge],
     request: KGConstructionReviewQueueRequest,
-) -> bool:
-    if request.review_status and edge.review_status != request.review_status:
-        return False
-    if request.source and edge.source != request.source:
-        return False
-    if request.scenario and edge.scenario != request.scenario:
-        return False
-    if request.relation and edge.relation != request.relation:
-        return False
-    if request.query and _normalize_query(request.query) not in _normalize_query(
-        " ".join(
-            (
-                edge.target_key,
-                edge.head,
-                edge.relation,
-                edge.tail,
-                edge.source,
-                edge.evidence,
-                edge.reason,
-                edge.relation_family,
-                edge.graph_impact,
-                edge.recommended_action,
-            )
-        )
-    ):
-        return False
-    return True
+) -> list[KGConstructionReviewQueueEdge]:
+    query = (request.query or "").strip().lower()
+    filtered: list[KGConstructionReviewQueueEdge] = []
+    for edge in edges:
+        if request.review_status and edge.review_status != request.review_status:
+            continue
+        if request.source and edge.source != request.source:
+            continue
+        if request.scenario and edge.scenario != request.scenario:
+            continue
+        if request.relation and edge.relation != request.relation:
+            continue
+        haystack = " ".join([edge.head, edge.relation, edge.tail, edge.evidence]).lower()
+        if query and query not in haystack:
+            continue
+        filtered.append(edge)
+    return filtered
 
 
-def _review_queue_summary(
-    rows: list[KGConstructionReviewQueueEdge],
-) -> KGConstructionReviewQueueSummary:
+def _queue_summary(edges: list[KGConstructionReviewQueueEdge]) -> KGConstructionReviewQueueSummary:
     return KGConstructionReviewQueueSummary(
-        review_status_counts=_count_values(edge.review_status for edge in rows),
-        relation_counts=_count_values(edge.relation for edge in rows),
-        scenario_counts=_count_values(edge.scenario for edge in rows),
-        source_counts=_count_values(edge.source for edge in rows),
+        review_status_counts=dict(Counter(edge.review_status for edge in edges)),
+        relation_counts=dict(Counter(edge.relation for edge in edges)),
+        scenario_counts=dict(Counter(edge.scenario for edge in edges)),
+        source_counts=dict(Counter(edge.source for edge in edges)),
     )
 
 
-def _count_values(values: Iterable[str]) -> dict[str, int]:
-    counts = Counter(str(value) for value in values if str(value))
-    return dict(sorted(counts.items()))
+def _safe_filename(value: str) -> str:
+    name = Path(value).name
+    if not name or name in {".", ".."}:
+        raise ValueError("invalid upload filename")
+    return name
 
 
-def _normalize_query(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip().lower())
+def _read_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _load_json_object(path: Path, *, object_name: str) -> dict[str, Any]:
-    if not path.is_file():
-        raise ValueError(f"{object_name} not found: {path}")
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"{object_name} must be a JSON object: {path}")
-    return payload
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def _load_json_list(path: Path, *, object_name: str) -> list[Any]:
-    if not path.is_file():
-        raise ValueError(f"{object_name} not found: {path}")
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, list):
-        raise ValueError(f"{object_name} must be a JSON array: {path}")
-    return payload
-
-
-def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-
-
-def _dict_value(payload: dict[str, Any], key: str) -> dict[str, Any]:
-    value = payload.get(key)
-    if isinstance(value, dict):
-        return value
-    raise ValueError(f"construction manifest missing object field: {key}")
-
-
-def _int_dict(value: object) -> dict[str, int]:
-    if not isinstance(value, dict):
-        return {}
-    return {str(key): _int_value(item) for key, item in value.items()}
-
-
-def _int_value(value: object) -> int:
-    if not isinstance(value, (str, bytes, bytearray, int, float)):
-        return 0
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _optional_int(value: object) -> int | None:
-    if value is None:
-        return None
-    return _int_value(value)
-
-
-def _float_value(value: object) -> float:
-    if not isinstance(value, (str, bytes, bytearray, int, float)):
-        return 0.0
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return 0.0
-
-
-def _str_or_none(value: object) -> str | None:
-    if value is None:
-        return None
-    text = str(value)
-    return text or None
-
-
-def _source_format_from_filename(filename: str) -> ConstructionSourceFormat:
-    suffix = Path(filename).suffix.lower()
-    source_format = SOURCE_UPLOAD_FORMATS.get(suffix)
-    if source_format is None:
-        supported = ", ".join(sorted(SOURCE_UPLOAD_FORMATS))
-        raise ValueError(f"source upload filename must end with one of: {supported}")
-    return source_format
-
-
-def _safe_path_component(value: str, *, field_name: str) -> str:
-    stripped = value.strip()
-    if not stripped:
-        raise ValueError(f"{field_name} cannot be empty")
-    if Path(stripped).name != stripped:
-        raise ValueError(f"{field_name} must be a single path component")
-    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", stripped).strip("._")
-    if safe != stripped or not safe:
-        raise ValueError(
-            f"{field_name} may contain only letters, numbers, '.', '_', and '-'"
-        )
-    return safe
-
-
-def _safe_upload_filename(filename: str) -> str:
-    safe_name = _safe_path_component(Path(filename).name, field_name="filename")
-    _source_format_from_filename(safe_name)
-    return safe_name
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 __all__ = [
     "ConstructionSourceFormat",
     "ConstructionSourceType",
+    "KGConstructionBuildDetail",
+    "KGConstructionBuildListResponse",
+    "KGConstructionBuildRecord",
     "KGConstructionBuildRequest",
     "KGConstructionBuildResponse",
-    "KGConstructionBuildDetail",
+    "KGConstructionBuildValidationResponse",
     "KGConstructionEdgeReviewRequest",
     "KGConstructionEdgeReviewResponse",
     "KGConstructionImportSummary",
-    "KGConstructionBuildListResponse",
+    "KGConstructionOverlayValidationRequest",
+    "KGConstructionOverlayValidationResponse",
     "KGConstructionPublishRequest",
     "KGConstructionPublishResponse",
     "KGConstructionReviewQueueEdge",
     "KGConstructionReviewQueueRequest",
     "KGConstructionReviewQueueResponse",
     "KGConstructionReviewQueueSummary",
-    "KGConstructionBuildRecord",
-    "KGConstructionBuildValidationResponse",
-    "KGConstructionOverlayValidationRequest",
-    "KGConstructionOverlayValidationResponse",
-    "KGConstructionSourceListResponse",
     "KGConstructionSourceInput",
+    "KGConstructionSourceListResponse",
     "KGConstructionSourceUploadRequest",
     "KGConstructionUploadedSource",
     "get_kg_construction_build",
+    "get_kg_construction_build_artifact_path",
     "get_kg_construction_review_queue",
-    "list_kg_construction_source_uploads",
     "list_kg_construction_builds",
+    "list_kg_construction_source_uploads",
     "publish_kg_construction_build",
     "review_kg_construction_edge",
     "run_kg_construction_build",
+    "safe_output_name",
     "save_kg_construction_source_upload",
     "validate_kg_construction_build",
     "validate_kg_construction_overlay",

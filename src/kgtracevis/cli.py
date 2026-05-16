@@ -4,8 +4,8 @@ from __future__ import annotations
 
 
 def build_kg() -> None:
-    """Build source-constrained KG CSV files."""
-    from scripts.build_kg import main
+    """Compile source files into KG CSV files."""
+    from scripts.compile_source_kg import main
 
     main()
 

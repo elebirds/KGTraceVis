@@ -1,66 +1,18 @@
-"""Service DTOs and handlers for source material library management."""
+"""Source material library management for the current KG compiler."""
 
 from __future__ import annotations
 
 import json
 import os
 import re
-import time
 import urllib.request
 import uuid
-from collections.abc import Mapping
 from datetime import UTC, datetime
-from hashlib import sha1
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from kgtracevis.kg_construction.document_extraction import (
-    ALLOWED_DOCUMENT_IE_RELATIONS,
-    DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
-    DEFAULT_DOCUMENT_UNDERSTANDING_PROMPT_VERSION,
-    DocumentIEChunkExtractionSummary,
-    DocumentIEClient,
-    DocumentIEExtractionResult,
-    DocumentUnderstandingClient,
-    DocumentUnderstandingMode,
-    OfflineDocumentIEFixtureClient,
-    OfflineDocumentUnderstandingFixtureClient,
-    OpenAICompatibleDocumentUnderstandingClient,
-    OpenAICompatibleKGExtractionClient,
-    ParsedSourceDocument,
-    SourceTextChunk,
-    build_chunk_prompt_context_records,
-    build_document_understanding_map,
-    chunk_source_document,
-    extract_draft_kg_from_chunks_with_report,
-    parse_source_material,
-    repair_document_ie_response_for_audit,
-)
-from kgtracevis.kg_construction.draft import (
-    DraftEntity,
-    DraftKG,
-    DraftRelation,
-    KGConstructionSource,
-)
-from kgtracevis.kg_construction.hypothesis_brainstorming import (
-    DEFAULT_HYPOTHESIS_BRAINSTORMING_PROMPT_VERSION,
-    HypothesisBrainstormingClient,
-    HypothesisInfluence,
-    HypothesisMode,
-    HypothesisProvider,
-    OfflineHypothesisFixtureClient,
-    OpenAICompatibleHypothesisBrainstormingClient,
-    run_hypothesis_brainstorming,
-)
-from kgtracevis.kg_construction.mvtec_taxonomy_extraction import (
-    extract_mvtec_taxonomy_from_document,
-)
-from kgtracevis.kg_construction.review_queue import review_queue_payload
-from kgtracevis.kg_construction.wafer_record_extraction import (
-    extract_wafer_records_from_document,
-)
 from kgtracevis.service.kg_construction import (
     ConstructionSourceFormat,
     KGConstructionBuildRequest,
@@ -71,7 +23,6 @@ DEFAULT_SOURCE_KG_MATERIAL_DIR = Path("runs/source_kg_materials")
 DEFAULT_MATERIAL_POSTGRES_CONFIG_PATH = Path("configs/database.yaml")
 MAX_MATERIAL_UPLOAD_BYTES = 20_000_000
 REMOTE_MATERIAL_FETCH_TIMEOUT_SECONDS = 10
-REMOTE_MATERIAL_FETCH_MAX_SECONDS = 45
 REMOTE_MATERIAL_FETCH_CHUNK_BYTES = 8 * 1024
 
 MaterialSourceKind = Literal["uploaded_file", "url", "local_path", "citation"]
@@ -87,23 +38,21 @@ MaterialType = Literal[
 ]
 MaterialStatus = Literal["registered", "uploaded", "extracted", "failed"]
 ExtractionStatus = Literal["not_started", "extracted", "failed"]
-DocumentIEProvider = Literal["openai", "offline_fixture"]
-DocumentUnderstandingProvider = Literal["none", "openai", "offline_fixture"]
 
 
 class KGMaterialExtractionState(BaseModel):
-    """Structured extraction metadata attached to one source material."""
+    """Lightweight source-readiness metadata for one material."""
 
     model_config = ConfigDict(extra="forbid")
 
     status: ExtractionStatus = "not_started"
     structured_records_path: str | None = None
-    source_format: ConstructionSourceFormat = "jsonl"
+    source_format: ConstructionSourceFormat = "text"
     source_id: str | None = None
     extractor_name: str | None = None
     extractor_version: str | None = None
     prompt_version: str | None = None
-    document_understanding_mode: DocumentUnderstandingMode = "chunk"
+    document_understanding_mode: str = "compiler_source"
     extracted_at: str | None = None
     record_count: int | None = Field(default=None, ge=0)
     chunk_count: int | None = Field(default=None, ge=0)
@@ -112,9 +61,9 @@ class KGMaterialExtractionState(BaseModel):
     chunk_results_path: str | None = None
     document_understanding_map_path: str | None = None
     chunk_prompt_context_path: str | None = None
-    hypothesis_mode: HypothesisMode = "none"
-    hypothesis_provider: HypothesisProvider = "none"
-    hypothesis_influence: HypothesisInfluence = "review_only"
+    hypothesis_mode: str = "none"
+    hypothesis_provider: str = "none"
+    hypothesis_influence: str = "review_only"
     hypothesis_brainstorming_manifest_path: str | None = None
     brainstorm_hypotheses_path: str | None = None
     brainstorm_review_items_path: str | None = None
@@ -127,7 +76,7 @@ class KGMaterialExtractionState(BaseModel):
 
     @model_validator(mode="after")
     def validate_extraction_shape(self) -> KGMaterialExtractionState:
-        """Keep extracted-state metadata explicit and build-checkable."""
+        """Keep readiness metadata explicit."""
         if self.status == "extracted" and not self.structured_records_path:
             raise ValueError("extraction.status=extracted requires structured_records_path")
         if self.status != "failed" and self.error_message:
@@ -150,7 +99,7 @@ class KGMaterialUploadRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_upload_shape(self) -> KGMaterialUploadRequest:
-        """Validate upload metadata before bytes are persisted."""
+        """Validate upload metadata."""
         _safe_path_component(self.material_id, field_name="material_id")
         _safe_upload_filename(self.filename)
         _require_non_empty(self.title, field_name="title")
@@ -159,7 +108,7 @@ class KGMaterialUploadRequest(BaseModel):
 
 
 class KGMaterialRegisterRequest(BaseModel):
-    """Request to register a URL, local path, citation, or extracted material."""
+    """Request to register a URL, local path, citation, or compiler-ready source."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -174,7 +123,7 @@ class KGMaterialRegisterRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_register_shape(self) -> KGMaterialRegisterRequest:
-        """Reject ambiguous source references without touching the network."""
+        """Reject ambiguous source references."""
         _safe_path_component(self.material_id, field_name="material_id")
         _require_non_empty(self.title, field_name="title")
         _require_non_empty(self.scenario, field_name="scenario")
@@ -186,10 +135,6 @@ class KGMaterialRegisterRequest(BaseModel):
             )
         if self.source_kind != "url" and is_url:
             raise ValueError("remote URLs must use source_kind=url")
-        if self.extraction.structured_records_path and _looks_like_url(
-            self.extraction.structured_records_path
-        ):
-            raise ValueError("structured_records_path must be a local file path")
         return self
 
 
@@ -214,16 +159,14 @@ class KGMaterialRecord(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     extraction: KGMaterialExtractionState = Field(default_factory=KGMaterialExtractionState)
     claim_boundary: str = (
-        "source materials are provenance inputs for candidate KG construction; "
-        "registration or upload does not verify industrial facts or publish KG rows"
+        "source materials are provenance inputs for source KG compiler builds; "
+        "registration or upload does not verify industrial facts"
     )
 
     @property
     def is_build_ready(self) -> bool:
-        """Return whether this material has local structured records for construction."""
-        return self.extraction.status == "extracted" and bool(
-            self.extraction.structured_records_path
-        )
+        """Return whether this material can be fed to the source KG compiler."""
+        return bool(_compiler_source_path(self, must_exist=False))
 
 
 class KGMaterialListResponse(BaseModel):
@@ -244,7 +187,7 @@ class KGMaterialDetailResponse(BaseModel):
 
 
 class KGMaterialSelectedBuildRequest(BaseModel):
-    """Request to convert selected material IDs into construction source inputs."""
+    """Request to convert selected materials into compiler source inputs."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -253,7 +196,7 @@ class KGMaterialSelectedBuildRequest(BaseModel):
     overwrite: bool = False
     run_id: str | None = None
     profile_path: str | None = None
-    source_type: Literal["structured_records", "manual_table"] = "structured_records"
+    source_type: Literal["structured_records", "manual_table", "document"] = "document"
 
     @model_validator(mode="after")
     def validate_selection(self) -> KGMaterialSelectedBuildRequest:
@@ -273,7 +216,7 @@ class KGMaterialSelectedBuildRequest(BaseModel):
 
 
 class KGMaterialBuildSourcesResponse(BaseModel):
-    """Build-ready construction source inputs derived from selected materials."""
+    """Compiler source inputs derived from selected materials."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -284,112 +227,33 @@ class KGMaterialBuildSourcesResponse(BaseModel):
     sources: list[KGConstructionSourceInput]
     construction_request: KGConstructionBuildRequest
     claim_boundary: str = (
-        "material-derived construction inputs remain candidate/reviewable sources; "
-        "they do not run extraction, call an LLM, fetch remote content, or publish to Neo4j"
+        "material-derived source inputs feed the current source KG compiler; "
+        "they do not use the removed legacy construction pipeline"
     )
 
 
 class KGMaterialExtractionRunRequest(BaseModel):
-    """Request to parse one material and run source-grounded candidate extraction."""
+    """Request to make a material compiler-ready.
+
+    The current compiler reads source files directly, so extraction is a
+    lightweight readiness step rather than a DraftKG/structured-record build.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: DocumentIEProvider = "openai"
-    max_chars: int = Field(default=6_000, ge=200, le=24_000)
-    overlap_chars: int = Field(default=400, ge=0, le=4_000)
-    source_format: ConstructionSourceFormat = "jsonl"
-    prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION
-    document_understanding_mode: DocumentUnderstandingMode = "chunk"
-    document_understanding_provider: DocumentUnderstandingProvider = "none"
-    document_understanding_prompt_version: str = DEFAULT_DOCUMENT_UNDERSTANDING_PROMPT_VERSION
-    hypothesis_mode: HypothesisMode = "none"
-    hypothesis_provider: HypothesisProvider = "none"
-    hypothesis_influence: HypothesisInfluence = "review_only"
-    hypothesis_prompt_version: str = DEFAULT_HYPOTHESIS_BRAINSTORMING_PROMPT_VERSION
-    default_confidence: float = Field(default=0.55, ge=0.0, le=1.0)
-    strict_grounding: bool = True
-    continue_on_chunk_error: bool = False
-    document_ie_fixture_path: str | None = None
-    document_ie_payload: dict[str, Any] | None = None
-    document_understanding_fixture_path: str | None = None
-    document_understanding_payload: dict[str, Any] | None = None
-    hypothesis_fixture_path: str | None = None
-    hypothesis_payload: dict[str, Any] | None = None
     overwrite: bool = False
-
-    @model_validator(mode="after")
-    def validate_chunking(self) -> KGMaterialExtractionRunRequest:
-        """Keep chunking options valid before extraction starts."""
-        if self.overlap_chars >= self.max_chars:
-            raise ValueError("overlap_chars must be smaller than max_chars")
-        if self.source_format != "jsonl":
-            raise ValueError("material extraction writes JSONL; source_format must be jsonl")
-        if self.provider != "offline_fixture" and (
-            self.document_ie_fixture_path or self.document_ie_payload is not None
-        ):
-            raise ValueError(
-                "document_ie_fixture_path/document_ie_payload require provider=offline_fixture"
-            )
-        if self.document_ie_fixture_path and self.document_ie_payload is not None:
-            raise ValueError(
-                "provide either document_ie_fixture_path or document_ie_payload, not both"
-            )
-        if self.document_understanding_mode == "chunk" and (
-            self.document_understanding_provider != "none"
-            or self.document_understanding_fixture_path
-            or self.document_understanding_payload is not None
-        ):
-            raise ValueError(
-                "document_understanding_provider/payload require non-chunk "
-                "document_understanding_mode"
-            )
-        if self.document_understanding_provider != "offline_fixture" and (
-            self.document_understanding_fixture_path
-            or self.document_understanding_payload is not None
-        ):
-            raise ValueError(
-                "document_understanding_fixture_path/document_understanding_payload "
-                "require document_understanding_provider=offline_fixture"
-            )
-        if (
-            self.document_understanding_fixture_path
-            and self.document_understanding_payload is not None
-        ):
-            raise ValueError(
-                "provide either document_understanding_fixture_path or "
-                "document_understanding_payload, not both"
-            )
-        if self.hypothesis_mode == "none" and (
-            self.hypothesis_provider != "none"
-            or self.hypothesis_fixture_path
-            or self.hypothesis_payload is not None
-        ):
-            raise ValueError(
-                "hypothesis_provider/payload require hypothesis_mode=brainstorm"
-            )
-        if self.hypothesis_provider != "offline_fixture" and (
-            self.hypothesis_fixture_path or self.hypothesis_payload is not None
-        ):
-            raise ValueError(
-                "hypothesis_fixture_path/hypothesis_payload require "
-                "hypothesis_provider=offline_fixture"
-            )
-        if self.hypothesis_fixture_path and self.hypothesis_payload is not None:
-            raise ValueError(
-                "provide either hypothesis_fixture_path or hypothesis_payload, not both"
-            )
-        return self
+    provider: Literal["none"] = "none"
 
 
 class KGMaterialDirectBuildRequest(KGMaterialSelectedBuildRequest):
-    """Request to directly run a material-library KG construction build."""
+    """Request to run selected source materials through the current compiler."""
 
     extraction_mode: Literal["never", "missing", "always"] = "never"
     extraction_request: KGMaterialExtractionRunRequest | None = None
 
 
 class KGMaterialExtractionRunResponse(BaseModel):
-    """Response for one material extraction run."""
+    """Response for a compiler-readiness extraction step."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -398,7 +262,7 @@ class KGMaterialExtractionRunResponse(BaseModel):
     structured_records_path: str
     record_count: int
     extraction_manifest_path: str
-    chunk_results_path: str
+    chunk_results_path: str | None = None
     document_ie_raw_responses_path: str | None = None
     document_ie_payload_repairs_path: str | None = None
     document_understanding_map_path: str | None = None
@@ -408,13 +272,12 @@ class KGMaterialExtractionRunResponse(BaseModel):
     brainstorm_review_items_path: str | None = None
     chunk_count: int
     error_count: int
-    provider: DocumentIEProvider
-    extractor_name: str
-    extractor_version: str
-    prompt_version: str
+    provider: str = "none"
+    extractor_name: str = "source_kg_compiler.material_source.v1"
+    extractor_version: str = "v1"
+    prompt_version: str = "none"
     claim_boundary: str = (
-        "LLM/IE outputs are source-grounded candidate KG rows for review; they "
-        "are not verified industrial facts"
+        "the material is compiler-ready source text; no legacy DraftKG extraction ran"
     )
 
 
@@ -502,16 +365,12 @@ class FileKGMaterialStore:
         material_id: str,
         chunks: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Persist parsed chunks as a local JSONL sidecar."""
+        """Persist source chunks as a local JSONL sidecar."""
         material_id = _safe_path_component(material_id, field_name="material_id")
-        normalized = [
-            _source_chunk_store_payload(material_id, chunk, index=index)
-            for index, chunk in enumerate(chunks)
-        ]
         record_dir = _material_dir(material_id, material_root=self.root)
         record_dir.mkdir(parents=True, exist_ok=True)
-        _write_jsonl(record_dir / "source_chunks.jsonl", normalized)
-        return normalized
+        _write_jsonl(record_dir / "source_chunks.jsonl", chunks)
+        return chunks
 
     def record_extraction_run(
         self,
@@ -554,9 +413,6 @@ class FileKGMaterialStore:
     ) -> dict[str, Any]:
         """Append an extraction artifact reference to a local JSONL sidecar."""
         material_id = _safe_path_component(material_id, field_name="material_id")
-        artifact_type = artifact_type.strip()
-        if not artifact_type:
-            raise ValueError("artifact_type cannot be empty")
         artifact = {
             "artifact_id": str(uuid.uuid4()),
             "material_id": material_id,
@@ -585,17 +441,11 @@ def configure_material_store_for_testing(store: KGMaterialStore | None) -> None:
 
 
 def material_store(*, material_root: Path | None = None) -> KGMaterialStore:
-    """Return the configured material store.
-
-    Passing ``material_root`` explicitly always selects the file-backed adapter.
-    Without a root, the runtime provider uses Postgres only when a real
-    Postgres DSN resolves from environment or ``configs/database.yaml``.
-    """
+    """Return the configured material store."""
     if material_root is not None:
         return FileKGMaterialStore(material_root)
     if _MATERIAL_STORE_OVERRIDE is not None:
         return _MATERIAL_STORE_OVERRIDE
-
     from kgtracevis.service.postgres import resolve_postgres_config
 
     config = resolve_postgres_config(
@@ -638,7 +488,6 @@ def save_kg_material_upload(
         raise ValueError(
             f"uploaded material file exceeds {MAX_MATERIAL_UPLOAD_BYTES} bytes: {len(content)}"
         )
-
     store = material_store(material_root=material_root)
     record_dir = _material_dir(request.material_id, material_root=material_root)
     metadata_path = record_dir / "metadata.json"
@@ -677,7 +526,7 @@ def register_kg_material(
     material_root: Path | None = None,
     overwrite: bool = False,
 ) -> KGMaterialRecord:
-    """Register a source material reference without fetching or extracting it."""
+    """Register a source material reference."""
     store = material_store(material_root=material_root)
     record_dir = _material_dir(request.material_id, material_root=material_root)
     metadata_path = record_dir / "metadata.json"
@@ -685,14 +534,10 @@ def register_kg_material(
         raise ValueError(
             f"material_id already exists; pass overwrite=true to replace: {request.material_id}"
         )
-
     record_dir.mkdir(parents=True, exist_ok=True)
     now = _utc_now()
-    status: MaterialStatus = (
-        "extracted" if request.extraction.status == "extracted" else "registered"
-    )
     record = KGMaterialRecord(
-        status=status,
+        status="extracted" if request.extraction.status == "extracted" else "registered",
         material_id=request.material_id,
         title=request.title,
         scenario=request.scenario,
@@ -708,10 +553,7 @@ def register_kg_material(
     return store.save_material_record(record)
 
 
-def list_kg_materials(
-    *,
-    material_root: Path | None = None,
-) -> KGMaterialListResponse:
+def list_kg_materials(*, material_root: Path | None = None) -> KGMaterialListResponse:
     """List persisted material-library records."""
     root = material_root or DEFAULT_SOURCE_KG_MATERIAL_DIR
     materials = material_store(material_root=material_root).list_material_records()
@@ -729,26 +571,96 @@ def get_kg_material(
     return KGMaterialDetailResponse(material=material)
 
 
+def extract_kg_material_to_structured_records(
+    material_id: str,
+    request: KGMaterialExtractionRunRequest,
+    *,
+    material_root: Path | None = None,
+    **_: Any,
+) -> KGMaterialExtractionRunResponse:
+    """Mark a material as compiler-ready without running legacy DraftKG extraction."""
+    store = material_store(material_root=material_root)
+    material = get_kg_material(material_id, material_root=material_root).material
+    source_path = _compiler_source_path(material, must_exist=True)
+    if source_path is None:
+        raise ValueError(
+            f"material is not backed by a local compiler-readable source: {material_id}"
+        )
+    record_dir = Path(material.metadata_path).parent
+    manifest_path = record_dir / "compiler_source_manifest.json"
+    if manifest_path.exists() and not request.overwrite:
+        raise ValueError("compiler_source_manifest.json already exists; pass overwrite=true")
+    now = _utc_now()
+    state = KGMaterialExtractionState(
+        status="extracted",
+        structured_records_path=source_path.as_posix(),
+        source_format=_source_format_from_path(source_path),
+        source_id=material.material_id,
+        extractor_name="source_kg_compiler.material_source",
+        extractor_version="v1",
+        prompt_version="none",
+        extracted_at=now,
+        record_count=1,
+        chunk_count=0,
+        error_count=0,
+        extraction_manifest_path=manifest_path.as_posix(),
+    )
+    manifest = {
+        "artifact_type": "source_kg_compiler_material_source_manifest_v1",
+        "material_id": material.material_id,
+        "source_path": source_path.as_posix(),
+        "created_at": now,
+        "claim_boundary": (
+            "source compiler consumes this file directly; no legacy KG construction "
+            "extraction has run"
+        ),
+    }
+    _write_json_object(manifest_path, manifest)
+    updated = material.model_copy(
+        update={"status": "extracted", "updated_at": now, "extraction": state}
+    )
+    store.save_material_record(updated)
+    extraction_run = store.record_extraction_run(
+        updated.material_id,
+        state,
+        provider=request.provider,
+        parameters=request.model_dump(mode="json"),
+        result_summary={"source_path": source_path.as_posix()},
+    )
+    store.save_extraction_artifact(
+        material_id=updated.material_id,
+        extraction_run_id=extraction_run.get("extraction_run_id"),
+        artifact_type="compiler_source",
+        uri=source_path.as_posix(),
+        media_type="text/plain",
+        payload={"source_format": state.source_format},
+    )
+    return KGMaterialExtractionRunResponse(
+        material=updated,
+        structured_records_path=source_path.as_posix(),
+        record_count=1,
+        extraction_manifest_path=manifest_path.as_posix(),
+        chunk_count=0,
+        error_count=0,
+    )
+
+
 def prepare_kg_material_construction_build(
     request: KGMaterialSelectedBuildRequest,
     *,
     material_root: Path | None = None,
 ) -> KGMaterialBuildSourcesResponse:
-    """Return construction source inputs for selected extracted materials."""
+    """Return compiler source inputs for selected materials."""
     materials = [
         get_kg_material(material_id, material_root=material_root).material
         for material_id in request.material_ids
     ]
-    sources = [
-        _construction_source_from_material(material, source_type=request.source_type)
-        for material in materials
-    ]
+    sources = [_construction_source_from_material(material) for material in materials]
     construction_request = KGConstructionBuildRequest(
         sources=sources,
         output_name=request.output_name,
         overwrite=request.overwrite,
         run_id=request.run_id,
-        profile_path=request.profile_path,
     )
     return KGMaterialBuildSourcesResponse(
         material_root=str(material_root or DEFAULT_SOURCE_KG_MATERIAL_DIR),
@@ -759,1185 +671,85 @@ def prepare_kg_material_construction_build(
     )
 
 
-def extract_kg_material_to_structured_records(
-    material_id: str,
-    request: KGMaterialExtractionRunRequest,
-    *,
-    client: DocumentIEClient | None = None,
-    document_understanding_client: DocumentUnderstandingClient | None = None,
-    hypothesis_client: HypothesisBrainstormingClient | None = None,
-    material_root: Path | None = None,
-) -> KGMaterialExtractionRunResponse:
-    """Extract one material into structured records consumable by construction."""
-    store = material_store(material_root=material_root)
-    detail = get_kg_material(material_id, material_root=material_root)
-    material = detail.material
-    record_dir = Path(material.metadata_path).parent
-    records_path = record_dir / "structured_records.jsonl"
-    chunk_results_path = record_dir / "chunk_extraction_results.jsonl"
-    document_ie_raw_responses_path = record_dir / "document_ie_raw_responses.jsonl"
-    document_ie_payload_repairs_path = record_dir / "document_ie_payload_repairs.jsonl"
-    extraction_manifest_path = record_dir / "extraction_manifest.json"
-    document_understanding_map_path = record_dir / "document_understanding_map.json"
-    chunk_prompt_context_path = record_dir / "chunk_prompt_context.jsonl"
-    brainstorm_hypotheses_path = record_dir / "brainstorm_hypotheses.jsonl"
-    brainstorm_evidence_tasks_path = record_dir / "brainstorm_evidence_tasks.jsonl"
-    brainstorm_profile_gaps_path = record_dir / "brainstorm_profile_gaps.json"
-    brainstorm_review_items_path = record_dir / "brainstorm_review_items.json"
-    hypothesis_brainstorming_manifest_path = (
-        record_dir / "hypothesis_brainstorming_manifest.json"
-    )
-    alignment_suggestions_path = record_dir / "alignment_suggestions.jsonl"
-    semantic_layer_suggestions_path = record_dir / "semantic_layer_suggestions.jsonl"
-    profile_gap_suggestions_path = record_dir / "profile_gap_suggestions.json"
-    existing_artifacts = [
-        path.name
-        for path in (
-            records_path,
-            chunk_results_path,
-            document_ie_raw_responses_path,
-            document_ie_payload_repairs_path,
-            extraction_manifest_path,
-            document_understanding_map_path,
-            chunk_prompt_context_path,
-            brainstorm_hypotheses_path,
-            brainstorm_evidence_tasks_path,
-            brainstorm_profile_gaps_path,
-            brainstorm_review_items_path,
-            hypothesis_brainstorming_manifest_path,
-            alignment_suggestions_path,
-            semantic_layer_suggestions_path,
-            profile_gap_suggestions_path,
+def _construction_source_from_material(
+    material: KGMaterialRecord,
+) -> KGConstructionSourceInput:
+    source_path = _compiler_source_path(material, must_exist=True)
+    if source_path is None:
+        raise ValueError(
+            f"material is not backed by a local compiler-readable source: {material.material_id}"
         )
-        if path.exists()
-    ]
-    if existing_artifacts and not request.overwrite:
-        names = ", ".join(existing_artifacts)
-        raise ValueError(f"{names} already exist; pass overwrite=true to replace")
-
-    source_path, source_metadata = _local_source_for_extraction(material)
-    if request.document_ie_fixture_path:
-        source_metadata["document_ie_fixture_path"] = request.document_ie_fixture_path
-    source = KGConstructionSource(
+    return KGConstructionSourceInput(
         source_id=material.material_id,
-        source_type=_document_source_type(material),
+        source_type="document",
         scenario=material.scenario,
-        path=source_path,
+        path=source_path.as_posix(),
+        source_format=_source_format_from_path(source_path),
         metadata={
             "material_id": material.material_id,
             "material_title": material.title,
+            "source_kind": material.source_kind,
             "material_type": material.material_type,
-            "content_type": material.content_type or "",
             **material.metadata,
-            **source_metadata,
         },
-    )
-    document = parse_source_material(source)
-    chunks = chunk_source_document(
-        document,
-        max_chars=request.max_chars,
-        overlap_chars=request.overlap_chars,
-    )
-    store.save_source_chunks(
-        material.material_id,
-        [_source_chunk_store_payload(material.material_id, chunk) for chunk in chunks],
-    )
-    document_understanding_map: dict[str, Any] | None = None
-    if request.document_understanding_mode != "chunk":
-        du_client = _document_understanding_client_for_request(
-            material=material,
-            request=request,
-            client=document_understanding_client,
-        )
-        document_understanding_map = build_document_understanding_map(
-            document,
-            chunks,
-            mode=request.document_understanding_mode,
-            client=du_client,
-            prompt_version=request.document_understanding_prompt_version,
-        )
-        _write_json_object(document_understanding_map_path, document_understanding_map)
-        _write_jsonl(
-            chunk_prompt_context_path,
-            build_chunk_prompt_context_records(chunks, document_understanding_map),
-        )
-
-    ie_client, extractor_name = _document_ie_client_for_request(
-        material=material,
-        request=request,
-        client=client,
-    )
-    ie_recorder = _RecordingDocumentIEClient(ie_client)
-    extraction_result = extract_draft_kg_from_chunks_with_report(
-        chunks,
-        ie_recorder,
-        extractor_name=extractor_name,
-        extractor_version="v1",
-        default_confidence=request.default_confidence,
-        strict_grounding=request.strict_grounding,
-        prompt_version=request.prompt_version,
-        continue_on_chunk_error=request.continue_on_chunk_error,
-        document_context=document_understanding_map,
-    )
-    raw_response_records = ie_recorder.records
-    payload_repair_records = [
-        _document_ie_payload_repair_record(record) for record in raw_response_records
-    ]
-    _write_jsonl(document_ie_raw_responses_path, raw_response_records)
-    _write_jsonl(document_ie_payload_repairs_path, payload_repair_records)
-    draft = extraction_result.draft
-    candidate_augmentations: list[dict[str, Any]] = []
-    mvtec_taxonomy_result = extract_mvtec_taxonomy_from_document(document)
-    if mvtec_taxonomy_result.has_candidates:
-        draft = DraftKG.combine((draft, mvtec_taxonomy_result.draft))
-        if mvtec_taxonomy_result.summary is not None:
-            candidate_augmentations.append(mvtec_taxonomy_result.summary.to_payload())
-    wafer_record_result = extract_wafer_records_from_document(document)
-    if wafer_record_result.has_candidates:
-        draft = DraftKG.combine((draft, wafer_record_result.draft))
-        if wafer_record_result.summary is not None:
-            candidate_augmentations.append(wafer_record_result.summary.to_payload())
-    records = _structured_records_from_draft(draft)
-    _write_jsonl(records_path, records)
-    _write_jsonl(
-        chunk_results_path,
-        [
-            _chunk_extraction_result_record(summary)
-            for summary in extraction_result.chunk_summaries
-        ],
-    )
-    hypothesis_result = None
-    if request.hypothesis_mode == "brainstorm":
-        brainstorming_client = _hypothesis_client_for_request(
-            material=material,
-            request=request,
-            client=hypothesis_client,
-        )
-        hypothesis_result = run_hypothesis_brainstorming(
-            document,
-            chunks,
-            mode=request.hypothesis_mode,
-            provider=request.hypothesis_provider,
-            influence=request.hypothesis_influence,
-            client=brainstorming_client,
-            document_map=document_understanding_map,
-            draft_kg=draft,
-            semantic_context={
-                "allowed_relations": sorted(ALLOWED_DOCUMENT_IE_RELATIONS),
-                "claim_boundary": (
-                    "semantic projection remains deterministic and profile-controlled"
-                ),
-            },
-            prompt_version=request.hypothesis_prompt_version,
-        )
-        _write_jsonl(brainstorm_hypotheses_path, hypothesis_result.hypotheses)
-        _write_jsonl(brainstorm_evidence_tasks_path, hypothesis_result.evidence_tasks)
-        _write_json_object(
-            brainstorm_profile_gaps_path,
-            {
-                "artifact_type": "brainstorm_profile_gaps_v1",
-                "source_id": material.material_id,
-                "profile_gaps": list(hypothesis_result.profile_gaps),
-            },
-        )
-        _write_json_object(
-            brainstorm_review_items_path,
-            {
-                "artifact_type": "brainstorm_review_items_v1",
-                "source_id": material.material_id,
-                "items": review_queue_payload(hypothesis_result.review_items),
-            },
-        )
-        _write_json_object(
-            hypothesis_brainstorming_manifest_path,
-            hypothesis_result.manifest,
-        )
-        _write_jsonl(alignment_suggestions_path, hypothesis_result.alignment_suggestions)
-        _write_jsonl(
-            semantic_layer_suggestions_path,
-            hypothesis_result.semantic_layer_suggestions,
-        )
-        _write_json_object(
-            profile_gap_suggestions_path,
-            {
-                "artifact_type": "profile_gap_suggestions_v1",
-                "source_id": material.material_id,
-                "profile_gaps": list(hypothesis_result.profile_gaps),
-            },
-        )
-
-    now = _utc_now()
-    extraction_run_id = str(uuid.uuid4())
-    manifest = _material_extraction_manifest(
-        material=material,
-        document=document,
-        chunks=chunks,
-        extraction_result=extraction_result,
-        records=records,
-        records_path=records_path,
-        chunk_results_path=chunk_results_path,
-        document_ie_raw_responses_path=document_ie_raw_responses_path,
-        document_ie_payload_repairs_path=document_ie_payload_repairs_path,
-        extraction_manifest_path=extraction_manifest_path,
-        document_understanding_map_path=(
-            document_understanding_map_path if document_understanding_map is not None else None
-        ),
-        chunk_prompt_context_path=(
-            chunk_prompt_context_path if document_understanding_map is not None else None
-        ),
-        document_understanding_map=document_understanding_map,
-        hypothesis_result_manifest=(
-            hypothesis_result.manifest if hypothesis_result is not None else None
-        ),
-        hypothesis_artifact_paths=(
-            {
-                "brainstorm_hypotheses": brainstorm_hypotheses_path,
-                "brainstorm_evidence_tasks": brainstorm_evidence_tasks_path,
-                "brainstorm_profile_gaps": brainstorm_profile_gaps_path,
-                "brainstorm_review_items": brainstorm_review_items_path,
-                "hypothesis_brainstorming_manifest": (
-                    hypothesis_brainstorming_manifest_path
-                ),
-                "alignment_suggestions": alignment_suggestions_path,
-                "semantic_layer_suggestions": semantic_layer_suggestions_path,
-                "profile_gap_suggestions": profile_gap_suggestions_path,
-            }
-            if hypothesis_result is not None
-            else None
-        ),
-        candidate_augmentations=candidate_augmentations,
-        extraction_run_id=extraction_run_id,
-        provider=request.provider,
-        request=request,
-        created_at=now,
-    )
-    _write_json_object(extraction_manifest_path, manifest)
-    updated = material.model_copy(
-        update={
-            "status": "extracted",
-            "updated_at": now,
-            "extraction": KGMaterialExtractionState(
-                status="extracted",
-                structured_records_path=str(records_path),
-                source_format=request.source_format,
-                source_id=material.material_id,
-                extractor_name=extractor_name,
-                extractor_version="v1",
-                prompt_version=request.prompt_version,
-                document_understanding_mode=request.document_understanding_mode,
-                hypothesis_mode=request.hypothesis_mode,
-                hypothesis_provider=request.hypothesis_provider,
-                hypothesis_influence=request.hypothesis_influence,
-                extracted_at=now,
-                record_count=len(records),
-                chunk_count=extraction_result.chunk_count,
-                error_count=extraction_result.error_count,
-                extraction_manifest_path=str(extraction_manifest_path),
-                chunk_results_path=str(chunk_results_path),
-                document_understanding_map_path=(
-                    str(document_understanding_map_path)
-                    if document_understanding_map is not None
-                    else None
-                ),
-                chunk_prompt_context_path=(
-                    str(chunk_prompt_context_path)
-                    if document_understanding_map is not None
-                    else None
-                ),
-                hypothesis_brainstorming_manifest_path=(
-                    str(hypothesis_brainstorming_manifest_path)
-                    if hypothesis_result is not None
-                    else None
-                ),
-                brainstorm_hypotheses_path=(
-                    str(brainstorm_hypotheses_path) if hypothesis_result is not None else None
-                ),
-                brainstorm_review_items_path=(
-                    str(brainstorm_review_items_path)
-                    if hypothesis_result is not None
-                    else None
-                ),
-                brainstorm_evidence_tasks_path=(
-                    str(brainstorm_evidence_tasks_path)
-                    if hypothesis_result is not None
-                    else None
-                ),
-                brainstorm_profile_gaps_path=(
-                    str(brainstorm_profile_gaps_path)
-                    if hypothesis_result is not None
-                    else None
-                ),
-                alignment_suggestions_path=(
-                    str(alignment_suggestions_path)
-                    if hypothesis_result is not None
-                    else None
-                ),
-                semantic_layer_suggestions_path=(
-                    str(semantic_layer_suggestions_path)
-                    if hypothesis_result is not None
-                    else None
-                ),
-                profile_gap_suggestions_path=(
-                    str(profile_gap_suggestions_path)
-                    if hypothesis_result is not None
-                    else None
-                ),
-            ),
-        }
-    )
-    store.save_material_record(updated)
-    extraction_run = store.record_extraction_run(
-        updated.material_id,
-        updated.extraction,
-        extraction_run_id=extraction_run_id,
-        provider=request.provider,
-        parameters={
-            "max_chars": request.max_chars,
-            "overlap_chars": request.overlap_chars,
-            "source_format": request.source_format,
-            "prompt_version": request.prompt_version,
-            "document_understanding_mode": request.document_understanding_mode,
-            "document_understanding_provider": request.document_understanding_provider,
-            "document_understanding_prompt_version": (
-                request.document_understanding_prompt_version
-            ),
-            "default_confidence": request.default_confidence,
-            "strict_grounding": request.strict_grounding,
-            "continue_on_chunk_error": request.continue_on_chunk_error,
-            "document_ie_fixture_path": request.document_ie_fixture_path,
-            "document_understanding_fixture_path": (
-                request.document_understanding_fixture_path
-            ),
-            "hypothesis_mode": request.hypothesis_mode,
-            "hypothesis_provider": request.hypothesis_provider,
-            "hypothesis_influence": request.hypothesis_influence,
-            "hypothesis_prompt_version": request.hypothesis_prompt_version,
-            "hypothesis_fixture_path": request.hypothesis_fixture_path,
-        },
-        result_summary={
-            "record_count": len(records),
-            "chunk_count": extraction_result.chunk_count,
-            "error_count": extraction_result.error_count,
-            "structured_records_path": str(records_path),
-            "chunk_results_path": str(chunk_results_path),
-            "document_ie_raw_responses_path": str(document_ie_raw_responses_path),
-            "document_ie_payload_repairs_path": str(document_ie_payload_repairs_path),
-            "extraction_manifest_path": str(extraction_manifest_path),
-            "document_understanding_map_path": (
-                str(document_understanding_map_path)
-                if document_understanding_map is not None
-                else None
-            ),
-            "chunk_prompt_context_path": (
-                str(chunk_prompt_context_path)
-                if document_understanding_map is not None
-                else None
-            ),
-            "hypothesis_brainstorming_manifest_path": (
-                str(hypothesis_brainstorming_manifest_path)
-                if hypothesis_result is not None
-                else None
-            ),
-            "brainstorm_review_items_path": (
-                str(brainstorm_review_items_path)
-                if hypothesis_result is not None
-                else None
-            ),
-        },
-    )
-    store.save_extraction_artifact(
-        material_id=updated.material_id,
-        extraction_run_id=extraction_run.get("extraction_run_id"),
-        artifact_type="structured_records",
-        uri=str(records_path),
-        media_type="application/jsonl",
-        payload={
-            "record_count": len(records),
-            "record_types": sorted({str(record.get("record_type")) for record in records}),
-        },
-    )
-    store.save_extraction_artifact(
-        material_id=updated.material_id,
-        extraction_run_id=extraction_run.get("extraction_run_id"),
-        artifact_type="chunk_extraction_results",
-        uri=str(chunk_results_path),
-        media_type="application/jsonl",
-        payload={
-            "chunk_count": extraction_result.chunk_count,
-            "error_count": extraction_result.error_count,
-        },
-    )
-    store.save_extraction_artifact(
-        material_id=updated.material_id,
-        extraction_run_id=extraction_run.get("extraction_run_id"),
-        artifact_type="document_ie_raw_responses",
-        uri=str(document_ie_raw_responses_path),
-        media_type="application/jsonl",
-        payload={
-            "chunk_count": len(raw_response_records),
-            "claim_boundary": (
-                "Raw IE client responses are retained for replayable schema repair."
-            ),
-        },
-    )
-    store.save_extraction_artifact(
-        material_id=updated.material_id,
-        extraction_run_id=extraction_run.get("extraction_run_id"),
-        artifact_type="document_ie_payload_repairs",
-        uri=str(document_ie_payload_repairs_path),
-        media_type="application/jsonl",
-        payload={
-            "chunk_count": len(payload_repair_records),
-            "failed_count": sum(
-                1 for record in payload_repair_records if record.get("status") == "failed"
-            ),
-        },
-    )
-    store.save_extraction_artifact(
-        material_id=updated.material_id,
-        extraction_run_id=extraction_run.get("extraction_run_id"),
-        artifact_type="extraction_manifest",
-        uri=str(extraction_manifest_path),
-        media_type="application/json",
-        payload={
-            "record_count": len(records),
-            "chunk_count": extraction_result.chunk_count,
-            "prompt_version": request.prompt_version,
-            "claim_boundary": manifest["claim_boundary"],
-            "document_understanding_mode": request.document_understanding_mode,
-        },
-    )
-    if document_understanding_map is not None:
-        store.save_extraction_artifact(
-            material_id=updated.material_id,
-            extraction_run_id=extraction_run.get("extraction_run_id"),
-            artifact_type="document_understanding_map",
-            uri=str(document_understanding_map_path),
-            media_type="application/json",
-            payload={
-                "mode": request.document_understanding_mode,
-                "chunk_count": len(chunks),
-                "entity_inventory_count": len(
-                    document_understanding_map.get("entity_inventory", [])
-                ),
-                "relation_hint_count": len(document_understanding_map.get("relation_hints", [])),
-                "claim_boundary": document_understanding_map["claim_boundary"],
-            },
-        )
-        store.save_extraction_artifact(
-            material_id=updated.material_id,
-            extraction_run_id=extraction_run.get("extraction_run_id"),
-            artifact_type="chunk_prompt_context",
-            uri=str(chunk_prompt_context_path),
-            media_type="application/jsonl",
-            payload={
-                "mode": request.document_understanding_mode,
-                "chunk_count": len(chunks),
-                "claim_boundary": (
-                    "Prompt context is advisory terminology only; extracted "
-                    "candidate evidence must still be quoted from each chunk."
-                ),
-            },
-        )
-    if hypothesis_result is not None:
-        for artifact_type, path, media_type, payload in (
-            (
-                "hypothesis_brainstorming_manifest",
-                hypothesis_brainstorming_manifest_path,
-                "application/json",
-                hypothesis_result.manifest,
-            ),
-            (
-                "brainstorm_hypotheses",
-                brainstorm_hypotheses_path,
-                "application/jsonl",
-                {"hypothesis_count": len(hypothesis_result.hypotheses)},
-            ),
-            (
-                "brainstorm_review_items",
-                brainstorm_review_items_path,
-                "application/json",
-                {"review_item_count": len(hypothesis_result.review_items)},
-            ),
-            (
-                "alignment_suggestions",
-                alignment_suggestions_path,
-                "application/jsonl",
-                {"suggestion_count": len(hypothesis_result.alignment_suggestions)},
-            ),
-            (
-                "semantic_layer_suggestions",
-                semantic_layer_suggestions_path,
-                "application/jsonl",
-                {"suggestion_count": len(hypothesis_result.semantic_layer_suggestions)},
-            ),
-        ):
-            store.save_extraction_artifact(
-                material_id=updated.material_id,
-                extraction_run_id=extraction_run.get("extraction_run_id"),
-                artifact_type=artifact_type,
-                uri=str(path),
-                media_type=media_type,
-                payload=payload,
-            )
-    return KGMaterialExtractionRunResponse(
-        material=updated,
-        structured_records_path=str(records_path),
-        record_count=len(records),
-        extraction_manifest_path=str(extraction_manifest_path),
-        chunk_results_path=str(chunk_results_path),
-        document_ie_raw_responses_path=str(document_ie_raw_responses_path),
-        document_ie_payload_repairs_path=str(document_ie_payload_repairs_path),
-        document_understanding_map_path=(
-            str(document_understanding_map_path)
-            if document_understanding_map is not None
-            else None
-        ),
-        chunk_prompt_context_path=(
-            str(chunk_prompt_context_path)
-            if document_understanding_map is not None
-            else None
-        ),
-        hypothesis_brainstorming_manifest_path=(
-            str(hypothesis_brainstorming_manifest_path)
-            if hypothesis_result is not None
-            else None
-        ),
-        brainstorm_hypotheses_path=(
-            str(brainstorm_hypotheses_path) if hypothesis_result is not None else None
-        ),
-        brainstorm_review_items_path=(
-            str(brainstorm_review_items_path) if hypothesis_result is not None else None
-        ),
-        chunk_count=extraction_result.chunk_count,
-        error_count=extraction_result.error_count,
-        prompt_version=request.prompt_version,
-        provider=request.provider,
-        extractor_name=extraction_result.extractor_name,
-        extractor_version=extraction_result.extractor_version,
     )
 
 
-def _construction_source_from_material(
-    material: KGMaterialRecord,
+def fetch_remote_material(
     *,
-    source_type: Literal["structured_records", "manual_table"],
-) -> KGConstructionSourceInput:
-    extraction = material.extraction
-    if extraction.status != "extracted":
-        raise ValueError(
-            f"material_id={material.material_id} is not build-ready; "
-            f"extraction.status must be extracted"
-        )
-    if not extraction.structured_records_path:
-        raise ValueError(
-            f"material_id={material.material_id} is not build-ready; "
-            "missing extraction.structured_records_path"
-        )
-    records_path = Path(extraction.structured_records_path)
-    if not records_path.is_file():
-        raise ValueError(
-            f"material_id={material.material_id} structured records not found: {records_path}"
-        )
-
-    source_id = extraction.source_id or material.material_id
-    metadata: dict[str, Any] = {
-        "material_id": material.material_id,
-        "material_title": material.title,
-        "material_type": material.material_type,
-        "material_source_kind": material.source_kind,
-        "material_source_uri": material.source_uri,
-        "material_metadata_path": material.metadata_path,
-    }
-    if extraction.extractor_name:
-        metadata["extractor_name"] = extraction.extractor_name
-    if extraction.extractor_version:
-        metadata["extractor_version"] = extraction.extractor_version
-    if extraction.prompt_version:
-        metadata["prompt_version"] = extraction.prompt_version
-    if extraction.document_understanding_mode:
-        metadata["document_understanding_mode"] = extraction.document_understanding_mode
-    if extraction.hypothesis_mode:
-        metadata["hypothesis_mode"] = extraction.hypothesis_mode
-        metadata["hypothesis_provider"] = extraction.hypothesis_provider
-        metadata["hypothesis_influence"] = extraction.hypothesis_influence
-    if extraction.record_count is not None:
-        metadata["record_count"] = extraction.record_count
-    if extraction.chunk_count is not None:
-        metadata["chunk_count"] = extraction.chunk_count
-    if extraction.error_count is not None:
-        metadata["error_count"] = extraction.error_count
-    if extraction.extraction_manifest_path:
-        metadata["extraction_manifest_path"] = extraction.extraction_manifest_path
-    if extraction.chunk_results_path:
-        metadata["chunk_results_path"] = extraction.chunk_results_path
-    if extraction.document_understanding_map_path:
-        metadata["document_understanding_map_path"] = extraction.document_understanding_map_path
-    if extraction.chunk_prompt_context_path:
-        metadata["chunk_prompt_context_path"] = extraction.chunk_prompt_context_path
-    if extraction.hypothesis_brainstorming_manifest_path:
-        metadata["hypothesis_brainstorming_manifest_path"] = (
-            extraction.hypothesis_brainstorming_manifest_path
-        )
-    if extraction.brainstorm_hypotheses_path:
-        metadata["brainstorm_hypotheses_path"] = extraction.brainstorm_hypotheses_path
-    if extraction.brainstorm_review_items_path:
-        metadata["brainstorm_review_items_path"] = extraction.brainstorm_review_items_path
-    if extraction.brainstorm_evidence_tasks_path:
-        metadata["brainstorm_evidence_tasks_path"] = extraction.brainstorm_evidence_tasks_path
-    if extraction.brainstorm_profile_gaps_path:
-        metadata["brainstorm_profile_gaps_path"] = extraction.brainstorm_profile_gaps_path
-    if extraction.alignment_suggestions_path:
-        metadata["alignment_suggestions_path"] = extraction.alignment_suggestions_path
-    if extraction.semantic_layer_suggestions_path:
-        metadata["semantic_layer_suggestions_path"] = extraction.semantic_layer_suggestions_path
-    if extraction.profile_gap_suggestions_path:
-        metadata["profile_gap_suggestions_path"] = extraction.profile_gap_suggestions_path
-    return KGConstructionSourceInput(
-        source_id=source_id,
-        source_type=source_type,
-        scenario=material.scenario,
-        path=str(records_path),
-        source_format=extraction.source_format,
-        metadata=metadata,
-    )
-
-
-def _document_ie_client_for_request(
-    *,
-    material: KGMaterialRecord,
-    request: KGMaterialExtractionRunRequest,
-    client: DocumentIEClient | None,
-) -> tuple[DocumentIEClient, str]:
-    if client is not None:
-        extractor_name = (
-            "offline_document_ie" if request.provider == "offline_fixture" else "openai_document_ie"
-        )
-        return client, extractor_name
-    if request.provider == "openai":
-        return OpenAICompatibleKGExtractionClient(), "openai_document_ie"
-    fixture = _offline_document_ie_fixture(material=material, request=request)
-    return OfflineDocumentIEFixtureClient(fixture), "offline_document_ie"
-
-
-def _document_understanding_client_for_request(
-    *,
-    material: KGMaterialRecord,
-    request: KGMaterialExtractionRunRequest,
-    client: DocumentUnderstandingClient | None,
-) -> DocumentUnderstandingClient | None:
-    if client is not None:
-        return client
-    if request.document_understanding_provider == "none":
-        return None
-    if request.document_understanding_provider == "openai":
-        return OpenAICompatibleDocumentUnderstandingClient()
-    fixture = _offline_document_understanding_fixture(material=material, request=request)
-    return OfflineDocumentUnderstandingFixtureClient(fixture)
-
-
-def _hypothesis_client_for_request(
-    *,
-    material: KGMaterialRecord,
-    request: KGMaterialExtractionRunRequest,
-    client: HypothesisBrainstormingClient | None,
-) -> HypothesisBrainstormingClient | None:
-    if client is not None:
-        return client
-    if request.hypothesis_provider == "none":
-        return None
-    if request.hypothesis_provider == "openai":
-        return OpenAICompatibleHypothesisBrainstormingClient()
-    fixture = _offline_hypothesis_fixture(material=material, request=request)
-    return OfflineHypothesisFixtureClient(fixture)
-
-
-def _offline_document_ie_fixture(
-    *,
-    material: KGMaterialRecord,
-    request: KGMaterialExtractionRunRequest,
-) -> dict[str, Any]:
-    if request.document_ie_payload is not None:
-        return request.document_ie_payload
-    fixture_path = request.document_ie_fixture_path or _first_metadata_text(
-        material.metadata,
-        "document_ie_fixture_path",
-        "document_ie_fixture",
-    )
-    if fixture_path:
-        path = Path(fixture_path)
-        if not path.is_file():
-            raise ValueError(f"offline document IE fixture not found: {path}")
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(payload, dict):
-            return payload
-        raise ValueError(f"offline document IE fixture must be a JSON object: {path}")
-    inline = material.metadata.get("document_ie_payload")
-    if isinstance(inline, dict):
-        return inline
-    raise ValueError(
-        "provider=offline_fixture requires document_ie_payload, "
-        "document_ie_fixture_path, or material.metadata['document_ie_payload']/"
-        "['document_ie_fixture_path']"
-    )
-
-
-def _offline_document_understanding_fixture(
-    *,
-    material: KGMaterialRecord,
-    request: KGMaterialExtractionRunRequest,
-) -> dict[str, Any]:
-    if request.document_understanding_payload is not None:
-        return request.document_understanding_payload
-    fixture_path = request.document_understanding_fixture_path or _first_metadata_text(
-        material.metadata,
-        "document_understanding_fixture_path",
-        "document_understanding_fixture",
-    )
-    if fixture_path:
-        path = Path(fixture_path)
-        if not path.is_file():
-            raise ValueError(f"offline document understanding fixture not found: {path}")
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(payload, dict):
-            return payload
-        raise ValueError(
-            f"offline document understanding fixture must be a JSON object: {path}"
-        )
-    inline = material.metadata.get("document_understanding_payload")
-    if isinstance(inline, dict):
-        return inline
-    raise ValueError(
-        "document_understanding_provider=offline_fixture requires "
-        "document_understanding_payload, document_understanding_fixture_path, or "
-        "material.metadata['document_understanding_payload']/"
-        "['document_understanding_fixture_path']"
-    )
-
-
-def _offline_hypothesis_fixture(
-    *,
-    material: KGMaterialRecord,
-    request: KGMaterialExtractionRunRequest,
-) -> dict[str, Any]:
-    if request.hypothesis_payload is not None:
-        return request.hypothesis_payload
-    fixture_path = request.hypothesis_fixture_path or _first_metadata_text(
-        material.metadata,
-        "hypothesis_fixture_path",
-        "hypothesis_fixture",
-    )
-    if fixture_path:
-        path = Path(fixture_path)
-        if not path.is_file():
-            raise ValueError(f"offline hypothesis fixture not found: {path}")
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(payload, dict):
-            return payload
-        raise ValueError(f"offline hypothesis fixture must be a JSON object: {path}")
-    inline = material.metadata.get("hypothesis_payload")
-    if isinstance(inline, dict):
-        return inline
-    raise ValueError(
-        "hypothesis_provider=offline_fixture requires hypothesis_payload, "
-        "hypothesis_fixture_path, or material.metadata['hypothesis_payload']/"
-        "['hypothesis_fixture_path']"
-    )
-
-
-def _first_metadata_text(metadata: dict[str, Any], *keys: str) -> str:
-    for key in keys:
-        value = metadata.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
-
-
-def _local_source_for_extraction(material: KGMaterialRecord) -> tuple[Path, dict[str, str]]:
-    if material.source_kind == "url":
-        return _fetch_material_url_snapshot(material)
-    source_path = Path(material.source_uri)
-    if not source_path.is_file():
-        raise ValueError(f"material source path not found: {source_path}")
-    return source_path, {}
-
-
-def _fetch_material_url_snapshot(material: KGMaterialRecord) -> tuple[Path, dict[str, str]]:
-    record_dir = Path(material.metadata_path).parent
-    snapshot_path = record_dir / "web_snapshot.txt"
-    request = urllib.request.Request(
-        material.source_uri,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0 Safari/537.36 KGTraceVis/0.1"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        },
-    )
-    deadline = time.monotonic() + REMOTE_MATERIAL_FETCH_MAX_SECONDS
-    content_parts: list[bytes] = []
-    total_bytes = 0
-    try:
-        with urllib.request.urlopen(  # noqa: S310
-            request,
-            timeout=REMOTE_MATERIAL_FETCH_TIMEOUT_SECONDS,
-        ) as response:
+    url: str,
+    material_id: str,
+    material_root: Path | None = None,
+    timeout_seconds: int = REMOTE_MATERIAL_FETCH_TIMEOUT_SECONDS,
+) -> Path:
+    """Fetch a registered remote source into the local material directory."""
+    _require_non_empty(url, field_name="url")
+    if not _looks_like_url(url):
+        raise ValueError("remote material fetch requires an http(s) URL")
+    record_dir = _material_dir(material_id, material_root=material_root)
+    record_dir.mkdir(parents=True, exist_ok=True)
+    filename = _safe_upload_filename(Path(url).name or "remote_material.txt")
+    output_path = record_dir / filename
+    with urllib.request.urlopen(url, timeout=timeout_seconds) as response:  # noqa: S310
+        with output_path.open("wb") as handle:
             while True:
-                if time.monotonic() > deadline:
-                    raise ValueError(
-                        "remote material fetch exceeded "
-                        f"{REMOTE_MATERIAL_FETCH_MAX_SECONDS}s: {material.source_uri}"
-                    )
                 chunk = response.read(REMOTE_MATERIAL_FETCH_CHUNK_BYTES)
                 if not chunk:
                     break
-                content_parts.append(chunk)
-                total_bytes += len(chunk)
-                if total_bytes > MAX_MATERIAL_UPLOAD_BYTES:
-                    break
-            content_type = response.headers.get("content-type", "")
-    except TimeoutError as exc:
-        raise ValueError(
-            f"remote material fetch timed out for {material.material_id}: "
-            f"{material.source_uri}"
-        ) from exc
-    except OSError as exc:
-        raise ValueError(
-            f"remote material fetch failed for {material.material_id}: "
-            f"{material.source_uri}"
-        ) from exc
-    content = b"".join(content_parts)
-    if len(content) > MAX_MATERIAL_UPLOAD_BYTES:
-        raise ValueError(
-            f"remote material exceeds {MAX_MATERIAL_UPLOAD_BYTES} bytes: {material.source_uri}"
-        )
-    snapshot_path.write_bytes(content)
-    return snapshot_path, {"content_type": content_type, "fetched_url": material.source_uri}
+                handle.write(chunk)
+                if output_path.stat().st_size > MAX_MATERIAL_UPLOAD_BYTES:
+                    raise ValueError("remote material exceeds maximum upload size")
+    return output_path
 
 
-def _document_source_type(material: KGMaterialRecord) -> str:
-    if material.material_type == "pdf":
-        return "pdf"
-    if material.material_type == "webpage" or material.source_kind == "url":
-        return "web_snapshot"
-    if material.material_type == "markdown":
-        return "markdown"
-    return "plain_text"
-
-
-def _structured_records_from_draft(draft: object) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    for entity in getattr(draft, "entities", ()):
-        if isinstance(entity, DraftEntity):
-            records.append(_entity_record(entity))
-    for relation in getattr(draft, "relations", ()):
-        if isinstance(relation, DraftRelation):
-            records.append(_relation_record(relation))
-    return records
-
-
-def _entity_record(entity: DraftEntity) -> dict[str, Any]:
-    return {
-        "id": entity.entity_id_suggestion,
-        "name": entity.name,
-        "label": entity.label,
-        "scenario": entity.scenario,
-        "aliases": "|".join(entity.aliases),
-        "description": entity.description,
-        "source": entity.source_id,
-        "evidence": entity.evidence or entity.evidence_span,
-        "confidence": entity.confidence,
-        "record_type": "entity",
-        "draft_id": entity.draft_id,
-        "metadata": dict(entity.metadata),
-    }
-
-
-def _relation_record(relation: DraftRelation) -> dict[str, Any]:
-    return {
-        "head": relation.head,
-        "relation": relation.relation,
-        "tail": relation.tail,
-        "scenario": relation.scenario,
-        "source": relation.source_id,
-        "evidence": relation.evidence or relation.evidence_span,
-        "confidence": relation.confidence,
-        "record_type": "relation",
-        "draft_id": relation.draft_id,
-        "metadata": dict(relation.metadata),
-    }
-
-
-def _chunk_extraction_result_record(
-    summary: DocumentIEChunkExtractionSummary,
-) -> dict[str, Any]:
-    return {
-        "chunk_id": summary.chunk_id,
-        "source_id": summary.source_id,
-        "chunk_index": summary.chunk_index,
-        "status": summary.status,
-        "entity_count": summary.entity_count,
-        "relation_count": summary.relation_count,
-        "error_message": summary.error_message,
-    }
-
-
-class _RecordingDocumentIEClient:
-    """Record raw IE client responses before schema normalization."""
-
-    def __init__(self, inner: DocumentIEClient) -> None:
-        self.inner = inner
-        self.records: list[dict[str, Any]] = []
-
-    def extract_candidates(
-        self,
-        chunk: SourceTextChunk,
-        *,
-        prompt: str,
-        response_schema: Mapping[str, Any],
-    ) -> Mapping[str, Any] | str:
-        response = self.inner.extract_candidates(
-            chunk,
-            prompt=prompt,
-            response_schema=response_schema,
-        )
-        self.records.append(
-            {
-                "artifact_type": "document_ie_raw_response_v1",
-                "chunk_id": chunk.chunk_id,
-                "source_id": chunk.source_id,
-                "chunk_index": chunk.index,
-                "prompt_version": _prompt_version_from_prompt(prompt),
-                "response_media_type": (
-                    "application/json"
-                    if isinstance(response, Mapping)
-                    else "text/plain"
-                ),
-                "response": dict(response) if isinstance(response, Mapping) else response,
-                "response_sha1": sha1(
-                    (
-                        json.dumps(response, sort_keys=True, default=str)
-                        if isinstance(response, Mapping)
-                        else str(response)
-                    ).encode("utf-8")
-                ).hexdigest(),
-            }
-        )
-        return response
-
-
-def _prompt_version_from_prompt(prompt: str) -> str:
-    match = re.search(r"Prompt version:\s*([^.\n]+)", prompt)
-    return match.group(1).strip() if match else ""
-
-
-def _document_ie_payload_repair_record(raw_record: Mapping[str, Any]) -> dict[str, Any]:
-    response = raw_record.get("response")
-    repaired = repair_document_ie_response_for_audit(
-        response if isinstance(response, (Mapping, str)) else str(response),
-        chunk_id=str(raw_record.get("chunk_id") or ""),
-    )
-    return {
-        "artifact_type": "document_ie_payload_repair_v1",
-        "source_id": raw_record.get("source_id"),
-        "chunk_id": raw_record.get("chunk_id"),
-        "chunk_index": raw_record.get("chunk_index"),
-        "raw_response_sha1": raw_record.get("response_sha1"),
-        **repaired,
-    }
-
-
-def _material_extraction_manifest(
-    *,
+def _compiler_source_path(
     material: KGMaterialRecord,
-    document: ParsedSourceDocument,
-    chunks: tuple[SourceTextChunk, ...],
-    extraction_result: DocumentIEExtractionResult,
-    records: list[dict[str, Any]],
-    records_path: Path,
-    chunk_results_path: Path,
-    document_ie_raw_responses_path: Path,
-    document_ie_payload_repairs_path: Path,
-    extraction_manifest_path: Path,
-    document_understanding_map_path: Path | None,
-    chunk_prompt_context_path: Path | None,
-    document_understanding_map: dict[str, Any] | None,
-    hypothesis_result_manifest: dict[str, Any] | None,
-    hypothesis_artifact_paths: Mapping[str, Path] | None,
-    candidate_augmentations: list[dict[str, Any]],
-    extraction_run_id: str,
-    provider: str,
-    request: KGMaterialExtractionRunRequest,
-    created_at: str,
-) -> dict[str, Any]:
-    entity_count = sum(1 for record in records if record.get("record_type") == "entity")
-    relation_count = sum(1 for record in records if record.get("record_type") == "relation")
-    return {
-        "artifact_type": "document_ie_extraction_manifest",
-        "manifest_version": "v1",
-        "extraction_run_id": extraction_run_id,
-        "created_at": created_at,
-        "claim_boundary": (
-            "Document IE output is source-grounded DraftKG candidate material for "
-            "review and construction staging; it is not reviewed or published KG."
-        ),
-        "material": {
-            "material_id": material.material_id,
-            "title": material.title,
-            "scenario": material.scenario,
-            "material_type": material.material_type,
-            "source_kind": material.source_kind,
-            "source_uri": material.source_uri,
-            "metadata_path": material.metadata_path,
-        },
-        "source": {
-            "source_id": document.source_id,
-            "source_type": document.source_type,
-            "scenario": document.scenario,
-            "parser": document.parser,
-            "path": str(document.path) if document.path is not None else None,
-            "metadata": dict(document.metadata),
-        },
-        "chunking": {
-            "max_chars": request.max_chars,
-            "overlap_chars": request.overlap_chars,
-            "chunk_count": len(chunks),
-            "chunks": [_manifest_chunk_summary(chunk) for chunk in chunks],
-        },
-        "extraction": {
-            "provider": provider,
-            "extractor_name": extraction_result.extractor_name,
-            "extractor_version": extraction_result.extractor_version,
-            "prompt_version": request.prompt_version,
-            "document_understanding_mode": request.document_understanding_mode,
-            "document_understanding_provider": request.document_understanding_provider,
-            "document_understanding_prompt_version": (
-                request.document_understanding_prompt_version
-            ),
-            "default_confidence": request.default_confidence,
-            "strict_grounding": request.strict_grounding,
-            "continue_on_chunk_error": request.continue_on_chunk_error,
-            "allowed_relations": sorted(ALLOWED_DOCUMENT_IE_RELATIONS),
-            "raw_response_capture": {
-                "raw_responses_path": str(document_ie_raw_responses_path),
-                "payload_repairs_path": str(document_ie_payload_repairs_path),
-                "claim_boundary": (
-                    "raw LLM responses are persisted before schema normalization so "
-                    "repair logic can be audited and replayed without another model call"
-                ),
-            },
-            "llm_boundary": (
-                "LLM extraction proposes source-attached candidates only; review, "
-                "alignment, semantic projection, and RCA view build remain separate."
-            ),
-            "candidate_augmentations": candidate_augmentations,
-        },
-        "document_understanding": {
-            "mode": request.document_understanding_mode,
-            "artifact_path": (
-                str(document_understanding_map_path)
-                if document_understanding_map_path is not None
-                else None
-            ),
-            "chunk_prompt_context_path": (
-                str(chunk_prompt_context_path)
-                if chunk_prompt_context_path is not None
-                else None
-            ),
-            "artifact_type": (
-                document_understanding_map.get("artifact_type")
-                if document_understanding_map is not None
-                else None
-            ),
-            "claim_boundary": (
-                document_understanding_map.get("claim_boundary")
-                if document_understanding_map is not None
-                else (
-                    "chunk mode skips document-level planning artifacts and keeps "
-                    "candidate extraction scoped to each parsed chunk"
-                )
-            ),
-        },
-        "hypothesis_brainstorming": (
-            hypothesis_result_manifest
-            if hypothesis_result_manifest is not None
-            else {
-                "mode": request.hypothesis_mode,
-                "provider": request.hypothesis_provider,
-                "influence": request.hypothesis_influence,
-                "claim_boundary": (
-                    "hypothesis brainstorming disabled; no hypothesis artifacts "
-                    "participated in extraction"
-                ),
-            }
-        ),
-        "summary": {
-            "record_count": len(records),
-            "entity_count": entity_count,
-            "relation_count": relation_count,
-            "chunk_count": extraction_result.chunk_count,
-            "error_count": extraction_result.error_count,
-            "review_status": "auto",
-        },
-        "artifacts": {
-            "structured_records": str(records_path),
-            "chunk_extraction_results": str(chunk_results_path),
-            "document_ie_raw_responses": str(document_ie_raw_responses_path),
-            "document_ie_payload_repairs": str(document_ie_payload_repairs_path),
-            "extraction_manifest": str(extraction_manifest_path),
-            "document_understanding_map": (
-                str(document_understanding_map_path)
-                if document_understanding_map_path is not None
-                else None
-            ),
-            "chunk_prompt_context": (
-                str(chunk_prompt_context_path)
-                if chunk_prompt_context_path is not None
-                else None
-            ),
-            "hypothesis_brainstorming": {
-                key: str(path) for key, path in (hypothesis_artifact_paths or {}).items()
-            },
-        },
-    }
+    *,
+    must_exist: bool,
+) -> Path | None:
+    candidates: list[str] = []
+    if material.extraction.structured_records_path:
+        candidates.append(material.extraction.structured_records_path)
+    if material.source_kind in {"uploaded_file", "local_path"}:
+        candidates.append(material.source_uri)
+    for value in candidates:
+        path = Path(value).expanduser()
+        if path.is_file() or (not must_exist and not _looks_like_url(value)):
+            return path
+    return None
 
 
-def _manifest_chunk_summary(chunk: SourceTextChunk) -> dict[str, Any]:
-    return {
-        "chunk_id": chunk.chunk_id,
-        "chunk_index": chunk.index,
-        "char_start": chunk.start_char,
-        "char_end": chunk.end_char,
-        "text_sha1": sha1(chunk.text.encode("utf-8")).hexdigest(),
-        "text_length": len(chunk.text),
-        "source_locator": f"chars={chunk.start_char}-{chunk.end_char}",
-    }
-
-
-def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True, default=str),
-        encoding="utf-8",
-    )
-
-
-def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
-    path.write_text(
-        "".join(
-            json.dumps(record, sort_keys=True, default=str) + "\n"
-            for record in records
-        ),
-        encoding="utf-8",
-    )
-
-
-def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, sort_keys=True, default=str) + "\n")
+def _source_format_from_path(path: Path) -> ConstructionSourceFormat:
+    suffix = path.suffix.lower()
+    if suffix == ".jsonl":
+        return "jsonl"
+    if suffix == ".json":
+        return "json"
+    if suffix == ".csv":
+        return "csv"
+    if suffix in {".md", ".markdown"}:
+        return "markdown"
+    return "text"
 
 
 def _material_record_exists(store: KGMaterialStore, material_id: str) -> bool:
@@ -1948,79 +760,57 @@ def _material_record_exists(store: KGMaterialStore, material_id: str) -> bool:
     return True
 
 
-def _source_chunk_store_payload(
-    material_id: str,
-    chunk: SourceTextChunk | dict[str, Any],
-    *,
-    index: int | None = None,
-) -> dict[str, Any]:
-    if isinstance(chunk, SourceTextChunk):
-        return {
-            "chunk_id": chunk.chunk_id,
-            "material_id": material_id,
-            "chunk_index": chunk.index - 1,
-            "source_locator": f"chars={chunk.start_char}-{chunk.end_char}",
-            "text_content": chunk.text,
-            "char_start": chunk.start_char,
-            "char_end": chunk.end_char,
-            "metadata": {
-                "source_id": chunk.source_id,
-                "source_type": chunk.source_type,
-                "scenario": chunk.scenario,
-                **dict(chunk.metadata),
-            },
-        }
-
-    text = str(chunk.get("text_content") or chunk.get("text") or "").strip()
-    if not text:
-        raise ValueError("source chunk text_content cannot be empty")
-    chunk_index = int(chunk.get("chunk_index", index or 0))
-    return {
-        "chunk_id": str(chunk.get("chunk_id") or f"{material_id}_chunk_{chunk_index:04d}"),
-        "material_id": material_id,
-        "chunk_index": chunk_index,
-        "source_locator": chunk.get("source_locator"),
-        "text_content": text,
-        "char_start": chunk.get("char_start"),
-        "char_end": chunk.get("char_end"),
-        "metadata": dict(chunk.get("metadata") or {}),
-    }
-
-
-def _material_dir(material_id: str, *, material_root: Path | None) -> Path:
-    safe_id = _safe_path_component(material_id, field_name="material_id")
-    return (material_root or DEFAULT_SOURCE_KG_MATERIAL_DIR) / safe_id
-
-
-def _load_material_record(metadata_path: Path) -> KGMaterialRecord:
-    payload = json.loads(metadata_path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"material metadata must be a JSON object: {metadata_path}")
-    return KGMaterialRecord.model_validate(payload)
-
-
-def _write_material_record(record: KGMaterialRecord) -> None:
-    metadata_path = Path(record.metadata_path)
-    metadata_path.write_text(
-        json.dumps(record.model_dump(mode="json"), indent=2, sort_keys=True),
-        encoding="utf-8",
+def _material_dir(material_id: str, *, material_root: Path | None = None) -> Path:
+    return (material_root or DEFAULT_SOURCE_KG_MATERIAL_DIR) / _safe_path_component(
+        material_id,
+        field_name="material_id",
     )
 
 
+def _write_material_record(material: KGMaterialRecord) -> None:
+    path = Path(material.metadata_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json_object(path, material.model_dump(mode="json"))
+
+
+def _load_material_record(path: Path) -> KGMaterialRecord:
+    return KGMaterialRecord.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+
+
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
 def _safe_path_component(value: str, *, field_name: str) -> str:
-    stripped = value.strip()
-    if not stripped:
+    text = value.strip()
+    if not text:
         raise ValueError(f"{field_name} cannot be empty")
-    if Path(stripped).name != stripped:
-        raise ValueError(f"{field_name} must be a single path component")
-    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", stripped).strip("._")
-    if safe != stripped or not safe:
-        raise ValueError(f"{field_name} may contain only letters, numbers, '.', '_', and '-'")
-    return safe
+    if Path(text).name != text or text in {".", ".."}:
+        raise ValueError(f"{field_name} must be a safe path component")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", text):
+        raise ValueError(f"{field_name} may contain only letters, numbers, _, ., and -")
+    return text
 
 
-def _safe_upload_filename(filename: str) -> str:
-    return _safe_path_component(Path(filename).name, field_name="filename")
+def _safe_upload_filename(value: str) -> str:
+    name = Path(value).name
+    if not name or name in {".", ".."}:
+        raise ValueError("filename must be a safe file name")
+    return name
 
 
 def _require_non_empty(value: str, *, field_name: str) -> None:
@@ -2029,7 +819,8 @@ def _require_non_empty(value: str, *, field_name: str) -> None:
 
 
 def _looks_like_url(value: str) -> bool:
-    return value.lower().startswith(("http://", "https://"))
+    lowered = value.lower()
+    return lowered.startswith("http://") or lowered.startswith("https://")
 
 
 def _utc_now() -> str:
@@ -2038,14 +829,7 @@ def _utc_now() -> str:
 
 __all__ = [
     "DEFAULT_SOURCE_KG_MATERIAL_DIR",
-    "DEFAULT_MATERIAL_POSTGRES_CONFIG_PATH",
-    "DocumentIEProvider",
-    "DocumentUnderstandingProvider",
-    "DocumentUnderstandingMode",
     "FileKGMaterialStore",
-    "MAX_MATERIAL_UPLOAD_BYTES",
-    "ExtractionStatus",
-    "KGMaterialStore",
     "KGMaterialBuildSourcesResponse",
     "KGMaterialDetailResponse",
     "KGMaterialDirectBuildRequest",
@@ -2056,13 +840,15 @@ __all__ = [
     "KGMaterialRecord",
     "KGMaterialRegisterRequest",
     "KGMaterialSelectedBuildRequest",
+    "KGMaterialStore",
     "KGMaterialUploadRequest",
     "MaterialSourceKind",
     "MaterialStatus",
     "MaterialType",
     "configure_material_store_for_testing",
-    "get_kg_material",
     "extract_kg_material_to_structured_records",
+    "fetch_remote_material",
+    "get_kg_material",
     "list_kg_materials",
     "material_store",
     "prepare_kg_material_construction_build",

@@ -18,7 +18,15 @@ LINKABLE_OBSERVATION_FACETS = {
 }
 FIELD_ALLOWED_LABELS = {
     "object": {"Object"},
-    "anomaly_type": {"Anomaly", "Defect", "Fault", "Pattern"},
+    "anomaly_type": {
+        "Anomaly",
+        "AnomalyType",
+        "Defect",
+        "DefectType",
+        "Fault",
+        "FaultType",
+        "Pattern",
+    },
     "location": {"Location", "ProcessUnit"},
     "morphology": {"Morphology", "Pattern"},
     "variable": {"Variable"},
@@ -123,7 +131,7 @@ def _field_aware_candidates(
         if graph.nodes.get(candidate.entity_id) is not None
         and graph.nodes[candidate.entity_id].label in allowed_labels
     ]
-    return filtered[:top_k]
+    return (filtered or candidates)[:top_k]
 
 
 def _link_payload(

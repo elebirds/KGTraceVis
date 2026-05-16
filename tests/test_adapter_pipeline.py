@@ -17,10 +17,11 @@ from kgtracevis.experiments.adapter_pipeline import (
     TABLE_FILENAME,
     run_adapter_pipeline,
 )
-from kgtracevis.kg_construction import build_candidate_kg, export_kg_csv
 
 
-def test_run_adapter_pipeline_writes_evidence_and_candidate_summary(tmp_path: Path) -> None:
+def test_run_adapter_pipeline_writes_evidence_and_candidate_summary(
+    tmp_path: Path,
+) -> None:
     """The helper should produce evidence files and candidate explanation summaries."""
     output = run_adapter_pipeline(
         "data/examples/records/mvtec_records.jsonl",
@@ -90,43 +91,6 @@ def test_run_adapter_pipeline_supports_wm811k_records(tmp_path: Path) -> None:
     assert rows[0]["top_target_label"]
     assert float(rows[0]["best_score"]) > 0
     assert all(row["explanation_scope"] == EXPLANATION_SCOPE for row in rows)
-
-
-def test_run_adapter_pipeline_uses_candidate_kg_overlay_for_wm811k_loc(
-    tmp_path: Path,
-) -> None:
-    """KG overlays should prevent Loc evidence from routing through Nearfull."""
-    nodes, edges, _summary = build_candidate_kg()
-    nodes_path = tmp_path / "nodes_candidate.csv"
-    edges_path = tmp_path / "edges_candidate.csv"
-    export_kg_csv(nodes, edges, nodes_path=nodes_path, edges_path=edges_path)
-    records_path = tmp_path / "wm811k_loc.jsonl"
-    records_path.write_text(
-        (
-            '{"dataset":"wafer","adapter":"wm811k","case_id":"wm811k_loc_001",'
-            '"wafer_id":"WLOC-001","predicted_pattern":"Loc",'
-            '"failure_pattern":"Loc","classification_confidence":0.67,'
-            '"wafer_map":[[0,0,0],[0,2,0],[0,0,0]],'
-            '"annotation_type":"native_ground_truth"}\n'
-        ),
-        encoding="utf-8",
-    )
-
-    output = run_adapter_pipeline(
-        records_path,
-        tmp_path / "overlay",
-        dataset="wafer",
-        kg_node_paths=[nodes_path],
-        kg_edge_paths=[edges_path],
-    )
-
-    case = output.summary["cases"][0]
-    anomaly_link = next(
-        link for link in case["linked_entities"] if link["field"] == "anomaly_type"
-    )
-    assert anomaly_link["selected_entity_id"] == "LocDefect"
-    assert case["top_k_paths"]
-    assert case["top_k_paths"][0]["target_entity_id"] != "GlueRemovalInsufficient"
 
 
 def test_run_adapter_pipeline_default_kg_handles_wm811k_loc(tmp_path: Path) -> None:
