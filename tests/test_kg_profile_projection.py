@@ -17,6 +17,7 @@ from kgtracevis.kg_construction import (
     SemanticProjectionRule,
     build_rca_reasoning_view,
     load_rca_profile,
+    profile_for_scenario,
     profile_to_manifest,
     project_semantic_layer,
 )
@@ -648,4 +649,118 @@ def test_profile_projection_skips_relation_when_endpoint_labels_do_not_match() -
     ]
     assert semantic.manifest["label_constraint_skipped_relation_ids"] == [
         "relation-bad-location"
+    ]
+
+
+def test_wafer_profile_keeps_spatial_edges_and_filters_bad_cause_shapes() -> None:
+    """Wafer projection should preserve spatial traceability but filter bad RCA shapes."""
+    profile = profile_for_scenario("wafer")
+    draft = DraftKG(
+        entities=(
+            DraftEntity(
+                draft_id="entity-scratch",
+                source_id="wafer_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="wafer",
+                entity_id_suggestion="ScratchPattern",
+                name="Scratch pattern",
+                label="DefectType",
+                evidence="Scratch pattern",
+            ),
+            DraftEntity(
+                draft_id="entity-linear",
+                source_id="wafer_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="wafer",
+                entity_id_suggestion="LinearSignature",
+                name="Linear signature",
+                label="Morphology",
+                evidence="linear scratch",
+            ),
+            DraftEntity(
+                draft_id="entity-center",
+                source_id="wafer_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="wafer",
+                entity_id_suggestion="CenterPattern",
+                name="Center pattern",
+                label="DefectType",
+                evidence="center pattern",
+            ),
+            DraftEntity(
+                draft_id="entity-machine",
+                source_id="wafer_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="wafer",
+                entity_id_suggestion="MachineHandlingProblem",
+                name="Machine handling problem",
+                label="Equipment",
+                evidence="machine handling problem",
+            ),
+        ),
+        relations=(
+            DraftRelation(
+                draft_id="relation-scratch-linear",
+                source_id="wafer_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="wafer",
+                head="ScratchPattern",
+                relation="HAS_SPATIAL_SIGNATURE",
+                tail="LinearSignature",
+                evidence="scratch pattern is linear",
+                confidence=0.7,
+            ),
+            DraftRelation(
+                draft_id="relation-bad-cause",
+                source_id="wafer_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="wafer",
+                head="ScratchPattern",
+                relation="CAUSES",
+                tail="CenterPattern",
+                evidence="bad candidate shape",
+                confidence=0.7,
+            ),
+            DraftRelation(
+                draft_id="relation-bad-suggested-cause",
+                source_id="wafer_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="wafer",
+                head="ScratchPattern",
+                relation="SUGGESTS_ROOT_CAUSE",
+                tail="CenterPattern",
+                evidence="bad suggested RCA candidate shape",
+                confidence=0.7,
+            ),
+            DraftRelation(
+                draft_id="relation-good-plausible-cause",
+                source_id="wafer_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="wafer",
+                head="ScratchPattern",
+                relation="HAS_PLAUSIBLE_CAUSE",
+                tail="MachineHandlingProblem",
+                evidence="scratch pattern is caused by machine handling problem",
+                confidence=0.7,
+            ),
+        ),
+    )
+
+    semantic = project_semantic_layer(draft, profile)
+
+    assert {edge.edge_id for edge in semantic.edges} == {
+        "ScratchPattern|HAS_SPATIAL_SIGNATURE|LinearSignature|wafer",
+        "ScratchPattern|HAS_PLAUSIBLE_CAUSE|MachineHandlingProblem|wafer",
+    }
+    assert semantic.manifest["label_constraint_skipped_relation_ids"] == [
+        "relation-bad-cause",
+        "relation-bad-suggested-cause",
     ]

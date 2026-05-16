@@ -56,6 +56,9 @@ from kgtracevis.kg_construction.mvtec_taxonomy_extraction import (
     extract_mvtec_taxonomy_from_document,
 )
 from kgtracevis.kg_construction.review_queue import review_queue_payload
+from kgtracevis.kg_construction.wafer_record_extraction import (
+    extract_wafer_records_from_document,
+)
 from kgtracevis.service.kg_construction import (
     ConstructionSourceFormat,
     KGConstructionBuildRequest,
@@ -287,8 +290,8 @@ class KGMaterialExtractionRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: DocumentIEProvider = "openai"
-    max_chars: int = Field(default=2_000, ge=200, le=8_000)
-    overlap_chars: int = Field(default=200, ge=0, le=2_000)
+    max_chars: int = Field(default=6_000, ge=200, le=24_000)
+    overlap_chars: int = Field(default=400, ge=0, le=4_000)
     source_format: ConstructionSourceFormat = "jsonl"
     prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION
     document_understanding_mode: DocumentUnderstandingMode = "chunk"
@@ -814,6 +817,7 @@ def extract_kg_material_to_structured_records(
             "material_title": material.title,
             "material_type": material.material_type,
             "content_type": material.content_type or "",
+            **material.metadata,
             **source_metadata,
         },
     )
@@ -870,6 +874,11 @@ def extract_kg_material_to_structured_records(
         draft = DraftKG.combine((draft, mvtec_taxonomy_result.draft))
         if mvtec_taxonomy_result.summary is not None:
             candidate_augmentations.append(mvtec_taxonomy_result.summary.to_payload())
+    wafer_record_result = extract_wafer_records_from_document(document)
+    if wafer_record_result.has_candidates:
+        draft = DraftKG.combine((draft, wafer_record_result.draft))
+        if wafer_record_result.summary is not None:
+            candidate_augmentations.append(wafer_record_result.summary.to_payload())
     records = _structured_records_from_draft(draft)
     _write_jsonl(records_path, records)
     _write_jsonl(
@@ -1508,7 +1517,14 @@ def _fetch_material_url_snapshot(material: KGMaterialRecord) -> tuple[Path, dict
     snapshot_path = record_dir / "web_snapshot.txt"
     request = urllib.request.Request(
         material.source_uri,
-        headers={"User-Agent": "KGTraceVis/0.1 source material fetcher"},
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0 Safari/537.36 KGTraceVis/0.1"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
     )
     with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310
         content = response.read(MAX_MATERIAL_UPLOAD_BYTES + 1)

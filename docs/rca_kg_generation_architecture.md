@@ -143,6 +143,17 @@ sent through source-constrained chunk IE. Root-cause source roles only influence
 prompt guidance; extracted relations still pass through profile whitelists,
 endpoint label constraints, review queue generation, and publish policy.
 
+The built-in `wafer` profile supports wafer-map/WM811K construction with the
+same review boundary. It keeps wafer pattern, spatial location, morphology,
+signal, process-condition, process-step, and root-cause candidate labels, and
+it constrains RCA-like relations so pattern-to-pattern similarities do not turn
+into propagation edges. WM811K JSONL evidence records can be supplemented by
+`wafer_evidence_record_extractor`, which maps explicit `failure_pattern`,
+`zone`, and `morphology` fields into reviewable spatial KG candidates. This
+supplement is not a multimodal mask/morphology engine and does not derive
+process causes; live LLM document IE and brainstorming are still used for
+source text that explicitly states process/mechanism context.
+
 Profiles can opt into a deliberately small semantic derivation DSL: two-hop
 rules that derive one relation from two existing semantic relations. Derived
 edges are still source-backed candidates because their evidence cites the

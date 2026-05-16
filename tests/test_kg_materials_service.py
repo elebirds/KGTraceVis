@@ -367,7 +367,7 @@ def test_hypothesis_fixture_normalizes_common_llm_json_shapes(
             hypothesis_payload={
                 "hypotheses": [
                     {
-                        "hypothesis_id": "H1",
+                        "hypothesis_id": 1,
                         "description": "Graph context may explain anomaly root causes.",
                         "supporting_spans": [
                             "graph-based root cause analysis for anomaly diagnosis"
@@ -395,6 +395,7 @@ def test_hypothesis_fixture_normalizes_common_llm_json_shapes(
         Path(response.brainstorm_review_items_path or "").read_text(encoding="utf-8")
     )
     assert hypotheses[0]["claim"] == "Graph context may explain anomaly root causes."
+    assert hypotheses[0]["hypothesis_id"] == "1"
     assert hypotheses[0]["supporting_spans"][0]["text"] == (
         "graph-based root cause analysis for anomaly diagnosis"
     )

@@ -514,6 +514,8 @@ def _normalize_mapping_list(
 
 
 def _normalize_hypothesis_row(row: dict[str, Any]) -> dict[str, Any]:
+    if row.get("hypothesis_id") is not None:
+        row["hypothesis_id"] = str(row["hypothesis_id"])
     claim = _first_non_empty(
         row.get("claim"),
         row.get("hypothesis"),
@@ -555,6 +557,8 @@ def _normalize_hypothesis_row(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_evidence_task_row(row: dict[str, Any]) -> dict[str, Any]:
+    if row.get("task_id") is not None:
+        row["task_id"] = str(row["task_id"])
     question = _first_non_empty(
         row.get("question"),
         row.get("claim"),
@@ -581,6 +585,8 @@ def _normalize_evidence_task_row(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_suggestion_row(row: dict[str, Any], default_type: str) -> dict[str, Any]:
+    if row.get("suggestion_id") is not None:
+        row["suggestion_id"] = str(row["suggestion_id"])
     row["suggestion_type"] = str(
         _first_non_empty(row.get("suggestion_type"), row.get("type"), default_type)
     )

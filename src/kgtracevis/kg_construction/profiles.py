@@ -533,12 +533,211 @@ MVTEC_PROFILE = RcaProfile(
 )
 
 
+WAFER_PROFILE = RcaProfile(
+    domain_id="wafer",
+    scenario="wafer",
+    ontology="wafer_rca_v1",
+    keep_labels=frozenset(
+        {
+            "AnomalyType",
+            "CauseCategory",
+            "Dataset",
+            "Defect",
+            "DefectType",
+            "Equipment",
+            "Location",
+            "Mechanism",
+            "Morphology",
+            "ProcessCondition",
+            "ProcessStep",
+            "ProcessUnit",
+            "RootCause",
+            "Signal",
+            "Variable",
+            "Wafer",
+        }
+    ),
+    relation_whitelist=frozenset(
+        {
+            "AFFECTS",
+            "ALIGNS_TO",
+            "ASSOCIATED_WITH_EVENT",
+            "BELONGS_TO",
+            "CAUSES",
+            "HAS_ANOMALY",
+            "HAS_LOCATION",
+            "HAS_MORPHOLOGY",
+            "HAS_PLAUSIBLE_CAUSE",
+            "HAS_SPATIAL_SIGNATURE",
+            "INDICATES",
+            "OBSERVED_BY",
+            "OCCURS_ON",
+            "SUGGESTS_PLAUSIBLE_MECHANISM",
+            "SUGGESTS_ROOT_CAUSE",
+        }
+    ),
+    relation_rewrites={
+        "ASSOCIATED_WITH_EVENT": "OCCURS_ON",
+        "HAS_PATTERN": "HAS_ANOMALY",
+        "MEASURES": "OBSERVED_BY",
+        "METRIC_OF": "OBSERVED_BY",
+    },
+    relation_families={
+        "AFFECTS": "AFFECTS",
+        "ALIGNS_TO": "ALIGNMENT",
+        "ASSOCIATED_WITH_EVENT": "OBSERVATION",
+        "BELONGS_TO": "SEMANTIC_SUPPORT",
+        "CAUSES": "CAUSES",
+        "HAS_ANOMALY": "OBSERVATION",
+        "HAS_LOCATION": "SEMANTIC_SUPPORT",
+        "HAS_MORPHOLOGY": "SEMANTIC_SUPPORT",
+        "HAS_PLAUSIBLE_CAUSE": "CAUSES",
+        "HAS_SPATIAL_SIGNATURE": "OBSERVATION",
+        "INDICATES": "CAUSES",
+        "OBSERVED_BY": "OBSERVATION",
+        "OCCURS_ON": "SEMANTIC_SUPPORT",
+        "SUGGESTS_PLAUSIBLE_MECHANISM": "CAUSES",
+        "SUGGESTS_ROOT_CAUSE": "CAUSES",
+    },
+    relation_label_constraints={
+        "CAUSES": (
+            frozenset(
+                {
+                    "CauseCategory",
+                    "Equipment",
+                    "Mechanism",
+                    "ProcessCondition",
+                    "ProcessStep",
+                    "ProcessUnit",
+                    "RootCause",
+                }
+            ),
+            frozenset({"AnomalyType", "Defect", "DefectType", "Signal", "Variable"}),
+        ),
+        "HAS_LOCATION": (
+            frozenset({"AnomalyType", "Defect", "DefectType", "Wafer"}),
+            frozenset({"Location"}),
+        ),
+        "HAS_MORPHOLOGY": (
+            frozenset({"AnomalyType", "Defect", "DefectType"}),
+            frozenset({"Morphology"}),
+        ),
+        "HAS_PLAUSIBLE_CAUSE": (
+            frozenset({"AnomalyType", "Defect", "DefectType", "Morphology"}),
+            frozenset(
+                {
+                    "CauseCategory",
+                    "Equipment",
+                    "Mechanism",
+                    "ProcessCondition",
+                    "ProcessStep",
+                    "ProcessUnit",
+                    "RootCause",
+                }
+            ),
+        ),
+        "SUGGESTS_PLAUSIBLE_MECHANISM": (
+            frozenset({"AnomalyType", "Defect", "DefectType", "Morphology"}),
+            frozenset(
+                {
+                    "CauseCategory",
+                    "Equipment",
+                    "Mechanism",
+                    "ProcessCondition",
+                    "ProcessStep",
+                    "ProcessUnit",
+                    "RootCause",
+                }
+            ),
+        ),
+        "SUGGESTS_ROOT_CAUSE": (
+            frozenset({"AnomalyType", "Defect", "DefectType", "Morphology"}),
+            frozenset(
+                {
+                    "CauseCategory",
+                    "Equipment",
+                    "Mechanism",
+                    "ProcessCondition",
+                    "ProcessStep",
+                    "ProcessUnit",
+                    "RootCause",
+                }
+            ),
+        ),
+        "HAS_SPATIAL_SIGNATURE": (
+            frozenset({"AnomalyType", "Defect", "DefectType"}),
+            frozenset({"Location", "Morphology"}),
+        ),
+        "INDICATES": (
+            frozenset({"AnomalyType", "Defect", "DefectType", "Location", "Morphology"}),
+            frozenset(
+                {
+                    "CauseCategory",
+                    "Equipment",
+                    "Mechanism",
+                    "ProcessCondition",
+                    "ProcessStep",
+                    "ProcessUnit",
+                    "RootCause",
+                }
+            ),
+        ),
+    },
+    propagation_families=frozenset({"OBSERVATION", "CAUSES", "AFFECTS"}),
+    relation_family_policies={
+        "OBSERVATION": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.55,
+            attenuation=0.85,
+            edge_weight_multiplier=0.9,
+            auto_source_trust=0.65,
+        ),
+        "CAUSES": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.5,
+            attenuation=0.85,
+            edge_weight_multiplier=0.95,
+            auto_source_trust=0.45,
+        ),
+        "AFFECTS": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.55,
+            attenuation=0.85,
+            edge_weight_multiplier=0.9,
+            auto_source_trust=0.55,
+        ),
+        "ALIGNMENT": RelationFamilyPolicy(propagation_enabled=False),
+        "SEMANTIC_SUPPORT": RelationFamilyPolicy(propagation_enabled=False),
+    },
+    root_candidate_labels=frozenset(
+        {
+            "CauseCategory",
+            "Equipment",
+            "ProcessCondition",
+            "ProcessStep",
+            "ProcessUnit",
+            "RootCause",
+        }
+    ),
+    observable_labels=frozenset(
+        {"AnomalyType", "Defect", "DefectType", "Location", "Morphology", "Wafer"}
+    ),
+    task_view="wafer_pattern_traceability_view",
+    confidence_policy="wafer_source_grounded_candidate_confidence",
+)
+
+
 def profile_for_scenario(scenario: str) -> RcaProfile:
     """Return the default profile for a scenario."""
     if scenario == "tep":
         return TEP_PROFILE
     if scenario == "mvtec":
         return MVTEC_PROFILE
+    if scenario == "wafer":
+        return WAFER_PROFILE
     return GENERIC_PROFILE
 
 

@@ -423,6 +423,17 @@ and records the supplement in `extraction_manifest.json`. The plausible
 mechanism rows are explicitly review-only label-derived hypotheses; they are not
 verified MVTec factory root causes and are not published without review.
 
+Wafer/WM811K uses the same material pipeline with a wafer-specific source pack.
+The high-value default pair is an open wafer-defect source that states pattern
+and process/mechanism context plus WM811K adapter evidence records that expose
+`failure_pattern`, `zone`, and `morphology`. The material pipeline may add a
+deterministic `wafer_evidence_record_extractor` supplement for those JSONL
+records. That supplement creates only explicit pattern, wafer, location,
+morphology, and spatial-signature candidates; it does not invent wafer process
+RCA. Method-heavy wafer papers can still be registered as later source-pack
+materials, but their algorithm terminology is treated as optional context and
+must survive the same profile constraints before it affects the KG.
+
 ```bash
 uv run python scripts/build_mvtec_llm_source_pack.py \
   --output-dir runs/mvtec_llm_source_pack \
@@ -439,6 +450,11 @@ For live LLM testing, switch the smoke provider to `openai`; the script loads
 does not provide verified factory RCA labels, so this smoke treats causal
 mechanisms as reviewable hypotheses and evidence tasks. It must not publish
 plausible-cause/root-cause edges as facts.
+
+Document chunks default to a conservative service value, but RCA-oriented live
+smokes use larger chunks (`--max-chars 12000 --overlap-chars 1200`) so tables,
+figure captions, and nearby mechanism text stay together. Larger chunks reduce
+cross-chunk fragmentation but do not relax strict evidence grounding.
 
 Domain profile policy now controls more of the semantic/RCA shape. Profiles can
 define semantic projection rules that rewrite a source relation and optionally

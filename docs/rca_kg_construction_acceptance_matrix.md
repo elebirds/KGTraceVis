@@ -198,20 +198,29 @@ uv run --extra dev mypy src tests scripts
 uv run pytest -q
 cd web && npm run build
 uv run python scripts/smoke_rca_kg_construction.py --output-dir /tmp/kgtracevis_brainstorm_smoke --tep-kg-root /Users/hhm/code/TEP_KG --require-tep --overwrite
-uv run python scripts/smoke_mvtec_llm_kg_construction.py --source-pack /tmp/kgtracevis_mvtec_source_pack_rca/mvtec_llm_source_pack.json --output-dir /tmp/kgtracevis_mvtec_pdf_offline_verify --provider offline_fixture --overwrite
-uv run python scripts/smoke_mvtec_llm_kg_construction.py --source-pack /tmp/kgtracevis_mvtec_source_pack_rca/mvtec_llm_source_pack.json --output-dir /tmp/kgtracevis_mvtec_pdf_live_constrained --provider openai --max-materials 3 --document-understanding-mode long_context --overwrite
+uv run python scripts/smoke_mvtec_llm_kg_construction.py --output-dir /tmp/kgtracevis_mvtec_offline_smoke_v2 --provider offline_fixture --overwrite
+uv run python scripts/build_wafer_llm_source_pack.py --output-dir /tmp/kgtracevis_wafer_source_pack_v2 --overwrite
+uv run python scripts/smoke_wafer_llm_kg_construction.py --output-dir /tmp/kgtracevis_wafer_offline_smoke_v2 --provider offline_fixture --overwrite
+uv run python scripts/smoke_mvtec_llm_kg_construction.py --source-pack /tmp/kgtracevis_mvtec_source_pack_expanded/mvtec_llm_source_pack.json --output-dir /tmp/kgtracevis_mvtec_expanded_live_12k_v3 --provider openai --max-materials 6 --document-understanding-mode long_context --max-chars 12000 --overlap-chars 1200 --overwrite
+uv run python scripts/smoke_wafer_llm_kg_construction.py --source-pack /tmp/kgtracevis_wafer_source_pack_v2/wafer_llm_source_pack.json --output-dir /tmp/kgtracevis_wafer_live_smoke_12k_v6 --provider openai --max-materials 2 --document-understanding-mode long_context --max-chars 12000 --overlap-chars 1200 --overwrite
+uv run python scripts/evaluate_tep_rca.py --output-dir /tmp/kgtracevis_tep_rca_eval --raw-data-dir data/raw/tep --faults 1,2,6 --max-runs-per-fault 1 --max-cases 3 --overwrite
 ```
 
-At that pass, the test suite reported `380 passed, 2 skipped`, and the RCA-KG
+At that pass, the test suite reported `387 passed, 2 skipped`, and the RCA-KG
 construction smoke reported six passing paths: `toy_generic`,
 `material_direct`, `material_brainstorm`, `runtime_overlay`, `tep`, and
-`tep_runtime_overlay`. The live MVTec smoke used OpenAI-compatible `openai`
-provider settings from `.env.local` / `.env` and a raw-source pack containing
-`mvtec_ad_official_page`, `ds_mvtec_dataset_card`, and
-`injection_molding_root_causes_pdf`. It produced `130` nodes and `406` edges,
-including four source-backed PDF `CAUSES` candidates, skipped malformed
-endpoint-label shapes in semantic projection, and did not publish RCA-like
-cause edges.
+`tep_runtime_overlay`. The live MVTec expanded smoke used OpenAI-compatible
+`openai` provider settings from `.env.local` / `.env`, larger 12k chunks, and
+six raw/near-raw materials. It produced `187` nodes and `418` edges, including
+source-backed PDF/web `HAS_PLAUSIBLE_CAUSE` and `CAUSES` candidates from
+injection molding, flow-mark, and molding-flash sources, and did not publish
+RCA-like cause edges. The live wafer smoke used the prioritized wafer source
+pack (`wafer_defect_frontiers_2023`, `wm811k_example_records`) and produced
+`23` nodes and `17` edges with `HAS_LOCATION`, `HAS_MORPHOLOGY`,
+`HAS_SPATIAL_SIGNATURE`, `HAS_PLAUSIBLE_CAUSE`, and `HAS_ANOMALY` relations,
+again with zero published edges. The TEP evaluation over faults 1, 2, and 6
+reported top-1/top-3/top-5 root-cause accuracy, MRR, and path hit rate all at
+`1.0` for the three sampled cases.
 
 ## Remaining Non-Goals
 

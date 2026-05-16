@@ -35,6 +35,8 @@ class MVTecSourceMaterialSpec:
     path: Path
     material_type: MaterialType
     provenance_role: str
+    source_uri: str | None = None
+    source_kind: str = "local_path"
 
 
 @dataclass(frozen=True)
@@ -74,7 +76,7 @@ def build_mvtec_llm_source_pack(
     materials: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     for spec in _default_material_specs(config):
-        if not spec.path.is_file():
+        if spec.source_kind != "url" and not spec.path.is_file():
             skipped.append(
                 {
                     "material_id": spec.material_id,
@@ -83,7 +85,9 @@ def build_mvtec_llm_source_pack(
                 }
             )
             continue
-        copied_path = _copy_material_source(spec, source_dir)
+        copied_path = (
+            None if spec.source_kind == "url" else _copy_material_source(spec, source_dir)
+        )
         materials.append(_material_registration_payload(spec, copied_path))
 
     if not materials:
@@ -191,6 +195,33 @@ def _default_material_specs(
             provenance_role="manufacturing_defect_cause_table_context",
         ),
         MVTecSourceMaterialSpec(
+            material_id="injection_molding_defects_web_table",
+            title="Injection moulding defects and causes reference",
+            path=Path(""),
+            material_type="webpage",
+            provenance_role="manufacturing_defect_cause_table_context",
+            source_uri="https://en.wikipedia.org/wiki/Injection_moulding",
+            source_kind="url",
+        ),
+        MVTecSourceMaterialSpec(
+            material_id="flow_mark_defect_web_reference",
+            title="Flow mark molding defect reference",
+            path=Path(""),
+            material_type="webpage",
+            provenance_role="manufacturing_process_root_cause_context",
+            source_uri="https://en.wikipedia.org/wiki/Flow_mark",
+            source_kind="url",
+        ),
+        MVTecSourceMaterialSpec(
+            material_id="molding_flash_defect_web_reference",
+            title="Molding flash defect reference",
+            path=Path(""),
+            material_type="webpage",
+            provenance_role="manufacturing_process_root_cause_context",
+            source_uri="https://en.wikipedia.org/wiki/Flash_(manufacturing)",
+            source_kind="url",
+        ),
+        MVTecSourceMaterialSpec(
             material_id="mvtec_source_bundle_readme",
             title="MVTec source bundle README",
             path=config.mvtec_source_bundle_dir / "README.md",
@@ -220,13 +251,16 @@ def _copy_material_source(spec: MVTecSourceMaterialSpec, source_dir: Path) -> Pa
 
 def _material_registration_payload(
     spec: MVTecSourceMaterialSpec,
-    copied_path: Path,
+    copied_path: Path | None,
 ) -> dict[str, Any]:
+    source_uri = spec.source_uri or str(copied_path)
+    if not source_uri:
+        raise ValueError(f"MVTec material {spec.material_id} has no source URI")
     return {
         "material_id": spec.material_id,
         "title": spec.title,
-        "source_uri": str(copied_path),
-        "source_kind": "local_path",
+        "source_uri": source_uri,
+        "source_kind": spec.source_kind,
         "scenario": "mvtec",
         "material_type": spec.material_type,
         "metadata": {

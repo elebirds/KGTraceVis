@@ -87,6 +87,49 @@ DOCUMENT_IE_RELATION_ALIASES = {
     "SUGGESTS_ROOT_CAUSE": "SUGGESTS_ROOT_CAUSE",
 }
 
+DOCUMENT_IE_LABEL_ALIASES = {
+    "DEFECT CLASS": "DefectType",
+    "DEFECTCLASS": "DefectType",
+    "DEFECT PATTERN": "DefectType",
+    "DEFECTPATTERN": "DefectType",
+    "DEFECT TYPE": "DefectType",
+    "FAILURE PATTERN": "DefectType",
+    "PATTERN": "DefectType",
+    "PROCESS": "ProcessUnit",
+    "PROCESS CONDITION": "ProcessCondition",
+    "WAFER MAP": "Wafer",
+    "WAFERMAP": "Wafer",
+}
+
+CAUSAL_SUGGESTION_RELATIONS = frozenset(
+    {
+        "CAUSES",
+        "HAS_PLAUSIBLE_CAUSE",
+        "SUGGESTS_PLAUSIBLE_MECHANISM",
+        "SUGGESTS_ROOT_CAUSE",
+    }
+)
+
+CAUSAL_CAUSE_PHRASE_PATTERNS = (
+    re.compile(
+        r"\barises?\s+due\s+to\s+(?:problems?\s+in\s+(?:the\s+)?)?"
+        r"(?P<cause>[^.;:\n()]+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bis\s+due\s+to\s+(?:problems?\s+in\s+(?:the\s+)?)?"
+        r"(?P<cause>[^.;:\n()]+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bdue\s+to\s+(?:problems?\s+in\s+(?:the\s+)?)?"
+        r"(?P<cause>[^.;:\n()]+)",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bresult\s+of\s+(?P<cause>[^.;:\n()]+)", re.IGNORECASE),
+    re.compile(r"\bcaused\s+by\s+(?P<cause>[^.;:\n()]+)", re.IGNORECASE),
+)
+
 
 @dataclass(frozen=True)
 class ParsedSourceDocument:
@@ -724,6 +767,15 @@ def _source_role_prompt(chunk: SourceTextChunk) -> str:
             "Use the source wording for cause entity names instead of generic IDs, "
             "label causes as RootCause or CauseCategory, label symptoms as Defect "
             "or AnomalyType, and copy the exact defect/cause phrase as evidence."
+        )
+    if "wafer" in role or "wm811k" in role:
+        lines.append(
+            "This source is wafer-map context. Extract wafer pattern, spatial "
+            "location, morphology/signature, and explicitly stated process-condition "
+            "candidates. Prefer `Pattern HAS_LOCATION Location`, "
+            "`Pattern HAS_MORPHOLOGY Morphology`, `Pattern HAS_SPATIAL_SIGNATURE "
+            "Morphology`, and `Pattern HAS_PLAUSIBLE_CAUSE ProcessCondition` only "
+            "when the chunk states the link."
         )
     elif any(token in role for token in ("taxonomy", "defect_label", "dataset")):
         lines.append(
@@ -2273,12 +2325,17 @@ def _normalize_extracted_payload_shape(payload: Mapping[str, Any]) -> dict[str, 
             raw_ref = str(item.get(key) or "").strip()
             if raw_ref and normalized_ref:
                 reference_map[raw_ref] = normalized_ref
-    normalized["entities"] = normalized_entities
-    normalized["relations"] = [
+    normalized_relations = [
         _normalize_extracted_relation_shape(item, reference_map=reference_map)
         for item in relations
         if isinstance(item, Mapping)
     ]
+    normalized_entities, normalized_relations = _repair_extracted_causal_self_links(
+        normalized_entities,
+        normalized_relations,
+    )
+    normalized["entities"] = normalized_entities
+    normalized["relations"] = normalized_relations
     return normalized
 
 
@@ -2310,11 +2367,139 @@ def _normalize_extracted_relation_shape(
     return relation
 
 
+def _repair_extracted_causal_self_links(
+    entities: Sequence[Mapping[str, Any]],
+    relations: Sequence[Mapping[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Turn source-grounded self-causal IE slips into reviewable cause candidates."""
+    repaired_entities = [dict(entity) for entity in entities]
+    repaired_relations: list[dict[str, Any]] = []
+    entity_by_id = {
+        str(entity.get("id") or "").strip(): dict(entity)
+        for entity in repaired_entities
+        if str(entity.get("id") or "").strip()
+    }
+    for relation_item in relations:
+        relation = dict(relation_item)
+        relation_name = _relation_alias_for_repair(relation.get("relation"))
+        if relation_name not in CAUSAL_SUGGESTION_RELATIONS:
+            repaired_relations.append(relation)
+            continue
+
+        head = str(relation.get("head") or "").strip()
+        tail = str(relation.get("tail") or "").strip()
+        if not _looks_like_causal_self_link(head, tail, entity_by_id=entity_by_id):
+            repaired_relations.append(relation)
+            continue
+
+        cause_phrase = _extract_cause_phrase_from_evidence(relation.get("evidence"))
+        if cause_phrase is None:
+            repaired_relations.append(relation)
+            continue
+
+        cause_name = _cause_entity_name(cause_phrase)
+        cause_id = _coerce_entity_id(
+            cause_name,
+            candidate="causal self-link repair entity",
+        )
+        if cause_id and cause_id not in entity_by_id:
+            cause_entity = {
+                "id": cause_id,
+                "name": cause_name,
+                "label": _cause_entity_label(cause_phrase),
+                "evidence": cause_phrase,
+                "confidence": relation.get("confidence"),
+            }
+            repaired_entities.append(cause_entity)
+            entity_by_id[cause_id] = cause_entity
+        if cause_id:
+            relation["tail"] = cause_id
+            relation["normalization_note"] = "causal_self_link_tail_repaired_from_evidence"
+        repaired_relations.append(relation)
+    return repaired_entities, repaired_relations
+
+
+def _relation_alias_for_repair(value: Any) -> str:
+    text = re.sub(r"[^A-Za-z0-9]+", "_", str(value or "")).strip("_").upper()
+    return DOCUMENT_IE_RELATION_ALIASES.get(text, text)
+
+
+def _looks_like_causal_self_link(
+    head: str,
+    tail: str,
+    *,
+    entity_by_id: Mapping[str, Mapping[str, Any]],
+) -> bool:
+    if not head or not tail:
+        return False
+    if _squashed(head) == _squashed(tail):
+        return True
+    head_entity = entity_by_id.get(head, {})
+    tail_entity = entity_by_id.get(tail, {})
+    head_name = str(head_entity.get("name") or head).strip()
+    tail_name = str(tail_entity.get("name") or tail).strip()
+    if _squashed(head_name) == _squashed(tail_name):
+        return True
+    return False
+
+
+def _extract_cause_phrase_from_evidence(value: Any) -> str | None:
+    evidence = str(value or "").strip()
+    if not evidence:
+        return None
+    for pattern in CAUSAL_CAUSE_PHRASE_PATTERNS:
+        match = pattern.search(evidence)
+        if match is None:
+            continue
+        phrase = _clean_cause_phrase(match.group("cause"))
+        if phrase is not None:
+            return phrase
+    return None
+
+
+def _clean_cause_phrase(value: str) -> str | None:
+    phrase = re.sub(r"\s+", " ", value).strip(" \t\r\n,")
+    phrase = re.sub(r"^(?:the|a|an)\s+", "", phrase, flags=re.IGNORECASE)
+    phrase = re.sub(
+        r"\s+(?:and|or|which|that|when|where|because)\b.*$",
+        "",
+        phrase,
+        flags=re.IGNORECASE,
+    ).strip(" \t\r\n,")
+    if not phrase or len(phrase) > 100:
+        return None
+    if not any(char.isalpha() for char in phrase):
+        return None
+    return phrase
+
+
+def _cause_entity_name(cause_phrase: str) -> str:
+    problem_pattern = r"\b(?:problem|problems|issue|issues|fault|faults|failure|failures)\b"
+    if re.search(problem_pattern, cause_phrase, re.IGNORECASE):
+        return cause_phrase
+    return f"{cause_phrase} issue"
+
+
+def _cause_entity_label(cause_phrase: str) -> str:
+    if re.search(r"\bstep\b", cause_phrase, re.IGNORECASE):
+        return "ProcessStep"
+    if re.search(r"\b(?:machine|equipment|tool)\b", cause_phrase, re.IGNORECASE):
+        return "Equipment"
+    return "ProcessCondition"
+
+
 def _is_weak_extracted_entity_id(value: Any) -> bool:
     text = str(value or "").strip()
     if not text or not any(char.isalpha() for char in text):
         return True
     return re.fullmatch(r"(?i)(?:e|n|id|node|entity)\d{1,5}", text) is not None
+
+
+def _normalize_extracted_entity_label(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return DOCUMENT_IE_LABEL_ALIASES.get(text.upper(), text)
 
 
 def _coerce_entity_candidates_for_chunk(
@@ -2402,7 +2587,7 @@ def _entity_to_draft(
     raw_entity_id = _first_text(entity.id, entity.entity_id, entity.node_id)
     entity_id = _coerce_entity_id(raw_entity_id, candidate=f"entity candidate in {chunk.chunk_id}")
     name = _first_text(entity.name)
-    label = _first_text(entity.label)
+    label = _normalize_extracted_entity_label(_first_text(entity.label))
     if not entity_id or not name or not label:
         raise ValueError(f"entity candidate in {chunk.chunk_id} missing id/name/label")
     scenario = _normalize_scenario(

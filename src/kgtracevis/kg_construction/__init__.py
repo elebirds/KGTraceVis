@@ -115,6 +115,7 @@ from kgtracevis.kg_construction.profiles import (
     GENERIC_PROFILE,
     MVTEC_PROFILE,
     TEP_PROFILE,
+    WAFER_PROFILE,
     RcaProfile,
     RelationFamilyPolicy,
     SemanticDerivedRelationRule,
@@ -165,6 +166,13 @@ from kgtracevis.kg_construction.triple_cleaner import (
     clean_candidate_triples,
     clean_kg_edges,
     clean_kg_nodes,
+)
+from kgtracevis.kg_construction.wafer_record_extraction import (
+    WaferRecordExtractionResult,
+    WaferRecordExtractionSummary,
+    draft_from_wafer_evidence_records,
+    extract_wafer_records_from_document,
+    parse_wafer_evidence_records,
 )
 
 __all__ = [
@@ -225,6 +233,9 @@ __all__ = [
     "PublishSnapshot",
     "StructuredRecordExtractor",
     "TEP_PROFILE",
+    "WAFER_PROFILE",
+    "WaferRecordExtractionResult",
+    "WaferRecordExtractionSummary",
     "TepRcaGraphExtractor",
     "TepSemanticLiftExtractor",
     "TepVariableMappingExtractor",
@@ -256,6 +267,7 @@ __all__ = [
     "draft_rows_from_draft",
     "draft_status_to_review_status",
     "draft_from_mvtec_taxonomy",
+    "draft_from_wafer_evidence_records",
     "edge_weight",
     "export_edges_csv",
     "export_kg_csv",
@@ -264,6 +276,7 @@ __all__ = [
     "extract_candidate_triples",
     "extract_mvtec_taxonomy_from_document",
     "extract_source_draft",
+    "extract_wafer_records_from_document",
     "load_source_registry",
     "load_source_text",
     "load_structured_records",
@@ -274,6 +287,7 @@ __all__ = [
     "profile_for_scenario",
     "profile_to_manifest",
     "parse_mvtec_defects_dict",
+    "parse_wafer_evidence_records",
     "project_semantic_layer",
     "review_decision_for_edge",
     "review_decision_for_item",

@@ -51,6 +51,9 @@ def test_mvtec_llm_source_pack_uses_raw_materials_and_excludes_derived_kg(
 
     assert material_ids == {
         "ds_mvtec_dataset_card",
+        "flow_mark_defect_web_reference",
+        "injection_molding_defects_web_table",
+        "molding_flash_defect_web_reference",
         "mvtec_ad_official_page",
         "mvtec_source_bundle_readme",
         "patchcore_arxiv_abs",
@@ -104,6 +107,41 @@ def test_mvtec_llm_source_pack_includes_optional_pdf_rca_sources(
     ] == "manufacturing_process_root_cause_context"
     assert by_id["injection_molding_defects_chart_pdf"]["material_type"] == "pdf"
     assert by_id["visual_defect_survey_html"]["material_type"] == "webpage"
+
+
+def test_mvtec_llm_source_pack_includes_remote_root_cause_references(
+    tmp_path: Path,
+) -> None:
+    """Remote raw references can enter the pack without prebuilt KG artifacts."""
+    source_bundle = tmp_path / "source_bundle"
+    defect_spectrum = tmp_path / "Defect_Spectrum"
+    source_bundle.mkdir(parents=True)
+    (defect_spectrum / "DS-MVTec").mkdir(parents=True)
+    (source_bundle / "mvtec_ad_official_page.html").write_text(
+        "<html><body>MVTec AD has industrial anomaly detection data.</body></html>",
+        encoding="utf-8",
+    )
+    (defect_spectrum / "DS-MVTec" / "DS-MVTec.md").write_text(
+        "# DS-MVTec\n\n## defect classes\nbottle broken_large",
+        encoding="utf-8",
+    )
+
+    result = build_mvtec_llm_source_pack(
+        MVTecLLMSourcePackConfig(
+            output_dir=tmp_path / "pack",
+            mvtec_source_bundle_dir=source_bundle,
+            defect_spectrum_dir=defect_spectrum,
+            include_patchcore=False,
+        )
+    )
+
+    by_id = {item["material_id"]: item for item in result.manifest["materials"]}
+
+    assert by_id["injection_molding_defects_web_table"]["source_kind"] == "url"
+    assert by_id["flow_mark_defect_web_reference"]["scenario"] == "mvtec"
+    assert by_id["molding_flash_defect_web_reference"]["metadata"][
+        "source_pack_role"
+    ] == "manufacturing_process_root_cause_context"
 
 
 def test_smoke_mvtec_llm_kg_construction_cli_runs_offline_fixture(

@@ -678,6 +678,54 @@ def test_chunk_ie_continue_on_error_skips_invalid_candidates() -> None:
     )
 
 
+def test_document_ie_repairs_source_grounded_causal_self_link() -> None:
+    """Causal self-links can be repaired from explicit evidence without publishing facts."""
+    text = "A center often arises due to problems in the thin film deposition."
+    chunk = SourceTextChunk(
+        chunk_id="wafer_note:chunk:0001:abc",
+        source_id="wafer_note",
+        source_type="plain_text",
+        scenario="wafer",
+        text=text,
+        start_char=0,
+        end_char=len(text),
+        index=1,
+    )
+    client = FakeIEClient(
+        {
+            "entities": [
+                {
+                    "id": "Center",
+                    "name": "center",
+                    "label": "pattern",
+                    "evidence": "center",
+                }
+            ],
+            "relations": [
+                {
+                    "head": "Center",
+                    "relation": "HAS_PLAUSIBLE_CAUSE",
+                    "tail": "Center",
+                    "evidence": text,
+                    "confidence": 0.52,
+                }
+            ],
+        }
+    )
+
+    draft = extract_draft_kg_from_chunks((chunk,), client)
+
+    entity_by_id = {entity.entity_id_suggestion: entity for entity in draft.entities}
+    assert entity_by_id["Center"].label == "DefectType"
+    assert entity_by_id["ThinFilmDepositionIssue"].label == "ProcessCondition"
+    assert entity_by_id["ThinFilmDepositionIssue"].evidence == "thin film deposition"
+    relation = draft.relations[0]
+    assert relation.head == "Center"
+    assert relation.tail == "ThinFilmDepositionIssue"
+    assert relation.relation == "HAS_PLAUSIBLE_CAUSE"
+    assert relation.evidence == text
+
+
 class FakeIEClient:
     def __init__(self, payload: dict[str, Any] | str) -> None:
         self.payload = payload
