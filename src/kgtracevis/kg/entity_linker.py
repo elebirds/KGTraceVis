@@ -30,7 +30,7 @@ FIELD_ALLOWED_LABELS = {
     "location": {"Location", "ProcessUnit"},
     "morphology": {"Morphology", "Pattern"},
     "variable": {"Variable"},
-    "log_event": {"EvidenceSource"},
+    "log_event": {"EvidenceSource", "LogEvent"},
 }
 
 

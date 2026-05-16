@@ -168,3 +168,33 @@ def test_new_style_graph_links_wm811k_loc_entities() -> None:
     assert selected["anomaly_type"] == "LocDefect"
     assert selected["location"] == "WaferLocalLocation"
     assert selected["morphology"] == "WaferClusteredMorphology"
+
+
+def test_default_csv_taxonomy_links_current_anomaly_and_log_labels() -> None:
+    """Default KG labels should link anomaly, fault, and log evidence facets."""
+    graph = KnowledgeGraph.from_default_paths()
+
+    mvtec_links = link_evidence_entities(
+        load_evidence_json("data/examples/ds_mvtec_example.json"),
+        graph,
+    )
+    wafer_links = link_evidence_entities(
+        load_evidence_json("data/examples/wafer_example.json"),
+        graph,
+    )
+    tep_fault_links = link_evidence_entities(
+        load_evidence_json("data/examples/tep_example.json").model_copy(
+            update={"anomaly_type": "fault_06", "observations": []}
+        ),
+        graph,
+    )
+
+    assert selected_entities_by_field(mvtec_links)["anomaly_type"] == "ScratchDefect"
+    assert selected_entities_by_field(wafer_links)["anomaly_type"] == "NearfullDefect"
+    assert selected_entities_by_field(tep_fault_links)["anomaly_type"] == (
+        "Fault06Stream1AFeedLoss"
+    )
+
+    log_link = next(link for link in wafer_links if link["field"] == "log_event")
+    assert log_link["selected_entity_id"] == "ExampleAlarm"
+    assert [candidate["label"] for candidate in log_link["candidates"]] == ["LogEvent"]

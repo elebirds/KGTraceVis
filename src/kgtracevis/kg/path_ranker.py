@@ -15,6 +15,7 @@ ROOT_CAUSE_LABELS = {
     "CandidateCause",
     "CauseCategory",
     "Fault",
+    "FaultType",
     "Mechanism",
     "RootCause",
 }

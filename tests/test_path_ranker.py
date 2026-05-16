@@ -124,6 +124,20 @@ def test_generic_reasoner_preserves_kg_build_provenance() -> None:
     ]
 
 
+def test_default_csv_path_ranking_targets_root_cause_and_fault_type_labels() -> None:
+    """Generic path ranking should discover current CSV RCA target labels."""
+    evidence = load_evidence_json("data/examples/tep_example.json")
+    graph = KnowledgeGraph.from_default_paths()
+    links = link_evidence_entities(evidence, graph)
+
+    paths = rank_root_cause_paths(evidence, graph, links, top_k=10)
+    target_labels = {graph.nodes[path["target_entity_id"]].label for path in paths}
+
+    assert "RootCause" in target_labels
+    assert "FaultType" in target_labels
+    assert any(path["source_entity_id"] == "XMEAS1" for path in paths)
+
+
 def _edge(
     head: str,
     tail: str,
