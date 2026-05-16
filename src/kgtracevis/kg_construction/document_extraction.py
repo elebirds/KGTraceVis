@@ -2502,6 +2502,14 @@ def _normalize_extracted_entity_label(value: str) -> str:
     return DOCUMENT_IE_LABEL_ALIASES.get(text.upper(), text)
 
 
+def _normalize_extracted_entity_label_for_name(value: str, *, name: str, entity_id: str) -> str:
+    label = _normalize_extracted_entity_label(value)
+    normalized_name = _squashed(f"{name} {entity_id}")
+    if re.search(r"\bwafer(?:\s*map)?\b", normalized_name):
+        return "Wafer"
+    return label
+
+
 def _coerce_entity_candidates_for_chunk(
     candidate_entities: Sequence[ExtractedEntityPayload],
     *,
@@ -2587,7 +2595,11 @@ def _entity_to_draft(
     raw_entity_id = _first_text(entity.id, entity.entity_id, entity.node_id)
     entity_id = _coerce_entity_id(raw_entity_id, candidate=f"entity candidate in {chunk.chunk_id}")
     name = _first_text(entity.name)
-    label = _normalize_extracted_entity_label(_first_text(entity.label))
+    label = _normalize_extracted_entity_label_for_name(
+        _first_text(entity.label),
+        name=name,
+        entity_id=entity_id,
+    )
     if not entity_id or not name or not label:
         raise ValueError(f"entity candidate in {chunk.chunk_id} missing id/name/label")
     scenario = _normalize_scenario(

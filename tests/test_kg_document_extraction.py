@@ -726,6 +726,47 @@ def test_document_ie_repairs_source_grounded_causal_self_link() -> None:
     assert relation.evidence == text
 
 
+def test_document_ie_normalizes_wafer_map_label_from_name() -> None:
+    """Wafer-map mentions should not become conflicting defect-pattern nodes."""
+    text = "Identifying defect patterns in a wafer map during manufacturing on the wafer."
+    chunk = SourceTextChunk(
+        chunk_id="wafer_note:chunk:0001:def",
+        source_id="wafer_note",
+        source_type="plain_text",
+        scenario="wafer",
+        text=text,
+        start_char=0,
+        end_char=len(text),
+        index=1,
+    )
+    client = FakeIEClient(
+        {
+            "entities": [
+                {
+                    "id": "wafer map",
+                    "name": "wafer map",
+                    "label": "pattern",
+                    "evidence": "wafer map",
+                },
+                {
+                    "id": "wafer",
+                    "name": "wafer",
+                    "label": "AnomalyType",
+                    "evidence": "wafer",
+                },
+            ],
+            "relations": [],
+        }
+    )
+
+    draft = extract_draft_kg_from_chunks((chunk,), client)
+
+    assert draft.entities[0].entity_id_suggestion == "WaferMap"
+    assert draft.entities[0].label == "Wafer"
+    assert draft.entities[1].entity_id_suggestion == "Wafer"
+    assert draft.entities[1].label == "Wafer"
+
+
 class FakeIEClient:
     def __init__(self, payload: dict[str, Any] | str) -> None:
         self.payload = payload

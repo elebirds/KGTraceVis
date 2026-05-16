@@ -29,9 +29,17 @@ def test_wafer_llm_source_pack_includes_remote_papers_and_records(
 
     assert by_id["wafer_map_scientific_reports_2023"]["source_kind"] == "url"
     assert by_id["wafer_defect_frontiers_2023"]["scenario"] == "wafer"
+    assert by_id["wafer_spatial_patterns_ntut_2006"]["source_kind"] == "url"
+    assert by_id["wafer_polar_cnn_mdpi_2024"]["source_kind"] == "url"
+    assert by_id["wafer_root_cause_pattern_jstage"]["source_kind"] == "url"
     assert by_id["wm811k_example_records"]["source_kind"] == "local_path"
     assert Path(by_id["wm811k_example_records"]["source_uri"]).is_file()
-    assert material_ids[:2] == ["wafer_defect_frontiers_2023", "wm811k_example_records"]
+    assert material_ids[:3] == [
+        "wafer_defect_frontiers_2023",
+        "wafer_spatial_patterns_ntut_2006",
+        "wafer_root_cause_pattern_jstage",
+    ]
+    assert material_ids[-1] == "wm811k_example_records"
 
 
 def test_wafer_llm_source_pack_can_skip_missing_records(tmp_path: Path) -> None:

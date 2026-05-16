@@ -137,6 +137,86 @@ def _default_material_specs(
             material_type="webpage",
             provenance_role="wafer_pattern_taxonomy_context",
         ),
+        WaferSourceMaterialSpec(
+            material_id="wafer_spatial_patterns_ntut_2006",
+            title=(
+                "Automatic identification of spatial defect patterns for "
+                "semiconductor manufacturing"
+            ),
+            source_uri=(
+                "https://ntut.elsevierpure.com/en/publications/"
+                "automatic-identification-of-spatial-defect-patterns-for-semicondu"
+            ),
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_spatial_signature_root_cause_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="wafer_root_cause_pattern_jstage",
+            title=(
+                "Root cause determination method based on comparison of defect "
+                "distribution patterns"
+            ),
+            source_uri=(
+                "https://www.jstage.jst.go.jp/article/jjspe/75/2/"
+                "75_2_256/_article/-char/en"
+            ),
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_root_cause_pattern_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="wafer_simple_feature_extraction_arxiv_2023",
+            title=(
+                "An embarrassingly simple approach for wafer feature extraction "
+                "and defect pattern recognition"
+            ),
+            source_uri="https://arxiv.org/abs/2303.11632",
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_ml_method_root_cause_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="wafer_map_scientific_reports_2023",
+            title="Wafer map failure pattern classification paper",
+            source_uri="https://www.nature.com/articles/s41598-023-34147-2",
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_ml_method_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="wafer_spatial_signature_ornl_1997",
+            title="Automatic classification of spatial signatures on semiconductor wafer maps",
+            source_uri=(
+                "https://impact.ornl.gov/en/publications/"
+                "automatic-classification-of-spatial-signatures-on-semiconductor-w"
+            ),
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_spatial_signature_process_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="wafer_polar_cnn_mdpi_2024",
+            title=(
+                "Development of a wafer defect pattern classifier using polar "
+                "coordinate transformed inputs"
+            ),
+            source_uri="https://www.mdpi.com/2079-9292/13/7/1360",
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_pattern_taxonomy_process_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="wafer_fuzzy_inference_mdpi_2026",
+            title=(
+                "Fuzzy inference system for interpretable classification of "
+                "wafer map defect patterns"
+            ),
+            source_uri="https://www.mdpi.com/2079-9292/15/1/130",
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_interpretable_pattern_taxonomy_context",
+        ),
     ]
     if config.include_wm811k_records:
         specs.append(
@@ -150,16 +230,6 @@ def _default_material_specs(
                 local_path=config.wm811k_records_path,
             )
         )
-    specs.append(
-        WaferSourceMaterialSpec(
-            material_id="wafer_map_scientific_reports_2023",
-            title="Wafer map failure pattern classification paper",
-            source_uri="https://www.nature.com/articles/s41598-023-34147-2",
-            source_kind="url",
-            material_type="webpage",
-            provenance_role="wafer_ml_method_context",
-        )
-    )
     return tuple(specs)
 
 
