@@ -69,7 +69,6 @@ top-k RCA path is contract/runtime valid, but not overlay-contribution accepted.
 |---|---|---|
 | Toy generic construction | Accepted | `scripts/smoke_rca_kg_construction.py` path `toy_generic` |
 | Material direct construction | Accepted | smoke path `material_direct` |
-| MVTec catalog construction | Accepted | smoke path `mvtec_catalog`; uses category-scoped defect nodes, `mvtec_rca_v1`, and reviewable plausible mechanism candidates |
 | TEP construction import | Accepted | smoke path `tep`; preserves `relation_family`, propagation flags, and fault anchors |
 | Runtime overlay RCA path | Accepted | smoke path `runtime_overlay`; checks `path_strength`, `rca_score`, `source_edge_ids`, `kg_build_ids` |
 | TEP runtime overlay RCA path | Accepted | smoke path `tep_runtime_overlay`; Root-KGD paths preserve candidate overlay `kg_build_id` and source edge IDs via `external_edge_id` matching |
@@ -185,10 +184,9 @@ uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_smoke/ma
 uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_smoke/tep --example-dir data/examples --overlay-only-runtime --overlay-only-import --output-path runs/source_kg_smoke/tep/kg_overlay_validation_report.json
 ```
 
-At the latest MVTec catalog update pass, the local suite reported `370 passed`
-and `2 skipped`. The RCA-KG construction smoke reported seven passing paths:
-`toy_generic`, `material_direct`, `material_brainstorm`, `runtime_overlay`,
-`mvtec_catalog`, `tep`, and `tep_runtime_overlay`.
+At that pass, the test suite reported `348 passed`, and the RCA-KG construction
+smoke reported five passing paths: `toy_generic`, `material_direct`,
+`runtime_overlay`, `tep`, and `tep_runtime_overlay`.
 
 ## Remaining Non-Goals
 

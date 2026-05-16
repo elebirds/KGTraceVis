@@ -1747,17 +1747,6 @@ def test_image_upload_mode_defaults_to_unknown_label_when_unspecified(
     monkeypatch,
 ) -> None:
     """Raw image uploads should not require an operator defect label."""
-    class FakeMVTecBackend:
-        def __init__(self, **_kwargs) -> None:
-            pass
-
-        def predict(self, _image_path: Path) -> dict[str, object]:
-            return {
-                "score": 0.91,
-                "confidence": 0.91,
-                "mask": np.zeros((2, 2), dtype=bool),
-            }
-
     original = service_api.create_run_from_upload
 
     def _patched_create_run_from_upload(*args, **kwargs):
@@ -1765,7 +1754,6 @@ def test_image_upload_mode_defaults_to_unknown_label_when_unspecified(
         return original(*args, **kwargs)
 
     monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
-    monkeypatch.setattr(service_runs, "AnomalibMVTecBackend", FakeMVTecBackend)
     client = TestClient(app)
     with Path("runs/real_model_pipeline/assets/mvtec/input_root/capsule/test/crack/000.png").open(
         "rb"

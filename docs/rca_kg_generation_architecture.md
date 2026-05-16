@@ -22,10 +22,7 @@ The system is not a general industrial KG builder. It creates source-grounded, r
 
 ## Layer Contracts
 
-`Source Library` records material provenance. A source is not a KG fact. It may
-be a structured table, document, prior graph, variable mapping, code artifact,
-log/event file, manual table, benchmark catalog such as MVTec AD, or external
-project artifact such as TEP_KG outputs.
+`Source Library` records material provenance. A source is not a KG fact. It may be a structured table, document, prior graph, variable mapping, code artifact, log/event file, manual table, or external project artifact such as TEP_KG outputs.
 
 `Parser / Chunk` turns sources into extractor inputs: rows, text chunks,
 structured records, or source references. Parsers do not emit final KG facts.
@@ -37,12 +34,7 @@ full source text. External/domain-pack sources such as TEP semantic-lift and RCA
 graph artifacts report `source_reference` plus safe path metadata while leaving
 extractor inputs unchanged.
 
-`Extractor Registry` maps source types to extractor plugins. All extractors
-emit `DraftKG`. LLM document IE is isolated as one extractor type and cannot
-publish facts. The MVTec AD catalog extractor is deterministic and
-category-scoped: it builds object, defect, morphology, location, and plausible
-mechanism candidates from catalog rows while preserving the boundary that
-MVTec has anomaly labels and masks, not verified root-cause labels.
+`Extractor Registry` maps source types to extractor plugins. All extractors emit `DraftKG`. LLM document IE is isolated as one extractor type and cannot publish facts.
 
 `Draft KG` is the unified intermediate layer for `DraftEntity`, `DraftRelation`, optional alignments, signal mappings, and RCA hints. Auto-generated rows default to `draft` or `auto`, not reviewed.
 
@@ -99,11 +91,10 @@ gap/alignment items are recorded for future rerun or profile maintenance.
 ## Domain Packs
 
 Domain behavior lives in RCA profiles under `kgtracevis.kg_construction.profiles`.
-Built-in generic, MVTec, and TEP profiles are available by default, and JSON
-Domain Pack examples live under `configs/kg_construction/profiles/`. CLI and
-service builds can select an external pack with `--profile-path` /
-`profile_path`; the active pack is written to `profile_manifest.json` for
-reproducibility.
+Built-in generic and TEP profiles are available by default, and JSON Domain
+Pack examples live under `configs/kg_construction/profiles/`. CLI and service
+builds can select an external pack with `--profile-path` / `profile_path`; the
+active pack is written to `profile_manifest.json` for reproducibility.
 
 The `generic` profile includes relation families:
 

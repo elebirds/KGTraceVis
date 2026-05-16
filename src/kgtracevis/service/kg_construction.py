@@ -56,7 +56,6 @@ MAX_SOURCE_UPLOAD_BYTES = 5_000_000
 ConstructionSourceType = Literal[
     "structured_records",
     "manual_table",
-    "mvtec_ad_catalog",
     "tep_semantic_lift",
     "tep_variable_mapping",
     "tep_rca_graph",
@@ -89,11 +88,10 @@ class KGConstructionSourceInput(BaseModel):
     @model_validator(mode="after")
     def validate_supported_shape(self) -> KGConstructionSourceInput:
         """Constrain runtime construction to explicit safe source shapes."""
-        if self.source_type in {"structured_records", "manual_table", "mvtec_ad_catalog"}:
+        if self.source_type in {"structured_records", "manual_table"}:
             if not self.path and self.source_text is None:
                 raise ValueError(
-                    "structured_records/manual_table/mvtec_ad_catalog sources require "
-                    "path or source_text"
+                    "structured_records/manual_table sources require path or source_text"
                 )
             if self.path and self.source_text is not None:
                 raise ValueError("pass either path or source_text, not both")

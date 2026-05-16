@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import subprocess
 import sys
@@ -1209,76 +1208,6 @@ def test_build_source_kg_script_supports_toy_generic_structured_source(
     assert publish_manifest["source_ids"] == ["toy_generic_source"]
 
 
-def test_build_source_kg_script_supports_mvtec_catalog_source(
-    tmp_path: Path,
-) -> None:
-    """The CLI should expose the MVTec catalog construction path."""
-    output_dir = tmp_path / "mvtec_catalog_candidate"
-    catalog_path = tmp_path / "mvtec_ad_catalog.csv"
-    catalog_path.write_text(
-        "\n".join(
-            [
-                (
-                    "category_folder,category_label,defect_folder,defect_official_name,"
-                    "defect_superclass,top_level_anomaly_class,dataset_fact_source,"
-                    "semantic_mapping_source"
-                ),
-                (
-                    "bottle,Bottle,broken_large,Broken large,broken,structural_damage,"
-                    "MVTec AD catalog fixture,KGTraceVis CLI unit fixture"
-                ),
-                (
-                    "cable,Cable,cut_outer_insulation,Cut outer insulation,cut,"
-                    "structural_damage,MVTec AD catalog fixture,"
-                    "KGTraceVis CLI unit fixture"
-                ),
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "scripts/build_source_kg.py",
-            "--mvtec-ad-catalog",
-            str(catalog_path),
-            "--run-id",
-            "kgbuild_cli_mvtec_catalog",
-            "--output-dir",
-            str(output_dir),
-        ],
-        cwd=Path(__file__).resolve().parents[1],
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-
-    edge_rows = _read_csv_rows(output_dir / "edges.csv")
-    edge_keys = {
-        (row["head"], row["relation"], row["tail"])
-        for row in edge_rows
-    }
-    summary = json.loads((output_dir / "kg_construction_summary.json").read_text())
-
-    assert "source_to_kg_construction_result_v1" in completed.stdout
-    assert summary["kg_build_id"] == "kgbuild_cli_mvtec_catalog"
-    assert summary["source_ids"] == ["mvtec_ad_catalog"]
-    assert summary["extractor_versions"] == {"mvtec_catalog": "v1"}
-    assert summary["profile_version"] == "mvtec_rca_v1"
-    assert (
-        "BottleObject",
-        "SUGGESTS_PLAUSIBLE_MECHANISM",
-        "BottleBreakage",
-    ) in edge_keys
-    assert (
-        "BottleObject",
-        "SUGGESTS_PLAUSIBLE_MECHANISM",
-        "CableInsulationDamage",
-    ) not in edge_keys
-
-
 def test_build_source_kg_script_supports_offline_document_source(
     tmp_path: Path,
 ) -> None:
@@ -1435,11 +1364,6 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
         "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
         encoding="utf-8",
     )
-
-
-def _read_csv_rows(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
 
 
 def _required_artifact_keys() -> set[str]:

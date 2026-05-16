@@ -9,7 +9,6 @@ from kgtracevis.kg_construction.draft import (
     KGConstructionSource,
 )
 from kgtracevis.kg_construction.extractors.base import ExtractorRegistry
-from kgtracevis.kg_construction.extractors.mvtec_catalog import MVTecCatalogExtractor
 from kgtracevis.kg_construction.parsers import ParsedSourceContent
 from kgtracevis.kg_construction.source_loader import load_structured_records
 
@@ -158,7 +157,7 @@ class StructuredRecordExtractor:
 
 def default_extractor_registry() -> ExtractorRegistry:
     """Return the default source-to-KG extractor registry."""
-    return ExtractorRegistry([StructuredRecordExtractor(), MVTecCatalogExtractor()])
+    return ExtractorRegistry([StructuredRecordExtractor()])
 
 
 def _split_aliases(value: str) -> tuple[str, ...]:
