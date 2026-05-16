@@ -29,6 +29,7 @@ from kgtracevis.source_kg_compiler.models import (
     SourceKGArtifactPaths,
     SourceKGArtifacts,
     SourceKGLLMClient,
+    SourceKGProgressCallback,
     SourceUnit,
 )
 
@@ -150,6 +151,8 @@ def compile_source_kg(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
     overwrite: bool = False,
+    source_limit: int | None = None,
+    progress_callback: SourceKGProgressCallback | None = None,
 ) -> tuple[SourceKGArtifacts, SourceKGArtifactPaths, dict[str, Any], dict[str, Any]]:
     """Compile source files into KGBuilder-style LLM KG artifacts and reports."""
     started = time.perf_counter()
@@ -160,17 +163,102 @@ def compile_source_kg(
     if default_scenario not in VALID_SCENARIOS:
         raise ValueError(f"invalid default scenario: {default_scenario}")
     paths = artifact_paths(output_dir)
+    _emit_progress(
+        progress_callback,
+        stage="compile_start",
+        event="stage_start",
+        elapsed_seconds=0.0,
+        source_path_count=len(source_paths),
+        output_dir=output_dir.as_posix(),
+        source_limit=source_limit,
+    )
     _prepare_output_dir(output_dir, overwrite=overwrite)
 
+    _emit_progress(
+        progress_callback,
+        stage="source_units",
+        event="stage_start",
+        elapsed_seconds=_elapsed(started),
+        source_path_count=len(source_paths),
+        source_limit=source_limit,
+    )
     source_units = load_source_units(
         source_paths,
         default_scenario=default_scenario,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
+        source_limit=source_limit,
     )
-    knowledge_cards = build_knowledge_cards(source_units, llm_client=llm_client)
-    entities = build_canonical_entities(knowledge_cards, llm_client=llm_client)
-    edges = build_canonical_edges(knowledge_cards, entities, llm_client=llm_client)
+    _emit_progress(
+        progress_callback,
+        stage="source_units",
+        event="stage_finish",
+        elapsed_seconds=_elapsed(started),
+        source_unit_count=len(source_units),
+        source_file_count=len({unit.material_path for unit in source_units}),
+    )
+    _emit_progress(
+        progress_callback,
+        stage="knowledge_cards",
+        event="stage_start",
+        elapsed_seconds=_elapsed(started),
+        source_unit_count=len(source_units),
+    )
+    knowledge_cards = build_knowledge_cards(
+        source_units,
+        llm_client=llm_client,
+        progress_callback=progress_callback,
+        started_at=started,
+    )
+    _emit_progress(
+        progress_callback,
+        stage="knowledge_cards",
+        event="stage_finish",
+        elapsed_seconds=_elapsed(started),
+        knowledge_card_count=len(knowledge_cards),
+    )
+    _emit_progress(
+        progress_callback,
+        stage="entities",
+        event="stage_start",
+        elapsed_seconds=_elapsed(started),
+        knowledge_card_count=len(knowledge_cards),
+    )
+    entities = build_canonical_entities(
+        knowledge_cards,
+        llm_client=llm_client,
+        progress_callback=progress_callback,
+        started_at=started,
+    )
+    _emit_progress(
+        progress_callback,
+        stage="entities",
+        event="stage_finish",
+        elapsed_seconds=_elapsed(started),
+        entity_count=len(entities),
+    )
+    _emit_progress(
+        progress_callback,
+        stage="edges",
+        event="stage_start",
+        elapsed_seconds=_elapsed(started),
+        knowledge_card_count=len(knowledge_cards),
+        entity_count=len(entities),
+    )
+    edges = build_canonical_edges(
+        knowledge_cards,
+        entities,
+        llm_client=llm_client,
+        progress_callback=progress_callback,
+        started_at=started,
+    )
+    _emit_progress(
+        progress_callback,
+        stage="edges",
+        event="stage_finish",
+        elapsed_seconds=_elapsed(started),
+        edge_count=len(edges),
+    )
     artifacts = SourceKGArtifacts(
         source_units=source_units,
         knowledge_cards=knowledge_cards,
@@ -179,11 +267,29 @@ def compile_source_kg(
     )
 
     write_artifacts(artifacts, paths)
+    _emit_progress(
+        progress_callback,
+        stage="domain_profiles",
+        event="stage_start",
+        elapsed_seconds=_elapsed(started),
+        knowledge_card_count=len(knowledge_cards),
+        entity_count=len(entities),
+        edge_count=len(edges),
+    )
     domain_profiles = build_domain_profiles(
         knowledge_cards=knowledge_cards,
         entities=entities,
         edges=edges,
         llm_client=llm_client,
+        progress_callback=progress_callback,
+        started_at=started,
+    )
+    _emit_progress(
+        progress_callback,
+        stage="domain_profiles",
+        event="stage_finish",
+        elapsed_seconds=_elapsed(started),
+        profile_counts=domain_profiles.get("metadata", {}).get("profile_counts", {}),
     )
     _write_json(paths.domain_profiles, domain_profiles)
     _write_json(paths.domain_profile_report, domain_profiles["metadata"])
@@ -202,6 +308,17 @@ def compile_source_kg(
         llm_metrics=_llm_metrics(llm_client),
     )
     _write_json(paths.validation_report, validation_report)
+    _emit_progress(
+        progress_callback,
+        stage="compile_finish",
+        event="stage_finish",
+        elapsed_seconds=_elapsed(started),
+        source_units=len(source_units),
+        knowledge_cards=len(knowledge_cards),
+        entities=len(entities),
+        edges=len(edges),
+        output_dir=paths.output_dir.as_posix(),
+    )
     return artifacts, paths, qa_report, validation_report
 
 
@@ -230,10 +347,13 @@ def load_source_units(
     default_scenario: str = "shared",
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+    source_limit: int | None = None,
 ) -> list[SourceUnit]:
     """Load source files or directories into stable source units."""
     if not source_paths:
         raise ValueError("at least one source path is required")
+    if source_limit is not None and source_limit <= 0:
+        raise ValueError("source_limit must be positive")
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
     if chunk_overlap < 0 or chunk_overlap >= chunk_size:
@@ -252,6 +372,8 @@ def load_source_units(
             raise ValueError(f"source path is not a file or directory: {path}")
 
     unique_files = sorted({path.resolve(): path for path in files}.values(), key=_path_sort_key)
+    if source_limit is not None:
+        unique_files = unique_files[:source_limit]
     if not unique_files:
         raise ValueError("no supported source files found")
 
@@ -297,16 +419,36 @@ def build_knowledge_cards(
     source_units: list[SourceUnit],
     *,
     llm_client: SourceKGLLMClient,
+    progress_callback: SourceKGProgressCallback | None = None,
+    started_at: float | None = None,
 ) -> list[KnowledgeCard]:
     """Extract KGBuilder-style knowledge cards with LLM-first source grounding."""
     cards: list[KnowledgeCard] = []
-    for unit in source_units:
+    started = time.perf_counter() if started_at is None else started_at
+    for index, unit in enumerate(source_units, start=1):
         cards.extend(_cards_from_unit(unit))
-        raw = llm_client.complete_json(
+        item_label = f"{index}/{len(source_units)}:{unit.unit_id}"
+        raw = _complete_json_with_progress(
+            llm_client,
             system_prompt=KNOWLEDGE_CARD_SYSTEM_PROMPT,
             user_prompt=_knowledge_card_user_prompt(unit),
+            stage="knowledge_cards",
+            item=item_label,
+            progress_callback=progress_callback,
+            started_at=started,
         )
-        payload = safe_json_parse(raw, repairer=llm_client.repair_json)
+        payload = safe_json_parse(
+            raw,
+            repairer=lambda broken_json, error, item_label=item_label: _repair_json_with_progress(
+                llm_client,
+                broken_json=broken_json,
+                error=error,
+                stage="knowledge_cards",
+                item=item_label,
+                progress_callback=progress_callback,
+                started_at=started,
+            ),
+        )
         for item in _as_list(payload.get("cards") if isinstance(payload, dict) else payload):
             if isinstance(item, dict):
                 card = _normalize_llm_card(item, unit)
@@ -319,10 +461,13 @@ def build_canonical_entities(
     knowledge_cards: list[KnowledgeCard],
     *,
     llm_client: SourceKGLLMClient,
+    progress_callback: SourceKGProgressCallback | None = None,
+    started_at: float | None = None,
 ) -> list[CanonicalEntity]:
     """Extract canonical entities with KGBuilder's LLM entity stage."""
     entities_by_key: dict[tuple[str, str], CanonicalEntity] = {}
     entity_id_to_key: dict[str, tuple[str, str]] = {}
+    started = time.perf_counter() if started_at is None else started_at
 
     def upsert_entity(
         *,
@@ -366,12 +511,30 @@ def build_canonical_entities(
         )
         return entities_by_key[key]
 
-    for batch in _card_batches(knowledge_cards, batch_size=25):
-        raw = llm_client.complete_json(
+    batches = list(_card_batches(knowledge_cards, batch_size=25))
+    for index, batch in enumerate(batches, start=1):
+        item_label = f"{index}/{len(batches)}"
+        raw = _complete_json_with_progress(
+            llm_client,
             system_prompt=ENTITY_SYSTEM_PROMPT,
             user_prompt=_entity_user_prompt(batch),
+            stage="entities",
+            item=item_label,
+            progress_callback=progress_callback,
+            started_at=started,
         )
-        payload = safe_json_parse(raw, repairer=llm_client.repair_json)
+        payload = safe_json_parse(
+            raw,
+            repairer=lambda broken_json, error, item_label=item_label: _repair_json_with_progress(
+                llm_client,
+                broken_json=broken_json,
+                error=error,
+                stage="entities",
+                item=item_label,
+                progress_callback=progress_callback,
+                started_at=started,
+            ),
+        )
         for item in _as_list(payload.get("entities") if isinstance(payload, dict) else payload):
             if not isinstance(item, dict):
                 continue
@@ -440,10 +603,13 @@ def build_canonical_edges(
     entities: list[CanonicalEntity],
     *,
     llm_client: SourceKGLLMClient,
+    progress_callback: SourceKGProgressCallback | None = None,
+    started_at: float | None = None,
 ) -> list[CanonicalEdge]:
     """Build KGBuilder-style edges from cards and canonical entities."""
     entity_by_id = {entity.entity_id: entity for entity in entities}
     edges_by_key: dict[tuple[str, str, str, str], CanonicalEdge] = {}
+    started = time.perf_counter() if started_at is None else started_at
 
     def upsert_edge(edge: CanonicalEdge) -> None:
         if edge.head not in entity_by_id or edge.tail not in entity_by_id:
@@ -466,12 +632,30 @@ def build_canonical_edges(
             }
         )
 
-    for batch_cards, batch_entities in _edge_batches(knowledge_cards, entities, batch_size=25):
-        raw = llm_client.complete_json(
+    batches = list(_edge_batches(knowledge_cards, entities, batch_size=25))
+    for index, (batch_cards, batch_entities) in enumerate(batches, start=1):
+        item_label = f"{index}/{len(batches)}"
+        raw = _complete_json_with_progress(
+            llm_client,
             system_prompt=EDGE_SYSTEM_PROMPT,
             user_prompt=_edge_user_prompt(batch_cards, batch_entities),
+            stage="edges",
+            item=item_label,
+            progress_callback=progress_callback,
+            started_at=started,
         )
-        payload = safe_json_parse(raw, repairer=llm_client.repair_json)
+        payload = safe_json_parse(
+            raw,
+            repairer=lambda broken_json, error, item_label=item_label: _repair_json_with_progress(
+                llm_client,
+                broken_json=broken_json,
+                error=error,
+                stage="edges",
+                item=item_label,
+                progress_callback=progress_callback,
+                started_at=started,
+            ),
+        )
         for item in _as_list(payload.get("edges") if isinstance(payload, dict) else payload):
             if not isinstance(item, dict):
                 continue
@@ -516,14 +700,34 @@ def build_domain_profiles(
     entities: list[CanonicalEntity],
     edges: list[CanonicalEdge],
     llm_client: SourceKGLLMClient,
+    progress_callback: SourceKGProgressCallback | None = None,
+    started_at: float | None = None,
 ) -> dict[str, Any]:
     """Extract reusable KGBuilder-style domain reasoning profiles."""
+    started = time.perf_counter() if started_at is None else started_at
     deterministic = _deterministic_domain_profiles(entities, edges)
-    raw = llm_client.complete_json(
+    item_label = "all"
+    raw = _complete_json_with_progress(
+        llm_client,
         system_prompt=DOMAIN_PROFILE_SYSTEM_PROMPT,
         user_prompt=_domain_profile_user_prompt(knowledge_cards, entities, edges),
+        stage="domain_profiles",
+        item=item_label,
+        progress_callback=progress_callback,
+        started_at=started,
     )
-    payload = safe_json_parse(raw, repairer=llm_client.repair_json)
+    payload = safe_json_parse(
+        raw,
+        repairer=lambda broken_json, error: _repair_json_with_progress(
+            llm_client,
+            broken_json=broken_json,
+            error=error,
+            stage="domain_profiles",
+            item=item_label,
+            progress_callback=progress_callback,
+            started_at=started,
+        ),
+    )
     llm_payload = payload if isinstance(payload, dict) else {}
     profiles = _merge_profile_payloads(deterministic, llm_payload)
     return {
@@ -1769,6 +1973,111 @@ def _llm_metrics(llm_client: SourceKGLLMClient) -> dict[str, int]:
         "llm_output_tokens": int(getattr(llm_client, "output_tokens", 0) or 0),
         "llm_total_tokens": int(getattr(llm_client, "total_tokens", 0) or 0),
     }
+
+
+def _complete_json_with_progress(
+    llm_client: SourceKGLLMClient,
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    stage: str,
+    item: str,
+    progress_callback: SourceKGProgressCallback | None,
+    started_at: float,
+) -> str:
+    call_started = time.perf_counter()
+    _emit_progress(
+        progress_callback,
+        stage=stage,
+        event="llm_start",
+        item=item,
+        elapsed_seconds=_elapsed(started_at),
+        **_llm_metrics(llm_client),
+    )
+    try:
+        raw = llm_client.complete_json(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
+    except Exception as exc:
+        _emit_progress(
+            progress_callback,
+            stage=stage,
+            event="llm_error",
+            item=item,
+            elapsed_seconds=_elapsed(started_at),
+            llm_elapsed_seconds=round(time.perf_counter() - call_started, 3),
+            error_type=type(exc).__name__,
+            **_llm_metrics(llm_client),
+        )
+        raise
+    _emit_progress(
+        progress_callback,
+        stage=stage,
+        event="llm_finish",
+        item=item,
+        elapsed_seconds=_elapsed(started_at),
+        llm_elapsed_seconds=round(time.perf_counter() - call_started, 3),
+        **_llm_metrics(llm_client),
+    )
+    return raw
+
+
+def _repair_json_with_progress(
+    llm_client: SourceKGLLMClient,
+    *,
+    broken_json: str,
+    error: str,
+    stage: str,
+    item: str,
+    progress_callback: SourceKGProgressCallback | None,
+    started_at: float,
+) -> str:
+    repair_started = time.perf_counter()
+    _emit_progress(
+        progress_callback,
+        stage=stage,
+        event="llm_repair_start",
+        item=item,
+        elapsed_seconds=_elapsed(started_at),
+        **_llm_metrics(llm_client),
+    )
+    try:
+        repaired = llm_client.repair_json(broken_json, error)
+    except Exception as exc:
+        _emit_progress(
+            progress_callback,
+            stage=stage,
+            event="llm_repair_error",
+            item=item,
+            elapsed_seconds=_elapsed(started_at),
+            llm_elapsed_seconds=round(time.perf_counter() - repair_started, 3),
+            error_type=type(exc).__name__,
+            **_llm_metrics(llm_client),
+        )
+        raise
+    _emit_progress(
+        progress_callback,
+        stage=stage,
+        event="llm_repair_finish",
+        item=item,
+        elapsed_seconds=_elapsed(started_at),
+        llm_elapsed_seconds=round(time.perf_counter() - repair_started, 3),
+        **_llm_metrics(llm_client),
+    )
+    return repaired
+
+
+def _emit_progress(
+    progress_callback: SourceKGProgressCallback | None,
+    **event: Any,
+) -> None:
+    if progress_callback is not None:
+        progress_callback(event)
+
+
+def _elapsed(started_at: float) -> float:
+    return round(time.perf_counter() - started_at, 3)
 
 
 def _as_list(value: Any) -> list[Any]:

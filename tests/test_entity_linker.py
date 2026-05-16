@@ -11,7 +11,15 @@ from kgtracevis.schema.validators import load_evidence_json
 def test_link_mvtec_example_entities() -> None:
     """The MVTec example should link its core visual fields."""
     evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
-    graph = KnowledgeGraph.from_csv()
+    graph = KnowledgeGraph(
+        nodes=[
+            KGNode("BottleObject", "Bottle", "Object", "mvtec", ("bottle",)),
+            KGNode("ScratchDefect", "Scratch defect", "Defect", "mvtec", ("scratch",)),
+            KGNode("LinearMorphology", "Linear morphology", "Morphology", "mvtec", ("linear",)),
+            KGNode("SurfaceLocation", "Surface location", "Location", "mvtec", ("surface",)),
+        ],
+        edges=[],
+    )
 
     links = link_evidence_entities(evidence, graph)
     selected = {link["field"]: link["selected_entity_id"] for link in links}
@@ -60,7 +68,7 @@ def test_linker_prefers_field_compatible_candidate_labels() -> None:
     graph = KnowledgeGraph(
         nodes=[
             KGNode("WaferObject", "Wafer", "Object", "wafer", ("wafer",)),
-            KGNode("LocDefect", "Loc defect", "AnomalyType", "wafer", ("loc", "local")),
+            KGNode("LocDefect", "Loc defect", "Pattern", "wafer", ("loc", "local")),
             KGNode(
                 "WaferLocalLocation",
                 "Wafer local region",
@@ -103,8 +111,8 @@ def test_linker_exposes_ambiguous_candidate_margin() -> None:
     evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
     graph = KnowledgeGraph(
         nodes=[
-            KGNode("ScratchDefect", "Scratch defect", "DefectType", "mvtec", ("scratch",)),
-            KGNode("ScratchFault", "Scratch fault", "FaultType", "mvtec", ("scratch",)),
+            KGNode("ScratchDefect", "Scratch defect", "Defect", "mvtec", ("scratch",)),
+            KGNode("ScratchFault", "Scratch fault", "Fault", "mvtec", ("scratch",)),
         ],
         edges=[],
     )
@@ -121,8 +129,8 @@ def test_linker_exposes_ambiguous_candidate_margin() -> None:
     ]
 
 
-def test_default_graph_links_wm811k_loc_to_hardened_wafer_entities() -> None:
-    """Default KG loading should include hardened wafer classes for web analysis."""
+def test_new_style_graph_links_wm811k_loc_entities() -> None:
+    """New-style KG labels should support wafer evidence linking."""
     evidence = evidence_from_wm811k_record(
         {
             "dataset": "wafer",
@@ -134,7 +142,26 @@ def test_default_graph_links_wm811k_loc_to_hardened_wafer_entities() -> None:
             "wafer_map": [[0, 0, 0], [0, 2, 0], [0, 0, 0]],
         }
     )
-    graph = KnowledgeGraph.from_default_paths()
+    graph = KnowledgeGraph(
+        nodes=[
+            KGNode("LocDefect", "Loc defect", "Pattern", "wafer", ("loc", "local")),
+            KGNode(
+                "WaferLocalLocation",
+                "Wafer local region",
+                "Location",
+                "wafer",
+                ("local", "localized"),
+            ),
+            KGNode(
+                "WaferClusteredMorphology",
+                "Wafer clustered morphology",
+                "Morphology",
+                "wafer",
+                ("clustered",),
+            ),
+        ],
+        edges=[],
+    )
 
     selected = selected_entities_by_field(link_evidence_entities(evidence, graph))
 

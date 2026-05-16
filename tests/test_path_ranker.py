@@ -12,7 +12,15 @@ from kgtracevis.schema.validators import load_evidence_json
 def test_mvtec_example_returns_root_cause_path() -> None:
     """The MVTec example should return a plausible RCA path."""
     evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
-    graph = KnowledgeGraph.from_default_paths()
+    graph = KnowledgeGraph(
+        nodes=[
+            KGNode("ScratchDefect", "Scratch defect", "Defect", "mvtec", ("scratch",)),
+            KGNode("MechanicalContact", "Mechanical contact", "CandidateCause", "mvtec", ()),
+        ],
+        edges=[
+            _edge("ScratchDefect", "MechanicalContact", scenario="mvtec", confidence=0.7),
+        ],
+    )
     links = link_evidence_entities(evidence, graph)
 
     paths = rank_root_cause_paths(evidence, graph, links)
@@ -27,9 +35,9 @@ def test_path_ranking_ignores_edges_outside_evidence_scenario() -> None:
     evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
     graph = KnowledgeGraph(
         nodes=[
-            KGNode("ScratchDefect", "Scratch defect", "DefectType", "mvtec", ("scratch",)),
-            KGNode("MechanicalContact", "Mechanical contact", "RootCause", "mvtec", ()),
-            KGNode("HandlingDamage", "Handling damage", "RootCause", "mvtec", ()),
+            KGNode("ScratchDefect", "Scratch defect", "Defect", "mvtec", ("scratch",)),
+            KGNode("MechanicalContact", "Mechanical contact", "CandidateCause", "mvtec", ()),
+            KGNode("HandlingDamage", "Handling damage", "CandidateCause", "mvtec", ()),
         ],
         edges=[
             _edge("ScratchDefect", "MechanicalContact", scenario="wafer", confidence=0.99),
@@ -51,9 +59,9 @@ def test_path_ranking_uses_rca_view_scores_when_available() -> None:
     evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
     graph = KnowledgeGraph(
         nodes=[
-            KGNode("ScratchDefect", "Scratch defect", "DefectType", "mvtec", ("scratch",)),
-            KGNode("LowRcaCause", "Low RCA cause", "RootCause", "mvtec", ()),
-            KGNode("HighRcaCause", "High RCA cause", "RootCause", "mvtec", ()),
+            KGNode("ScratchDefect", "Scratch defect", "Defect", "mvtec", ("scratch",)),
+            KGNode("LowRcaCause", "Low RCA cause", "CandidateCause", "mvtec", ()),
+            KGNode("HighRcaCause", "High RCA cause", "CandidateCause", "mvtec", ()),
         ],
         edges=[
             _edge(
@@ -88,8 +96,8 @@ def test_generic_reasoner_preserves_kg_build_provenance() -> None:
     evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
     graph = KnowledgeGraph(
         nodes=[
-            KGNode("ScratchDefect", "Scratch defect", "DefectType", "mvtec", ("scratch",)),
-            KGNode("HighRcaCause", "High RCA cause", "RootCause", "mvtec", ()),
+            KGNode("ScratchDefect", "Scratch defect", "Defect", "mvtec", ("scratch",)),
+            KGNode("HighRcaCause", "High RCA cause", "CandidateCause", "mvtec", ()),
         ],
         edges=[
             _edge(

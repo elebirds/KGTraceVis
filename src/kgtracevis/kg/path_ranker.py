@@ -11,7 +11,7 @@ from kgtracevis.kg.entity_linker import selected_entities_by_field
 from kgtracevis.kg.graph import KGEdge, KnowledgeGraph
 from kgtracevis.schema.evidence_schema import Evidence
 
-ROOT_CAUSE_LABELS = {"RootCause", "CauseCategory", "FaultType"}
+ROOT_CAUSE_LABELS = {"CandidateCause", "Mechanism", "Fault"}
 SOURCE_FIELDS = {"anomaly_type", "variable", "log_event"}
 
 

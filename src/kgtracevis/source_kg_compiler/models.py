@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
@@ -12,6 +13,7 @@ ReviewStatus = Literal["auto", "reviewed", "rejected"]
 
 VALID_SCENARIOS: set[str] = {"shared", "mvtec", "tep", "wafer"}
 VALID_REVIEW_STATUSES: set[str] = {"auto", "reviewed", "rejected"}
+SourceKGProgressCallback = Callable[[dict[str, Any]], None]
 
 NODE_CSV_COLUMNS = ["id", "name", "label", "scenario", "aliases", "description"]
 EDGE_CSV_COLUMNS = [

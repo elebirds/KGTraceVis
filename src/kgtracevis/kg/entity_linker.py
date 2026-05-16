@@ -18,11 +18,11 @@ LINKABLE_OBSERVATION_FACETS = {
 }
 FIELD_ALLOWED_LABELS = {
     "object": {"Object"},
-    "anomaly_type": {"AnomalyType", "DefectType", "FaultType"},
+    "anomaly_type": {"Anomaly", "Defect", "Fault", "Pattern"},
     "location": {"Location", "ProcessUnit"},
-    "morphology": {"Morphology"},
+    "morphology": {"Morphology", "Pattern"},
     "variable": {"Variable"},
-    "log_event": {"LogEvent"},
+    "log_event": {"EvidenceSource"},
 }
 
 
@@ -113,7 +113,7 @@ def _field_aware_candidates(
     *,
     top_k: int,
 ) -> list[Any]:
-    """Prefer candidates whose node labels match the evidence field."""
+    """Return only candidates whose node labels match the evidence field."""
     allowed_labels = FIELD_ALLOWED_LABELS.get(field)
     if not allowed_labels:
         return candidates[:top_k]
@@ -123,7 +123,7 @@ def _field_aware_candidates(
         if graph.nodes.get(candidate.entity_id) is not None
         and graph.nodes[candidate.entity_id].label in allowed_labels
     ]
-    return (filtered or candidates)[:top_k]
+    return filtered[:top_k]
 
 
 def _link_payload(

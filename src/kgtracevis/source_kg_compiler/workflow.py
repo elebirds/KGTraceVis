@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from kgtracevis.source_kg_compiler.compiler import compile_source_kg
-from kgtracevis.source_kg_compiler.models import SourceKGArtifactPaths, SourceKGLLMClient
+from kgtracevis.source_kg_compiler.models import (
+    SourceKGArtifactPaths,
+    SourceKGLLMClient,
+    SourceKGProgressCallback,
+)
 
 
 @dataclass(frozen=True)
@@ -21,6 +25,8 @@ class SourceKGCompilerConfig:
     chunk_size: int = 8000
     chunk_overlap: int = 800
     overwrite: bool = False
+    source_limit: int | None = None
+    progress_callback: SourceKGProgressCallback | None = None
 
 
 @dataclass(frozen=True)
@@ -44,6 +50,8 @@ def run_source_kg_compiler_workflow(config: SourceKGCompilerConfig) -> SourceKGC
         chunk_size=config.chunk_size,
         chunk_overlap=config.chunk_overlap,
         overwrite=config.overwrite,
+        source_limit=config.source_limit,
+        progress_callback=config.progress_callback,
     )
     summary = {
         "artifact_type": "source_kg_compiler_summary_v1",
