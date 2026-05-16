@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import urllib.request
 import uuid
 from collections.abc import Mapping
@@ -35,6 +36,7 @@ from kgtracevis.kg_construction.document_extraction import (
     chunk_source_document,
     extract_draft_kg_from_chunks_with_report,
     parse_source_material,
+    repair_document_ie_response_for_audit,
 )
 from kgtracevis.kg_construction.draft import (
     DraftEntity,
@@ -68,6 +70,9 @@ from kgtracevis.service.kg_construction import (
 DEFAULT_SOURCE_KG_MATERIAL_DIR = Path("runs/source_kg_materials")
 DEFAULT_MATERIAL_POSTGRES_CONFIG_PATH = Path("configs/database.yaml")
 MAX_MATERIAL_UPLOAD_BYTES = 20_000_000
+REMOTE_MATERIAL_FETCH_TIMEOUT_SECONDS = 10
+REMOTE_MATERIAL_FETCH_MAX_SECONDS = 45
+REMOTE_MATERIAL_FETCH_CHUNK_BYTES = 8 * 1024
 
 MaterialSourceKind = Literal["uploaded_file", "url", "local_path", "citation"]
 MaterialType = Literal[
@@ -394,6 +399,8 @@ class KGMaterialExtractionRunResponse(BaseModel):
     record_count: int
     extraction_manifest_path: str
     chunk_results_path: str
+    document_ie_raw_responses_path: str | None = None
+    document_ie_payload_repairs_path: str | None = None
     document_understanding_map_path: str | None = None
     chunk_prompt_context_path: str | None = None
     hypothesis_brainstorming_manifest_path: str | None = None
@@ -768,6 +775,8 @@ def extract_kg_material_to_structured_records(
     record_dir = Path(material.metadata_path).parent
     records_path = record_dir / "structured_records.jsonl"
     chunk_results_path = record_dir / "chunk_extraction_results.jsonl"
+    document_ie_raw_responses_path = record_dir / "document_ie_raw_responses.jsonl"
+    document_ie_payload_repairs_path = record_dir / "document_ie_payload_repairs.jsonl"
     extraction_manifest_path = record_dir / "extraction_manifest.json"
     document_understanding_map_path = record_dir / "document_understanding_map.json"
     chunk_prompt_context_path = record_dir / "chunk_prompt_context.jsonl"
@@ -786,6 +795,8 @@ def extract_kg_material_to_structured_records(
         for path in (
             records_path,
             chunk_results_path,
+            document_ie_raw_responses_path,
+            document_ie_payload_repairs_path,
             extraction_manifest_path,
             document_understanding_map_path,
             chunk_prompt_context_path,
@@ -856,9 +867,10 @@ def extract_kg_material_to_structured_records(
         request=request,
         client=client,
     )
+    ie_recorder = _RecordingDocumentIEClient(ie_client)
     extraction_result = extract_draft_kg_from_chunks_with_report(
         chunks,
-        ie_client,
+        ie_recorder,
         extractor_name=extractor_name,
         extractor_version="v1",
         default_confidence=request.default_confidence,
@@ -867,6 +879,12 @@ def extract_kg_material_to_structured_records(
         continue_on_chunk_error=request.continue_on_chunk_error,
         document_context=document_understanding_map,
     )
+    raw_response_records = ie_recorder.records
+    payload_repair_records = [
+        _document_ie_payload_repair_record(record) for record in raw_response_records
+    ]
+    _write_jsonl(document_ie_raw_responses_path, raw_response_records)
+    _write_jsonl(document_ie_payload_repairs_path, payload_repair_records)
     draft = extraction_result.draft
     candidate_augmentations: list[dict[str, Any]] = []
     mvtec_taxonomy_result = extract_mvtec_taxonomy_from_document(document)
@@ -958,6 +976,8 @@ def extract_kg_material_to_structured_records(
         records=records,
         records_path=records_path,
         chunk_results_path=chunk_results_path,
+        document_ie_raw_responses_path=document_ie_raw_responses_path,
+        document_ie_payload_repairs_path=document_ie_payload_repairs_path,
         extraction_manifest_path=extraction_manifest_path,
         document_understanding_map_path=(
             document_understanding_map_path if document_understanding_map is not None else None
@@ -1100,6 +1120,8 @@ def extract_kg_material_to_structured_records(
             "error_count": extraction_result.error_count,
             "structured_records_path": str(records_path),
             "chunk_results_path": str(chunk_results_path),
+            "document_ie_raw_responses_path": str(document_ie_raw_responses_path),
+            "document_ie_payload_repairs_path": str(document_ie_payload_repairs_path),
             "extraction_manifest_path": str(extraction_manifest_path),
             "document_understanding_map_path": (
                 str(document_understanding_map_path)
@@ -1143,6 +1165,32 @@ def extract_kg_material_to_structured_records(
         payload={
             "chunk_count": extraction_result.chunk_count,
             "error_count": extraction_result.error_count,
+        },
+    )
+    store.save_extraction_artifact(
+        material_id=updated.material_id,
+        extraction_run_id=extraction_run.get("extraction_run_id"),
+        artifact_type="document_ie_raw_responses",
+        uri=str(document_ie_raw_responses_path),
+        media_type="application/jsonl",
+        payload={
+            "chunk_count": len(raw_response_records),
+            "claim_boundary": (
+                "Raw IE client responses are retained for replayable schema repair."
+            ),
+        },
+    )
+    store.save_extraction_artifact(
+        material_id=updated.material_id,
+        extraction_run_id=extraction_run.get("extraction_run_id"),
+        artifact_type="document_ie_payload_repairs",
+        uri=str(document_ie_payload_repairs_path),
+        media_type="application/jsonl",
+        payload={
+            "chunk_count": len(payload_repair_records),
+            "failed_count": sum(
+                1 for record in payload_repair_records if record.get("status") == "failed"
+            ),
         },
     )
     store.save_extraction_artifact(
@@ -1238,6 +1286,8 @@ def extract_kg_material_to_structured_records(
         record_count=len(records),
         extraction_manifest_path=str(extraction_manifest_path),
         chunk_results_path=str(chunk_results_path),
+        document_ie_raw_responses_path=str(document_ie_raw_responses_path),
+        document_ie_payload_repairs_path=str(document_ie_payload_repairs_path),
         document_understanding_map_path=(
             str(document_understanding_map_path)
             if document_understanding_map is not None
@@ -1526,9 +1576,39 @@ def _fetch_material_url_snapshot(material: KGMaterialRecord) -> tuple[Path, dict
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         },
     )
-    with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310
-        content = response.read(MAX_MATERIAL_UPLOAD_BYTES + 1)
-        content_type = response.headers.get("content-type", "")
+    deadline = time.monotonic() + REMOTE_MATERIAL_FETCH_MAX_SECONDS
+    content_parts: list[bytes] = []
+    total_bytes = 0
+    try:
+        with urllib.request.urlopen(  # noqa: S310
+            request,
+            timeout=REMOTE_MATERIAL_FETCH_TIMEOUT_SECONDS,
+        ) as response:
+            while True:
+                if time.monotonic() > deadline:
+                    raise ValueError(
+                        "remote material fetch exceeded "
+                        f"{REMOTE_MATERIAL_FETCH_MAX_SECONDS}s: {material.source_uri}"
+                    )
+                chunk = response.read(REMOTE_MATERIAL_FETCH_CHUNK_BYTES)
+                if not chunk:
+                    break
+                content_parts.append(chunk)
+                total_bytes += len(chunk)
+                if total_bytes > MAX_MATERIAL_UPLOAD_BYTES:
+                    break
+            content_type = response.headers.get("content-type", "")
+    except TimeoutError as exc:
+        raise ValueError(
+            f"remote material fetch timed out for {material.material_id}: "
+            f"{material.source_uri}"
+        ) from exc
+    except OSError as exc:
+        raise ValueError(
+            f"remote material fetch failed for {material.material_id}: "
+            f"{material.source_uri}"
+        ) from exc
+    content = b"".join(content_parts)
     if len(content) > MAX_MATERIAL_UPLOAD_BYTES:
         raise ValueError(
             f"remote material exceeds {MAX_MATERIAL_UPLOAD_BYTES} bytes: {material.source_uri}"
@@ -1604,6 +1684,71 @@ def _chunk_extraction_result_record(
     }
 
 
+class _RecordingDocumentIEClient:
+    """Record raw IE client responses before schema normalization."""
+
+    def __init__(self, inner: DocumentIEClient) -> None:
+        self.inner = inner
+        self.records: list[dict[str, Any]] = []
+
+    def extract_candidates(
+        self,
+        chunk: SourceTextChunk,
+        *,
+        prompt: str,
+        response_schema: Mapping[str, Any],
+    ) -> Mapping[str, Any] | str:
+        response = self.inner.extract_candidates(
+            chunk,
+            prompt=prompt,
+            response_schema=response_schema,
+        )
+        self.records.append(
+            {
+                "artifact_type": "document_ie_raw_response_v1",
+                "chunk_id": chunk.chunk_id,
+                "source_id": chunk.source_id,
+                "chunk_index": chunk.index,
+                "prompt_version": _prompt_version_from_prompt(prompt),
+                "response_media_type": (
+                    "application/json"
+                    if isinstance(response, Mapping)
+                    else "text/plain"
+                ),
+                "response": dict(response) if isinstance(response, Mapping) else response,
+                "response_sha1": sha1(
+                    (
+                        json.dumps(response, sort_keys=True, default=str)
+                        if isinstance(response, Mapping)
+                        else str(response)
+                    ).encode("utf-8")
+                ).hexdigest(),
+            }
+        )
+        return response
+
+
+def _prompt_version_from_prompt(prompt: str) -> str:
+    match = re.search(r"Prompt version:\s*([^.\n]+)", prompt)
+    return match.group(1).strip() if match else ""
+
+
+def _document_ie_payload_repair_record(raw_record: Mapping[str, Any]) -> dict[str, Any]:
+    response = raw_record.get("response")
+    repaired = repair_document_ie_response_for_audit(
+        response if isinstance(response, (Mapping, str)) else str(response),
+        chunk_id=str(raw_record.get("chunk_id") or ""),
+    )
+    return {
+        "artifact_type": "document_ie_payload_repair_v1",
+        "source_id": raw_record.get("source_id"),
+        "chunk_id": raw_record.get("chunk_id"),
+        "chunk_index": raw_record.get("chunk_index"),
+        "raw_response_sha1": raw_record.get("response_sha1"),
+        **repaired,
+    }
+
+
 def _material_extraction_manifest(
     *,
     material: KGMaterialRecord,
@@ -1613,6 +1758,8 @@ def _material_extraction_manifest(
     records: list[dict[str, Any]],
     records_path: Path,
     chunk_results_path: Path,
+    document_ie_raw_responses_path: Path,
+    document_ie_payload_repairs_path: Path,
     extraction_manifest_path: Path,
     document_understanding_map_path: Path | None,
     chunk_prompt_context_path: Path | None,
@@ -1673,6 +1820,14 @@ def _material_extraction_manifest(
             "strict_grounding": request.strict_grounding,
             "continue_on_chunk_error": request.continue_on_chunk_error,
             "allowed_relations": sorted(ALLOWED_DOCUMENT_IE_RELATIONS),
+            "raw_response_capture": {
+                "raw_responses_path": str(document_ie_raw_responses_path),
+                "payload_repairs_path": str(document_ie_payload_repairs_path),
+                "claim_boundary": (
+                    "raw LLM responses are persisted before schema normalization so "
+                    "repair logic can be audited and replayed without another model call"
+                ),
+            },
             "llm_boundary": (
                 "LLM extraction proposes source-attached candidates only; review, "
                 "alignment, semantic projection, and RCA view build remain separate."
@@ -1729,6 +1884,8 @@ def _material_extraction_manifest(
         "artifacts": {
             "structured_records": str(records_path),
             "chunk_extraction_results": str(chunk_results_path),
+            "document_ie_raw_responses": str(document_ie_raw_responses_path),
+            "document_ie_payload_repairs": str(document_ie_payload_repairs_path),
             "extraction_manifest": str(extraction_manifest_path),
             "document_understanding_map": (
                 str(document_understanding_map_path)
@@ -1761,12 +1918,18 @@ def _manifest_chunk_summary(chunk: SourceTextChunk) -> dict[str, Any]:
 
 def _write_json_object(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, default=str),
+        encoding="utf-8",
+    )
 
 
 def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
     path.write_text(
-        "".join(json.dumps(record, sort_keys=True) + "\n" for record in records),
+        "".join(
+            json.dumps(record, sort_keys=True, default=str) + "\n"
+            for record in records
+        ),
         encoding="utf-8",
     )
 
@@ -1774,7 +1937,7 @@ def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
 def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, sort_keys=True) + "\n")
+        handle.write(json.dumps(record, sort_keys=True, default=str) + "\n")
 
 
 def _material_record_exists(store: KGMaterialStore, material_id: str) -> bool:

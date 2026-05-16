@@ -101,6 +101,21 @@ DOCUMENT_IE_LABEL_ALIASES = {
     "WAFERMAP": "Wafer",
 }
 
+WAFER_PATTERN_LABEL_TERMS = frozenset(
+    {
+        "center",
+        "donut",
+        "edge loc",
+        "edge ring",
+        "loc",
+        "near full",
+        "random",
+        "ring",
+        "scratch",
+        "zone",
+    }
+)
+
 CAUSAL_SUGGESTION_RELATIONS = frozenset(
     {
         "CAUSES",
@@ -2299,6 +2314,30 @@ def _coerce_extracted_payload(
         raise ValueError(f"invalid IE payload for {chunk_id}") from exc
 
 
+def repair_document_ie_response_for_audit(
+    response: Mapping[str, Any] | str,
+    *,
+    chunk_id: str,
+) -> dict[str, Any]:
+    """Return the schema-normalized IE payload or an auditable repair error."""
+    try:
+        payload = _coerce_extracted_payload(response, chunk_id=chunk_id)
+    except ValueError as exc:
+        return {
+            "chunk_id": chunk_id,
+            "status": "failed",
+            "error_message": str(exc),
+        }
+    normalized = payload.model_dump(mode="json", exclude_none=True)
+    return {
+        "chunk_id": chunk_id,
+        "status": "normalized",
+        "entity_count": len(payload.entities),
+        "relation_count": len(payload.relations),
+        "normalized_payload": normalized,
+    }
+
+
 def _normalize_extracted_payload_shape(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Normalize common LLM IE aliases before Pydantic validation."""
     normalized = dict(payload)
@@ -2346,6 +2385,16 @@ def _normalize_extracted_entity_shape(item: Mapping[str, Any]) -> dict[str, Any]
     if _is_weak_extracted_entity_id(entity.get("id")):
         entity["id"] = entity.get("name")
     entity.setdefault("label", entity.get("type") or entity.get("category"))
+    entity["label"] = _normalize_extracted_entity_label_for_name(
+        str(entity.get("label") or ""),
+        name=str(entity.get("name") or ""),
+        entity_id=str(entity.get("id") or ""),
+    )
+    entity["id"] = _disambiguate_extracted_entity_id(
+        str(entity.get("id") or ""),
+        label=str(entity.get("label") or ""),
+        name=str(entity.get("name") or ""),
+    )
     return entity
 
 
@@ -2507,7 +2556,30 @@ def _normalize_extracted_entity_label_for_name(value: str, *, name: str, entity_
     normalized_name = _squashed(f"{name} {entity_id}")
     if re.search(r"\bwafer(?:\s*map)?\b", normalized_name):
         return "Wafer"
+    if label in {"AnomalyType", "Defect"} and re.search(r"\bpatterns?\b", normalized_name):
+        return "DefectType"
     return label
+
+
+def _disambiguate_extracted_entity_id(value: str, *, label: str, name: str) -> str:
+    text = _wafer_pattern_term(name or value)
+    if not text:
+        return value
+    base = _coerce_entity_id(text, candidate="wafer entity id disambiguation")
+    if label == "DefectType":
+        return f"{base}Pattern"
+    if label == "Location":
+        return f"{base}Location"
+    if label == "Morphology":
+        return f"{base}Morphology"
+    return value
+
+
+def _wafer_pattern_term(value: str) -> str:
+    text = re.sub(r"[_-]+", " ", str(value or "")).strip().lower()
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+patterns?$", "", text)
+    return text if text in WAFER_PATTERN_LABEL_TERMS else ""
 
 
 def _coerce_entity_candidates_for_chunk(
@@ -2595,11 +2667,7 @@ def _entity_to_draft(
     raw_entity_id = _first_text(entity.id, entity.entity_id, entity.node_id)
     entity_id = _coerce_entity_id(raw_entity_id, candidate=f"entity candidate in {chunk.chunk_id}")
     name = _first_text(entity.name)
-    label = _normalize_extracted_entity_label_for_name(
-        _first_text(entity.label),
-        name=name,
-        entity_id=entity_id,
-    )
+    label = _first_text(entity.label)
     if not entity_id or not name or not label:
         raise ValueError(f"entity candidate in {chunk.chunk_id} missing id/name/label")
     scenario = _normalize_scenario(
@@ -2757,6 +2825,22 @@ def _coerce_entity_id(value: str, *, candidate: str) -> str:
     words = re.findall(r"[A-Za-z0-9]+", normalized)
     if not words:
         raise ValueError(f"{candidate} has invalid entity id {value!r}")
+    if words[0][0].isdigit():
+        leading_alnum = re.fullmatch(r"(\d+)([A-Za-z].*)", words[0])
+        if leading_alnum is not None:
+            words = [leading_alnum.group(2), leading_alnum.group(1), *words[1:]]
+        first_alpha_index = next(
+            (index for index, word in enumerate(words) if word[0].isalpha()),
+            None,
+        )
+        if first_alpha_index is None:
+            words.insert(0, "N")
+        elif first_alpha_index > 0:
+            words = [
+                words[first_alpha_index],
+                *words[:first_alpha_index],
+                *words[first_alpha_index + 1 :],
+            ]
     return "".join(word[:1].upper() + word[1:] for word in words)
 
 

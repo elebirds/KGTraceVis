@@ -767,9 +767,13 @@ def test_runtime_material_store_provider_persists_extraction_state(
     assert store.runs[0]["result_summary"]["chunk_count"] == 1
     assert store.artifacts[0]["artifact_type"] == "structured_records"
     assert store.artifacts[0]["uri"] == response.structured_records_path
+    assert Path(response.document_ie_raw_responses_path or "").is_file()
+    assert Path(response.document_ie_payload_repairs_path or "").is_file()
     assert [artifact["artifact_type"] for artifact in store.artifacts] == [
         "structured_records",
         "chunk_extraction_results",
+        "document_ie_raw_responses",
+        "document_ie_payload_repairs",
         "extraction_manifest",
     ]
 

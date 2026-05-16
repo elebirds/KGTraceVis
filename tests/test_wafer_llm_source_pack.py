@@ -32,6 +32,10 @@ def test_wafer_llm_source_pack_includes_remote_papers_and_records(
     assert by_id["wafer_spatial_patterns_ntut_2006"]["source_kind"] == "url"
     assert by_id["wafer_polar_cnn_mdpi_2024"]["source_kind"] == "url"
     assert by_id["wafer_root_cause_pattern_jstage"]["source_kind"] == "url"
+    assert by_id["wafer_spatial_filtering_pdf_2021"]["material_type"] == "pdf"
+    assert by_id["wafer_spatial_signature_stanford_2012"]["material_type"] == "pdf"
+    assert by_id["wafer_defect_partial_trajectory_arxiv_2025"]["source_kind"] == "url"
+    assert by_id["substrate_mapping_reference"]["source_kind"] == "url"
     assert by_id["wm811k_example_records"]["source_kind"] == "local_path"
     assert Path(by_id["wm811k_example_records"]["source_uri"]).is_file()
     assert material_ids[:3] == [

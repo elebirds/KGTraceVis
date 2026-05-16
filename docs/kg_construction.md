@@ -269,6 +269,7 @@ artifacts and does not publish anything to Neo4j.
 
 The extraction endpoint parses supported local material content into text
 chunks, calls an OpenAI-compatible IE client, writes
+`document_ie_raw_responses.jsonl`, `document_ie_payload_repairs.jsonl`,
 `structured_records.jsonl`, `chunk_extraction_results.jsonl`, and
 `extraction_manifest.json`, then updates the material's extraction metadata.
 The manifest records parser/chunking settings, prompt version, extractor
@@ -308,9 +309,14 @@ Material extraction now exposes the document IE provider explicitly:
   and evidence-grounding checks, but it does not call an external model.
 
 Both providers write `structured_records.jsonl`,
-`chunk_extraction_results.jsonl`, and `extraction_manifest.json`. The manifest
-records the provider, extractor name, prompt version, allowed relation
-whitelist, and the claim boundary that extracted rows are reviewable candidates.
+`chunk_extraction_results.jsonl`, `document_ie_raw_responses.jsonl`,
+`document_ie_payload_repairs.jsonl`, and `extraction_manifest.json`. Raw IE
+responses are persisted before schema normalization or repair, with a response
+hash and chunk locator. Payload repair records then show the normalized payload
+or the validation error for replayable audit without another model call. The
+manifest records the provider, extractor name, prompt version, allowed relation
+whitelist, raw-response capture paths, and the claim boundary that extracted
+rows are reviewable candidates.
 The KG Studio material workflow exposes the same provider selector, so a no-key
 review/demo path is visible instead of hidden inside tests.
 

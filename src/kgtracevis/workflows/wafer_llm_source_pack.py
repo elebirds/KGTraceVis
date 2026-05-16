@@ -177,6 +177,60 @@ def _default_material_specs(
             provenance_role="wafer_ml_method_root_cause_context",
         ),
         WaferSourceMaterialSpec(
+            material_id="wafer_spatial_signature_stanford_2012",
+            title="Wafer spatial signature analysis",
+            source_uri=(
+                "https://cs229.stanford.edu/proj2012/"
+                "SinghPoppe-WaferSpatialSignatureAnalysis.pdf"
+            ),
+            source_kind="url",
+            material_type="pdf",
+            provenance_role="wafer_spatial_signature_process_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="wafer_spatial_filtering_pdf_2021",
+            title="Graph-theoretic spatial filtering for mixed-type wafer bin map patterns",
+            source_uri=(
+                "https://hochbaum.ieor.berkeley.edu/html/pub/"
+                "Spatial-FilteringIEEEsemicon-manuf-2021.pdf"
+            ),
+            source_kind="url",
+            material_type="pdf",
+            provenance_role="wafer_spatial_signature_root_cause_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="wafer_defect_partial_trajectory_arxiv_2025",
+            title="Wafer defect root cause analysis with partial trajectory regression",
+            source_uri="https://arxiv.org/abs/2507.20357",
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_process_root_cause_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="substrate_mapping_reference",
+            title="Substrate mapping wafer-map process reference",
+            source_uri="https://en.wikipedia.org/wiki/Substrate_mapping",
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_mapping_process_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="semiconductor_fabrication_process_reference",
+            title="Semiconductor device fabrication process and defect reference",
+            source_uri="https://en.wikipedia.org/wiki/Semiconductor_device_fabrication",
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_process_root_cause_context",
+        ),
+        WaferSourceMaterialSpec(
+            material_id="wafer_mixed_pattern_transformer_arxiv_2023",
+            title="Mixed-type wafer defect pattern recognition using deformable transformers",
+            source_uri="https://arxiv.org/abs/2303.13827",
+            source_kind="url",
+            material_type="webpage",
+            provenance_role="wafer_mixed_pattern_root_cause_context",
+        ),
+        WaferSourceMaterialSpec(
             material_id="wafer_map_scientific_reports_2023",
             title="Wafer map failure pattern classification paper",
             source_uri="https://www.nature.com/articles/s41598-023-34147-2",

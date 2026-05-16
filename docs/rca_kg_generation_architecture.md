@@ -231,9 +231,12 @@ workspace must also expose the source library record, parser/chunk audit,
 prompt/version policy, chunk-level extraction results, extraction manifest,
 alignment/projection decisions, review queue, and versioned publish manifest.
 The current material-library extraction endpoint writes
+`document_ie_raw_responses.jsonl`, `document_ie_payload_repairs.jsonl`,
 `structured_records.jsonl`, `chunk_extraction_results.jsonl`, and
-`extraction_manifest.json` so reviewers can see what the model attempted before
-those candidates enter RCA-KG construction.
+`extraction_manifest.json` so reviewers can see what the model returned, how
+schema repair normalized it, and what candidate rows entered RCA-KG
+construction. Raw response capture happens before schema repair, so failures
+remain replayable without calling the model again.
 
 ## TEP_KG Integration
 

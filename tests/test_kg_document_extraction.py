@@ -716,11 +716,11 @@ def test_document_ie_repairs_source_grounded_causal_self_link() -> None:
     draft = extract_draft_kg_from_chunks((chunk,), client)
 
     entity_by_id = {entity.entity_id_suggestion: entity for entity in draft.entities}
-    assert entity_by_id["Center"].label == "DefectType"
+    assert entity_by_id["CenterPattern"].label == "DefectType"
     assert entity_by_id["ThinFilmDepositionIssue"].label == "ProcessCondition"
     assert entity_by_id["ThinFilmDepositionIssue"].evidence == "thin film deposition"
     relation = draft.relations[0]
-    assert relation.head == "Center"
+    assert relation.head == "CenterPattern"
     assert relation.tail == "ThinFilmDepositionIssue"
     assert relation.relation == "HAS_PLAUSIBLE_CAUSE"
     assert relation.evidence == text
@@ -765,6 +765,180 @@ def test_document_ie_normalizes_wafer_map_label_from_name() -> None:
     assert draft.entities[0].label == "Wafer"
     assert draft.entities[1].entity_id_suggestion == "Wafer"
     assert draft.entities[1].label == "Wafer"
+
+
+def test_document_ie_disambiguates_wafer_pattern_and_location_terms() -> None:
+    """Pattern names reused as locations should produce distinct node IDs."""
+    text = "Center is a defect type. A center location can show a radial signature."
+    chunk = SourceTextChunk(
+        chunk_id="wafer_note:chunk:0001:ghi",
+        source_id="wafer_note",
+        source_type="plain_text",
+        scenario="wafer",
+        text=text,
+        start_char=0,
+        end_char=len(text),
+        index=1,
+    )
+    client = FakeIEClient(
+        {
+            "entities": [
+                {
+                    "id": "Center",
+                    "name": "Center",
+                    "label": "DefectType",
+                    "evidence": "Center",
+                },
+                {
+                    "id": "center",
+                    "name": "center",
+                    "label": "Location",
+                    "evidence": "center",
+                },
+            ],
+            "relations": [
+                {
+                    "head": "Center",
+                    "relation": "HAS_LOCATION",
+                    "tail": "center",
+                    "evidence": "Center is a defect type.",
+                }
+            ],
+        }
+    )
+
+    draft = extract_draft_kg_from_chunks((chunk,), client)
+
+    assert [entity.entity_id_suggestion for entity in draft.entities] == [
+        "CenterPattern",
+        "CenterLocation",
+    ]
+    assert draft.relations[0].head == "CenterPattern"
+    assert draft.relations[0].tail == "CenterLocation"
+
+
+def test_document_ie_disambiguates_wafer_pattern_and_morphology_terms() -> None:
+    """Known wafer pattern words can also appear as morphology/signature text."""
+    text = "Ring patterns may appear as a spatial morphology on wafer maps."
+    chunk = SourceTextChunk(
+        chunk_id="wafer_note:chunk:0001:jkl",
+        source_id="wafer_note",
+        source_type="plain_text",
+        scenario="wafer",
+        text=text,
+        start_char=0,
+        end_char=len(text),
+        index=1,
+    )
+    client = FakeIEClient(
+        {
+            "entities": [
+                {
+                    "id": "ring pattern",
+                    "name": "ring pattern",
+                    "label": "Morphology",
+                    "evidence": "Ring patterns",
+                }
+            ],
+            "relations": [],
+        }
+    )
+
+    draft = extract_draft_kg_from_chunks((chunk,), client)
+
+    assert draft.entities[0].entity_id_suggestion == "RingMorphology"
+    assert draft.entities[0].label == "Morphology"
+
+
+def test_document_ie_normalizes_named_wafer_pattern_defects_to_defect_type() -> None:
+    """Pattern-bearing defect labels should not conflict with DefectType rows."""
+    text = "The wafer contains a zone defect pattern."
+    chunk = SourceTextChunk(
+        chunk_id="wafer_note:chunk:0001:mno",
+        source_id="wafer_note",
+        source_type="plain_text",
+        scenario="wafer",
+        text=text,
+        start_char=0,
+        end_char=len(text),
+        index=1,
+    )
+    client = FakeIEClient(
+        {
+            "entities": [
+                {
+                    "id": "zone defect pattern",
+                    "name": "zone defect pattern",
+                    "label": "Defect",
+                    "evidence": "zone defect pattern",
+                },
+                {
+                    "id": "systematic patterns",
+                    "name": "systematic patterns",
+                    "label": "AnomalyType",
+                    "evidence": "pattern",
+                },
+            ],
+            "relations": [],
+        }
+    )
+
+    draft = extract_draft_kg_from_chunks((chunk,), client)
+
+    assert draft.entities[0].entity_id_suggestion == "ZoneDefectPattern"
+    assert draft.entities[0].label == "DefectType"
+    assert draft.entities[1].entity_id_suggestion == "SystematicPatterns"
+    assert draft.entities[1].label == "DefectType"
+
+
+def test_document_ie_normalizes_numeric_leading_entity_ids_to_pascal_case() -> None:
+    """IDs repaired from model text must still satisfy KG CSV ID rules."""
+    text = "The full wafer SVM outperformed the 36 zone SVM and the 36 zone baseline."
+    chunk = SourceTextChunk(
+        chunk_id="wafer_note:chunk:0001:pqr",
+        source_id="wafer_note",
+        source_type="plain_text",
+        scenario="wafer",
+        text=text,
+        start_char=0,
+        end_char=len(text),
+        index=1,
+    )
+    client = FakeIEClient(
+        {
+            "entities": [
+                {
+                    "id": "36 zone SVM",
+                    "name": "36 zone SVM",
+                    "label": "Model",
+                    "evidence": "36 zone SVM",
+                },
+                {
+                    "id": "36Zone",
+                    "name": "36 zone",
+                    "label": "Location",
+                    "evidence": "36 zone baseline",
+                },
+            ],
+            "relations": [
+                {
+                    "head": "36 zone SVM",
+                    "relation": "HAS_LOCATION",
+                    "tail": "36Zone",
+                    "evidence": "36 zone SVM and the 36 zone baseline",
+                }
+            ],
+        }
+    )
+
+    draft = extract_draft_kg_from_chunks((chunk,), client)
+
+    assert {entity.entity_id_suggestion for entity in draft.entities} == {
+        "Zone36SVM",
+        "Zone36",
+    }
+    assert draft.relations[0].head == "Zone36SVM"
+    assert draft.relations[0].tail == "Zone36"
 
 
 class FakeIEClient:
