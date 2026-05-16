@@ -258,6 +258,144 @@ Bad:
 export_kg_csv(nodes, edges, nodes_path=..., edges_path=...)
 ```
 
+## Scenario: Document Understanding For Source KG Construction
+
+### 1. Scope / Trigger
+
+- Trigger: changing material extraction, `document_understanding_mode`,
+  document-map artifacts, cross-chunk proposals, or review-time promotion of
+  document-level claims.
+- Reason: document understanding crosses API/service DTOs, LLM adapters,
+  material artifacts, source-to-KG construction, review queues, publish
+  snapshots, and runtime RCA overlay validation.
+
+### 2. Signatures
+
+Material extraction request fields:
+
+```text
+document_understanding_mode: "chunk" | "long_context" | "agentic"
+document_understanding_provider: "none" | "openai" | "offline_fixture"
+document_understanding_prompt_version: str
+document_understanding_fixture_path: str | None
+document_understanding_payload: dict | None
+```
+
+Document understanding adapter boundary:
+
+```python
+class DocumentUnderstandingClient(Protocol):
+    def understand_document(
+        self,
+        document: ParsedSourceDocument,
+        chunks: Sequence[SourceTextChunk],
+        *,
+        mode: DocumentUnderstandingMode,
+        step_name: str,
+        prompt: str,
+        response_schema: Mapping[str, Any],
+        prior_steps: Sequence[Mapping[str, Any]] = (),
+    ) -> Mapping[str, Any] | str: ...
+```
+
+Agentic reading uses a deterministic `DocumentReadingPlan` with chunk summaries
+and per-step `selected_chunk_ids`; prompts should pass selected chunks plus the
+auditable plan, not blindly pack every chunk for every step.
+
+### 3. Contracts
+
+- `chunk` mode is the default and must preserve current chunk IE behavior.
+- `long_context` may call a configured document-understanding client; with
+  provider `none`, it must produce a deterministic advisory fallback.
+- `agentic` must be distinct from `long_context`: it records `agent_steps`,
+  `document_reading_plan`, retrieval strategy, and selected chunk IDs.
+- Document maps are advisory only. They may guide prompt context and review
+  queues, but they are not DraftKG, reviewed KG, or published KG.
+- Chunk IE prompts may receive only chunk-scoped map items. Items without
+  `chunk_ids` must not be injected into every chunk prompt.
+- Cross-chunk proposals must preserve source/document scenario; do not default
+  every proposal to `shared`.
+- Accepting a `cross_chunk_relation_candidate` may stage a reviewed edge only
+  after explicit review. Build-time processing must never create or publish the
+  edge.
+- Optional reviewed RCA staging policy must be explicit in
+  `review_acceptance_policy` or `rca_policy`, capped, relation/family
+  whitelisted, and applied only at review accept time.
+
+### 4. Validation & Error Matrix
+
+| Condition | Behavior |
+|---|---|
+| `chunk` mode includes DU provider or fixture | reject at request validation |
+| DU fixture path and payload are both supplied | reject at request validation |
+| OpenAI DU provider lacks API key | fail only when that provider is used |
+| DU client returns invalid JSON/schema | raise `ValueError` naming `source_id:step_name` |
+| map item has no `chunk_ids` | omit it from chunk-specific prompt context |
+| cross-chunk proposal lacks allowed relation/head/tail/2 spans | write rejected proposal row; no review item |
+| valid cross-chunk proposal before review | review queue item only; no `edges.csv` row |
+| accepted cross-chunk proposal endpoint missing from nodes | reject staging with missing node IDs |
+| RCA opt-in policy requests unsupported relation/family | stage reviewed edge with conservative default RCA fields and audit `ignored` |
+| RCA opt-in score/priority/source_trust exceed caps | cap values and audit applied caps |
+
+### 5. Good/Base/Bad Cases
+
+- Good: `agentic` selects representative chunks for the outline step, records
+  selected chunk IDs, and later steps receive prior step outputs.
+- Base: `long_context` with provider `none` writes deterministic map/context
+  artifacts and keeps existing chunk IE grounding.
+- Bad: a document-map alias without `chunk_ids` appears in every chunk prompt.
+- Bad: a TEP cross-chunk proposal enters review as `scenario=shared`.
+- Bad: accepting a cross-chunk proposal lets caller-supplied
+  `proposed_payload` rewrite relation/confidence/validation fields.
+
+### 6. Tests Required
+
+- Request DTO validation for DU provider/fixture combinations.
+- Fake DU client test proving `long_context` calls the client and writes
+  client-derived map content.
+- Agentic test proving multiple named steps, prior-step counts, reading-plan
+  metadata, and selected chunk prompts that do not include all chunk text.
+- Chunk prompt context test proving unscoped document-map terms do not leak.
+- Cross-chunk proposal tests for rejected invalid proposals, valid review-only
+  proposals, preserved scenario, and no build-time publication.
+- Review workflow tests for default conservative staging, capped RCA opt-in,
+  unsupported opt-in ignored, duplicate edge rejection, and publish snapshot
+  refresh after accept.
+
+### 7. Wrong vs Correct
+
+Wrong:
+
+```python
+prompt = build_document_understanding_prompt(document, all_chunks, step_name="outline")
+```
+
+Correct:
+
+```python
+plan = build_document_reading_plan(document, chunks)
+step_plan = plan.step_for("outline")
+prompt = build_document_understanding_prompt(
+    document,
+    _chunks_for_step(chunks, step_plan),
+    step_name="outline",
+    reading_plan=plan,
+    step_plan=step_plan,
+)
+```
+
+Wrong:
+
+```python
+record["scenario"] = "shared"
+```
+
+Correct:
+
+```python
+record["scenario"] = proposal.get("scenario") or document_map["scenario"] or source.scenario
+```
+
 ### 7. Tests Required
 
 For each extraction:

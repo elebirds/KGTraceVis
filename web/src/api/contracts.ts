@@ -307,11 +307,15 @@ export interface KGMaterialExtractionRequest {
   source_format?: Extract<KGConstructionSourceFormat, "jsonl">;
   prompt_version?: string;
   document_understanding_mode?: "chunk" | "long_context" | "agentic";
+  document_understanding_provider?: "none" | "openai" | "offline_fixture";
+  document_understanding_prompt_version?: string;
   default_confidence?: number;
   strict_grounding?: boolean;
   continue_on_chunk_error?: boolean;
   document_ie_fixture_path?: string | null;
   document_ie_payload?: Record<string, unknown> | null;
+  document_understanding_fixture_path?: string | null;
+  document_understanding_payload?: Record<string, unknown> | null;
   overwrite?: boolean;
 }
 

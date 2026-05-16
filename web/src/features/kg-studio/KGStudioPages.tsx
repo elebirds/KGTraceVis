@@ -357,7 +357,10 @@ function KGSources({
     useState<"openai" | "offline_fixture">("openai");
   const [documentUnderstandingMode, setDocumentUnderstandingMode] =
     useState<"chunk" | "long_context" | "agentic">("chunk");
+  const [documentUnderstandingProvider, setDocumentUnderstandingProvider] =
+    useState<"none" | "openai" | "offline_fixture">("none");
   const [documentIEFixturePath, setDocumentIEFixturePath] = useState("");
+  const [documentUnderstandingFixturePath, setDocumentUnderstandingFixturePath] = useState("");
   const [extractOverwrite, setExtractOverwrite] = useState(false);
   const [materialBuildOverwrite, setMaterialBuildOverwrite] = useState(false);
   const [materialOutputName, setMaterialOutputName] = useState("material_library");
@@ -515,9 +518,17 @@ function KGSources({
           overwrite: extractOverwrite,
           source_format: "jsonl",
           document_understanding_mode: documentUnderstandingMode,
+          document_understanding_provider:
+            documentUnderstandingMode === "chunk" ? "none" : documentUnderstandingProvider,
           document_ie_fixture_path:
             materialExtractionProvider === "offline_fixture" && documentIEFixturePath.trim()
               ? documentIEFixturePath.trim()
+              : undefined,
+          document_understanding_fixture_path:
+            documentUnderstandingMode !== "chunk" &&
+            documentUnderstandingProvider === "offline_fixture" &&
+            documentUnderstandingFixturePath.trim()
+              ? documentUnderstandingFixturePath.trim()
               : undefined
         });
         recordCount += response.record_count;
@@ -696,9 +707,13 @@ function KGSources({
                   <span>Understanding mode</span>
                   <Select
                     value={documentUnderstandingMode}
-                    onChange={(value) =>
-                      setDocumentUnderstandingMode(value as "chunk" | "long_context" | "agentic")
-                    }
+                    onChange={(value) => {
+                      const nextMode = value as "chunk" | "long_context" | "agentic";
+                      setDocumentUnderstandingMode(nextMode);
+                      if (nextMode === "chunk") {
+                        setDocumentUnderstandingProvider("none");
+                      }
+                    }}
                     options={[
                       { label: "Chunk only", value: "chunk" },
                       { label: "Long context map", value: "long_context" },
@@ -706,6 +721,35 @@ function KGSources({
                     ]}
                   />
                 </label>
+                {documentUnderstandingMode !== "chunk" && (
+                  <label className="form-field">
+                    <span>Understanding provider</span>
+                    <Select
+                      value={documentUnderstandingProvider}
+                      onChange={(value) =>
+                        setDocumentUnderstandingProvider(
+                          value as "none" | "openai" | "offline_fixture"
+                        )
+                      }
+                      options={[
+                        { label: "Deterministic fallback", value: "none" },
+                        { label: "OpenAI document reader", value: "openai" },
+                        { label: "Offline map fixture", value: "offline_fixture" }
+                      ]}
+                    />
+                  </label>
+                )}
+                {documentUnderstandingMode !== "chunk" &&
+                  documentUnderstandingProvider === "offline_fixture" && (
+                    <label className="form-field">
+                      <span>Map fixture path</span>
+                      <Input
+                        value={documentUnderstandingFixturePath}
+                        onChange={setDocumentUnderstandingFixturePath}
+                        placeholder="optional if material metadata includes fixture"
+                      />
+                    </label>
+                  )}
                 {materialExtractionProvider === "offline_fixture" && (
                   <label className="form-field">
                     <span>Fixture path</span>

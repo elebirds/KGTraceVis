@@ -80,7 +80,8 @@ top-k RCA path is contract/runtime valid, but not overlay-contribution accepted.
 | Artifact diff | Accepted | fresh no-op and review replay `kg_construction_diff.json` |
 | External profile packs | Accepted | `--profile-path` / `profile_path`, recorded in `profile_manifest.json` |
 | LLM document extraction boundary | Accepted as controlled adapter | OpenAI/offline fixture providers emit DraftKG candidates and material audit artifacts; no-key provider selection is exposed in KG Studio and does not publish facts |
-| Document understanding mode | Accepted as advisory scaffold | `long_context`/`agentic` write `document_understanding_map.json` for terminology/review context; maps do not publish facts or relax chunk evidence grounding |
+| Document understanding mode | Accepted as advisory reader | `long_context` can use an OpenAI-compatible/fixture `DocumentUnderstandingClient`; `agentic` runs retrieval-backed named reader steps and records selected chunk IDs; maps guide chunk IE and cross-chunk review items but do not publish facts or relax chunk evidence grounding |
+| Reviewed cross-chunk RCA opt-in | Accepted as review-only staging policy | Accepted proposals default to non-propagating, unscored reviewed edges; explicit `review_acceptance_policy`/`rca_policy` can apply capped RCA fields only after review accept and relation/family validation |
 
 ## Commands
 

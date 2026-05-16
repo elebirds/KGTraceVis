@@ -318,14 +318,28 @@ Material extraction also supports explicit document understanding modes:
 
 - `document_understanding_mode=chunk` is the default and keeps extraction scoped
   to each parsed chunk.
-- `document_understanding_mode=long_context` writes
-  `document_understanding_map.json` with section, glossary, entity-inventory,
-  ontology-suggestion, relation-hint, and review-hint metadata. The map is then
-  injected into chunk prompts as terminology-only context, with the injected
-  rows recorded in `chunk_prompt_context.jsonl`.
-- `document_understanding_mode=agentic` currently uses the same deterministic
-  advisory map contract as `long_context`; it is a scaffold for future
-  tool/agent-assisted reading, not a fact publication path.
+- `document_understanding_mode=long_context` can call a configured
+  `DocumentUnderstandingClient` before chunk IE. `document_understanding_provider=openai`
+  uses the OpenAI-compatible document-understanding client, while
+  `document_understanding_provider=offline_fixture` replays a map fixture for
+  no-key tests and demos. If no document-understanding provider is configured,
+  the workflow keeps the deterministic advisory fallback for compatibility.
+- `document_understanding_mode=agentic` runs `AgenticDocumentReader`, a named
+  multi-step reader (`outline`, `glossary`, `entity_inventory`,
+  `relation_hints`, `cross_chunk_proposals`). The reader first builds a
+  deterministic document reading plan with chunk summaries and step-specific
+  selected chunk IDs, then sends only the selected chunk group plus prior step
+  outputs to the configured client. Without a client, the mode records an
+  explicit deterministic fallback in `agent_steps`.
+
+Both non-chunk modes write `document_understanding_map.json` with parser/chunk
+coverage, sections, glossary, entity-inventory, ontology-suggestion,
+relation-hint, cross-chunk proposal, unresolved-question, review-hint, and
+reader metadata. The map is then injected into chunk prompts as chunk-scoped
+terminology-only context, with the injected rows recorded in
+`chunk_prompt_context.jsonl`. KG Studio exposes the same document-understanding
+provider choices for material extraction, including deterministic fallback,
+OpenAI document reader, and offline map fixture.
 
 Document maps are planning and review artifacts, not KG facts. They do not
 create DraftKG rows and they do not relax current-chunk evidence grounding.
@@ -334,7 +348,15 @@ Cross-chunk relation proposals may be supplied through
 proposal needs an allowed relation, head and tail text, and at least two
 supporting spans. Valid proposals are written to `cross_chunk_proposals.jsonl`
 and enter the review queue as `cross_chunk_relation_candidate` items; rejected
-proposals remain in the proposal artifact. Neither path publishes KG edges.
+proposals remain in the proposal artifact. Build-time proposal handling never
+publishes KG edges. A reviewer may later accept a valid
+`cross_chunk_relation_candidate`, which stages a reviewed edge in `edges.csv`
+under the document/source scenario and refreshes the normal publish snapshot;
+rejected or unreviewed proposals remain outside the KG. Accepted proposal staging defaults to
+`propagation_enabled=false` and `rca_score=0`. A proposal may include an
+explicit `review_acceptance_policy` or `rca_policy` to request propagation/RCA
+fields, but those requests are applied only after review accept, only for
+whitelisted RCA relation/family combinations, and with conservative caps.
 
 The product boundary is therefore not "LLM returned triples". The product
 experience is the audited construction workspace: source registration, parser

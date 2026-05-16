@@ -310,17 +310,32 @@ This keeps no-key demos and regression runs source-grounded and auditable
 without treating fixtures as reviewed facts.
 
 For richer document work, extraction requests can set
-`document_understanding_mode` to `long_context` or `agentic`. The current
-implementation produces a deterministic `document_understanding_map.json`
-containing parser/chunk coverage, sections, glossary entries, entity inventory,
-relation-family hints, ontology suggestions, unresolved questions, and review
-hints. That map may be injected into chunk prompts as terminology context, and
-the injected context is audited in `chunk_prompt_context.jsonl`; strict evidence
-grounding remains local to the current chunk. Cross-chunk relation proposals are
-accepted only as review items when they include an allowed relation, endpoints,
-and at least two supporting spans. In other words, document understanding can
-guide extraction; it cannot publish KG facts or bypass review for cross-chunk
-claims.
+`document_understanding_mode` to `long_context` or `agentic`.
+`long_context` calls a configured `DocumentUnderstandingClient` to produce an
+advisory whole-document map; `agentic` runs `AgenticDocumentReader` through
+named outline, glossary, entity-inventory, relation-hint, and cross-chunk
+proposal steps. Agentic reading uses a deterministic section/retrieval plan:
+the plan records chunk summaries, selected chunk IDs, and the retrieval
+strategy for each step, and configured clients receive only the selected chunk
+group plus prior step outputs. Both modes keep a deterministic fallback when no
+document understanding provider is configured, so existing chunk-mode and
+no-key workflows remain stable.
+
+The resulting `document_understanding_map.json` contains parser/chunk coverage,
+sections, glossary entries, entity inventory, relation hints, ontology
+suggestions, cross-chunk proposals, unresolved questions, review hints, and
+reader metadata. Chunk IE receives only chunk-scoped terminology context from
+that map, audited in `chunk_prompt_context.jsonl`; strict evidence grounding
+remains local to the current chunk. Cross-chunk relation proposals are accepted
+only as review items when they include an allowed relation, endpoints, and at
+least two supporting spans. Accepted review items may then stage reviewed KG
+edges through the existing review/publish workflow under the document/source
+scenario. The reviewed edge remains non-propagating and RCA-unscored by
+default; an explicit proposal-level
+`review_acceptance_policy`/`rca_policy` may opt into capped propagation and RCA
+score fields only after accept and only for whitelisted relation/family
+combinations. Document understanding can guide extraction; it cannot publish KG
+facts or bypass review for cross-chunk claims.
 
 ## Example Commands
 
