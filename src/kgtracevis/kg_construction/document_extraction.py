@@ -562,6 +562,61 @@ def build_document_understanding_map(
     }
 
 
+def build_chunk_prompt_context_records(
+    chunks: Sequence[SourceTextChunk],
+    document_context: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Return audit-safe prompt context rows injected for each chunk."""
+    if not document_context:
+        return []
+    mode = str(document_context.get("mode") or "unknown")
+    rows: list[dict[str, Any]] = []
+    for chunk in chunks:
+        glossary = _context_items_for_chunk(
+            document_context.get("glossary", []),
+            chunk.chunk_id,
+            limit=8,
+        )
+        inventory = _context_items_for_chunk(
+            document_context.get("entity_inventory", []),
+            chunk.chunk_id,
+            limit=12,
+        )
+        relation_hints = _context_items_for_chunk(
+            document_context.get("relation_hints", []),
+            chunk.chunk_id,
+            limit=8,
+        )
+        rows.append(
+            {
+                "source_id": chunk.source_id,
+                "chunk_id": chunk.chunk_id,
+                "chunk_index": chunk.index,
+                "mode": mode,
+                "glossary_terms": [
+                    str(item.get("term"))
+                    for item in glossary
+                    if isinstance(item, Mapping) and item.get("term")
+                ],
+                "entity_terms": [
+                    str(item.get("term"))
+                    for item in inventory
+                    if isinstance(item, Mapping) and item.get("term")
+                ],
+                "relation_hint_families": [
+                    str(item.get("relation_family"))
+                    for item in relation_hints
+                    if isinstance(item, Mapping) and item.get("relation_family")
+                ],
+                "claim_boundary": (
+                    "Prompt context is advisory terminology only; extracted "
+                    "candidate evidence must still be quoted from this chunk."
+                ),
+            }
+        )
+    return rows
+
+
 class OpenAICompatibleKGExtractionClient:
     """OpenAI-compatible chat-completions client for document IE."""
 
@@ -677,6 +732,28 @@ def _document_context_prompt(document_context: Mapping[str, Any] | None) -> str:
         + "\n".join(parts)
         + "\n\n"
     )
+
+
+def _context_items_for_chunk(
+    value: object,
+    chunk_id: str,
+    *,
+    limit: int,
+) -> list[Mapping[str, Any]]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    scoped: list[Mapping[str, Any]] = []
+    global_items: list[Mapping[str, Any]] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        item_chunk_ids = item.get("chunk_ids")
+        if isinstance(item_chunk_ids, Sequence) and not isinstance(item_chunk_ids, (str, bytes)):
+            if chunk_id in {str(candidate) for candidate in item_chunk_ids}:
+                scoped.append(item)
+        else:
+            global_items.append(item)
+    return [*scoped, *global_items][:limit]
 
 
 def _document_sections(

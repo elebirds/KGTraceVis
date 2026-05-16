@@ -265,6 +265,10 @@ def test_kg_construction_build_route_writes_runtime_artifacts(
     assert Path(payload["semantic_layer_manifest_path"]).is_file()
     assert Path(payload["rca_view_manifest_path"]).is_file()
     assert Path(payload["review_queue_path"]).is_file()
+    assert Path(payload["document_understanding_manifest_path"]).is_file()
+    assert Path(payload["document_map_path"]).is_file()
+    assert Path(payload["chunk_prompt_context_path"]).is_file()
+    assert Path(payload["cross_chunk_proposals_path"]).is_file()
     assert Path(payload["publish_manifest_path"]).is_file()
     assert Path(payload["diff_path"]).is_file()
 
@@ -443,6 +447,16 @@ def test_kg_construction_build_registry_lists_details_and_validates(
     )
     assert builds[0]["rca_view_manifest_path"].endswith("rca_view_manifest.json")
     assert builds[0]["review_queue_path"].endswith("review_queue.json")
+    assert builds[0]["document_understanding_manifest_path"].endswith(
+        "document_understanding_manifest.json"
+    )
+    assert builds[0]["document_map_path"].endswith("document_map.json")
+    assert builds[0]["chunk_prompt_context_path"].endswith(
+        "chunk_prompt_context.jsonl"
+    )
+    assert builds[0]["cross_chunk_proposals_path"].endswith(
+        "cross_chunk_proposals.jsonl"
+    )
     assert builds[0]["publish_manifest_path"].endswith("publish_manifest.json")
 
     detail_response = client.get("/api/kg/construction/builds/kgbuild_registry_unit")
@@ -456,6 +470,10 @@ def test_kg_construction_build_registry_lists_details_and_validates(
         "entity_alignment_manifest.json"
     )
     assert detail["build"]["review_queue_path"].endswith("review_queue.json")
+    assert detail["build"]["document_map_path"].endswith("document_map.json")
+    assert detail["build"]["cross_chunk_proposals_path"].endswith(
+        "cross_chunk_proposals.jsonl"
+    )
     assert detail["summary"]["node_count"] == 2
     assert detail["manifest"]["run"]["run_id"] == "kgbuild_registry_unit"
 
@@ -1312,6 +1330,89 @@ def test_kg_material_routes_upload_register_and_list(
     }
 
 
+def test_kg_material_extract_route_returns_document_understanding_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Extraction API should expose document map and prompt-context artifacts."""
+    monkeypatch.setattr(
+        service_kg_materials,
+        "DEFAULT_SOURCE_KG_MATERIAL_DIR",
+        tmp_path / "materials",
+    )
+    client = TestClient(app)
+
+    upload = client.post(
+        "/api/kg/materials/upload",
+        files={
+            "file": (
+                "mapped_note.txt",
+                (
+                    "# Pump Section\n"
+                    "Condition Monitoring (CM) observes Pump cavitation. "
+                    "Pump cavitation indicates seal wear."
+                ),
+                "text/plain",
+            )
+        },
+        data={
+            "title": "Mapped note",
+            "scenario": "tep",
+            "source_type": "text",
+            "material_id": "mapped_note",
+        },
+    )
+    assert upload.status_code == 200
+
+    response = client.post(
+        "/api/kg/materials/mapped_note/extract",
+        json={
+            "provider": "offline_fixture",
+            "document_understanding_mode": "long_context",
+            "overwrite": True,
+            "document_ie_payload": {
+                "entities": [
+                    {
+                        "id": "PumpCavitation",
+                        "name": "Pump cavitation",
+                        "label": "FaultEvent",
+                        "evidence": "Pump cavitation",
+                    },
+                    {
+                        "id": "SealWear",
+                        "name": "Seal wear",
+                        "label": "RootCause",
+                        "evidence": "seal wear",
+                    },
+                ],
+                "relations": [
+                    {
+                        "head": "PumpCavitation",
+                        "relation": "SUGGESTS_ROOT_CAUSE",
+                        "tail": "SealWear",
+                        "evidence": "Pump cavitation indicates seal wear.",
+                        "confidence": 0.55,
+                    }
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "extracted"
+    assert payload["document_understanding_map_path"]
+    assert payload["chunk_prompt_context_path"]
+    assert payload["material"]["extraction"]["document_understanding_map_path"] == (
+        payload["document_understanding_map_path"]
+    )
+    assert payload["material"]["extraction"]["chunk_prompt_context_path"] == (
+        payload["chunk_prompt_context_path"]
+    )
+    assert Path(payload["document_understanding_map_path"]).is_file()
+    assert Path(payload["chunk_prompt_context_path"]).is_file()
+
+
 def test_kg_material_build_sources_feed_existing_construction_pipeline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1509,8 +1610,16 @@ def test_kg_material_direct_build_runs_material_workflow(
     assert Path(payload["alignment_manifest_path"]).is_file()
     assert Path(payload["published_nodes_path"]).is_file()
     assert Path(payload["published_edges_path"]).is_file()
+    assert Path(payload["document_understanding_manifest_path"]).is_file()
+    assert Path(payload["document_map_path"]).is_file()
+    assert Path(payload["chunk_prompt_context_path"]).is_file()
+    assert Path(payload["cross_chunk_proposals_path"]).is_file()
     assert Path(payload["publish_manifest_path"]).is_file()
     assert payload["artifacts"]["alignment_manifest"] == payload["alignment_manifest_path"]
+    assert payload["artifacts"]["document_map"] == payload["document_map_path"]
+    assert payload["artifacts"]["cross_chunk_proposals"] == (
+        payload["cross_chunk_proposals_path"]
+    )
     assert payload["artifacts"]["kg_construction_diff"] == payload["diff_path"]
     manifest = json.loads(Path(payload["manifest_path"]).read_text(encoding="utf-8"))
     assert manifest["material_library"]["extraction_mode"] == "never"

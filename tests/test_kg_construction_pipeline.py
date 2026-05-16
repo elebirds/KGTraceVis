@@ -35,6 +35,7 @@ from kgtracevis.kg_construction import (
     tep_external_id_to_kg_id,
 )
 from kgtracevis.kg_construction.extractors.structured import StructuredRecordExtractor
+from kgtracevis.kg_construction.models import KG_CONSTRUCTION_REQUIRED_ARTIFACT_KEYS
 
 
 class UnitExtractor:
@@ -1366,23 +1367,4 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
 
 
 def _required_artifact_keys() -> set[str]:
-    return {
-        "nodes",
-        "edges",
-        "published_nodes",
-        "published_edges",
-        "kg_construction_diff",
-        "source_library_manifest",
-        "draft_manifest",
-        "profile_manifest",
-        "alignment_manifest",
-        "source_audit_graph_manifest",
-        "semantic_layer_manifest",
-        "rca_view_manifest",
-        "review_queue",
-        "review_decisions",
-        "publish_manifest",
-        "publish_report",
-        "summary",
-        "manifest",
-    }
+    return set(KG_CONSTRUCTION_REQUIRED_ARTIFACT_KEYS)

@@ -258,6 +258,7 @@ export interface KGMaterialExtractionState {
   extraction_manifest_path?: string | null;
   chunk_results_path?: string | null;
   document_understanding_map_path?: string | null;
+  chunk_prompt_context_path?: string | null;
   error_message?: string | null;
 }
 
@@ -322,6 +323,7 @@ export interface KGMaterialExtractionResponse {
   extraction_manifest_path: string;
   chunk_results_path: string;
   document_understanding_map_path?: string | null;
+  chunk_prompt_context_path?: string | null;
   chunk_count: number;
   error_count: number;
   provider: "openai" | "offline_fixture";
@@ -441,8 +443,25 @@ export interface KGConstructionBuildResponse {
   output_dir: string;
   nodes_path: string;
   edges_path: string;
+  published_nodes_path?: string | null;
+  published_edges_path?: string | null;
   summary_path: string;
   manifest_path: string;
+  source_library_manifest_path?: string | null;
+  draft_manifest_path?: string | null;
+  profile_manifest_path?: string | null;
+  alignment_manifest_path?: string | null;
+  source_audit_graph_manifest_path?: string | null;
+  semantic_layer_manifest_path?: string | null;
+  rca_view_manifest_path?: string | null;
+  review_queue_path?: string | null;
+  document_understanding_manifest_path?: string | null;
+  document_map_path?: string | null;
+  chunk_prompt_context_path?: string | null;
+  cross_chunk_proposals_path?: string | null;
+  publish_manifest_path?: string | null;
+  publish_report_path?: string | null;
+  diff_path?: string | null;
   summary: Record<string, unknown>;
   claim_boundary: string;
 }
@@ -454,9 +473,23 @@ export interface KGConstructionBuildRecord {
   output_dir: string;
   nodes_path: string;
   edges_path: string;
+  published_nodes_path?: string | null;
+  published_edges_path?: string | null;
   summary_path: string;
   manifest_path: string;
+  source_library_manifest_path?: string | null;
+  draft_manifest_path?: string | null;
+  profile_manifest_path?: string | null;
+  alignment_manifest_path?: string | null;
+  source_audit_graph_manifest_path?: string | null;
+  semantic_layer_manifest_path?: string | null;
+  rca_view_manifest_path?: string | null;
   review_queue_path?: string | null;
+  document_understanding_manifest_path?: string | null;
+  document_map_path?: string | null;
+  chunk_prompt_context_path?: string | null;
+  cross_chunk_proposals_path?: string | null;
+  publish_manifest_path?: string | null;
   publish_report_path?: string | null;
   diff_path?: string | null;
   source_ids: string[];

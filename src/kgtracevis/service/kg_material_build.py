@@ -38,6 +38,10 @@ class KGMaterialBuildResponse(BaseModel):
     rca_view_manifest_path: str
     review_queue_path: str
     review_decisions_path: str
+    document_understanding_manifest_path: str
+    document_map_path: str
+    chunk_prompt_context_path: str
+    cross_chunk_proposals_path: str
     publish_manifest_path: str
     publish_report_path: str
     diff_path: str
@@ -96,6 +100,10 @@ def run_kg_material_build(
         rca_view_manifest_path=str(result.rca_view_manifest_path),
         review_queue_path=str(result.review_queue_path),
         review_decisions_path=str(result.review_decisions_path),
+        document_understanding_manifest_path=str(result.document_understanding_manifest_path),
+        document_map_path=str(result.document_map_path),
+        chunk_prompt_context_path=str(result.chunk_prompt_context_path),
+        cross_chunk_proposals_path=str(result.cross_chunk_proposals_path),
         publish_manifest_path=str(result.publish_manifest_path),
         publish_report_path=str(result.publish_report_path),
         diff_path=str(result.diff_path),

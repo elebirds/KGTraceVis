@@ -64,6 +64,10 @@ class MaterialKGConstructionWorkflowResult:
     rca_view_manifest_path: Path
     review_queue_path: Path
     review_decisions_path: Path
+    document_understanding_manifest_path: Path
+    document_map_path: Path
+    chunk_prompt_context_path: Path
+    cross_chunk_proposals_path: Path
     publish_manifest_path: Path
     publish_report_path: Path
     diff_path: Path
@@ -148,6 +152,10 @@ def run_material_kg_construction_workflow(
         rca_view_manifest_path=build_result.rca_view_manifest_path,
         review_queue_path=build_result.review_queue_path,
         review_decisions_path=Path(artifacts["review_decisions"]),
+        document_understanding_manifest_path=build_result.document_understanding_manifest_path,
+        document_map_path=build_result.document_map_path,
+        chunk_prompt_context_path=build_result.chunk_prompt_context_path,
+        cross_chunk_proposals_path=build_result.cross_chunk_proposals_path,
         publish_manifest_path=build_result.publish_manifest_path,
         publish_report_path=build_result.publish_report_path,
         diff_path=build_result.diff_path,

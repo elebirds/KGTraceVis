@@ -25,6 +25,7 @@ from kgtracevis.kg_construction.document_extraction import (
     OpenAICompatibleKGExtractionClient,
     ParsedSourceDocument,
     SourceTextChunk,
+    build_chunk_prompt_context_records,
     build_document_understanding_map,
     chunk_source_document,
     extract_draft_kg_from_chunks_with_report,
@@ -77,6 +78,7 @@ class KGMaterialExtractionState(BaseModel):
     extraction_manifest_path: str | None = None
     chunk_results_path: str | None = None
     document_understanding_map_path: str | None = None
+    chunk_prompt_context_path: str | None = None
     error_message: str | None = None
 
     @model_validator(mode="after")
@@ -300,6 +302,7 @@ class KGMaterialExtractionRunResponse(BaseModel):
     extraction_manifest_path: str
     chunk_results_path: str
     document_understanding_map_path: str | None = None
+    chunk_prompt_context_path: str | None = None
     chunk_count: int
     error_count: int
     provider: DocumentIEProvider
@@ -669,6 +672,7 @@ def extract_kg_material_to_structured_records(
     chunk_results_path = record_dir / "chunk_extraction_results.jsonl"
     extraction_manifest_path = record_dir / "extraction_manifest.json"
     document_understanding_map_path = record_dir / "document_understanding_map.json"
+    chunk_prompt_context_path = record_dir / "chunk_prompt_context.jsonl"
     existing_artifacts = [
         path.name
         for path in (
@@ -676,6 +680,7 @@ def extract_kg_material_to_structured_records(
             chunk_results_path,
             extraction_manifest_path,
             document_understanding_map_path,
+            chunk_prompt_context_path,
         )
         if path.exists()
     ]
@@ -717,6 +722,10 @@ def extract_kg_material_to_structured_records(
             mode=request.document_understanding_mode,
         )
         _write_json_object(document_understanding_map_path, document_understanding_map)
+        _write_jsonl(
+            chunk_prompt_context_path,
+            build_chunk_prompt_context_records(chunks, document_understanding_map),
+        )
 
     ie_client, extractor_name = _document_ie_client_for_request(
         material=material,
@@ -759,6 +768,9 @@ def extract_kg_material_to_structured_records(
         document_understanding_map_path=(
             document_understanding_map_path if document_understanding_map is not None else None
         ),
+        chunk_prompt_context_path=(
+            chunk_prompt_context_path if document_understanding_map is not None else None
+        ),
         document_understanding_map=document_understanding_map,
         extraction_run_id=extraction_run_id,
         provider=request.provider,
@@ -787,6 +799,11 @@ def extract_kg_material_to_structured_records(
                 chunk_results_path=str(chunk_results_path),
                 document_understanding_map_path=(
                     str(document_understanding_map_path)
+                    if document_understanding_map is not None
+                    else None
+                ),
+                chunk_prompt_context_path=(
+                    str(chunk_prompt_context_path)
                     if document_understanding_map is not None
                     else None
                 ),
@@ -819,6 +836,11 @@ def extract_kg_material_to_structured_records(
             "extraction_manifest_path": str(extraction_manifest_path),
             "document_understanding_map_path": (
                 str(document_understanding_map_path)
+                if document_understanding_map is not None
+                else None
+            ),
+            "chunk_prompt_context_path": (
+                str(chunk_prompt_context_path)
                 if document_understanding_map is not None
                 else None
             ),
@@ -877,6 +899,21 @@ def extract_kg_material_to_structured_records(
                 "claim_boundary": document_understanding_map["claim_boundary"],
             },
         )
+        store.save_extraction_artifact(
+            material_id=updated.material_id,
+            extraction_run_id=extraction_run.get("extraction_run_id"),
+            artifact_type="chunk_prompt_context",
+            uri=str(chunk_prompt_context_path),
+            media_type="application/jsonl",
+            payload={
+                "mode": request.document_understanding_mode,
+                "chunk_count": len(chunks),
+                "claim_boundary": (
+                    "Prompt context is advisory terminology only; extracted "
+                    "candidate evidence must still be quoted from each chunk."
+                ),
+            },
+        )
     return KGMaterialExtractionRunResponse(
         material=updated,
         structured_records_path=str(records_path),
@@ -885,6 +922,11 @@ def extract_kg_material_to_structured_records(
         chunk_results_path=str(chunk_results_path),
         document_understanding_map_path=(
             str(document_understanding_map_path)
+            if document_understanding_map is not None
+            else None
+        ),
+        chunk_prompt_context_path=(
+            str(chunk_prompt_context_path)
             if document_understanding_map is not None
             else None
         ),
@@ -948,6 +990,8 @@ def _construction_source_from_material(
         metadata["chunk_results_path"] = extraction.chunk_results_path
     if extraction.document_understanding_map_path:
         metadata["document_understanding_map_path"] = extraction.document_understanding_map_path
+    if extraction.chunk_prompt_context_path:
+        metadata["chunk_prompt_context_path"] = extraction.chunk_prompt_context_path
     return KGConstructionSourceInput(
         source_id=source_id,
         source_type=source_type,
@@ -1118,6 +1162,7 @@ def _material_extraction_manifest(
     chunk_results_path: Path,
     extraction_manifest_path: Path,
     document_understanding_map_path: Path | None,
+    chunk_prompt_context_path: Path | None,
     document_understanding_map: dict[str, Any] | None,
     extraction_run_id: str,
     provider: str,
@@ -1180,6 +1225,11 @@ def _material_extraction_manifest(
                 if document_understanding_map_path is not None
                 else None
             ),
+            "chunk_prompt_context_path": (
+                str(chunk_prompt_context_path)
+                if chunk_prompt_context_path is not None
+                else None
+            ),
             "artifact_type": (
                 document_understanding_map.get("artifact_type")
                 if document_understanding_map is not None
@@ -1209,6 +1259,11 @@ def _material_extraction_manifest(
             "document_understanding_map": (
                 str(document_understanding_map_path)
                 if document_understanding_map_path is not None
+                else None
+            ),
+            "chunk_prompt_context": (
+                str(chunk_prompt_context_path)
+                if chunk_prompt_context_path is not None
                 else None
             ),
         },

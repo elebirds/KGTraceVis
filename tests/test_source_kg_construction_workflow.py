@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from kgtracevis.kg_construction import KGConstructionSource
+from kgtracevis.kg_construction.models import KG_CONSTRUCTION_REQUIRED_ARTIFACT_KEYS
 from kgtracevis.workflows.source_kg_construction import (
     SourceKGConstructionWorkflowConfig,
     run_source_kg_construction_workflow,
@@ -116,6 +117,10 @@ def test_source_kg_construction_workflow_writes_rca_layer_artifacts(
         result.semantic_layer_manifest_path,
         result.rca_view_manifest_path,
         result.review_queue_path,
+        result.document_understanding_manifest_path,
+        result.document_map_path,
+        result.chunk_prompt_context_path,
+        result.cross_chunk_proposals_path,
         result.publish_manifest_path,
         output_dir / "published_nodes.csv",
         output_dir / "published_edges.csv",
@@ -262,6 +267,118 @@ def test_source_kg_construction_workflow_loads_external_profile_pack(
     assert artifact_diff["artifacts"]["profile_manifest"]["changed"] is False
 
 
+def test_source_kg_construction_workflow_reviews_cross_chunk_proposals(
+    tmp_path: Path,
+) -> None:
+    """Document-level proposals should be review-only and diffable."""
+    output_dir = tmp_path / "document_understanding_build"
+    document_map_path = tmp_path / "document_understanding_map.json"
+    chunk_prompt_context_path = tmp_path / "chunk_prompt_context.jsonl"
+    document_map_path.write_text(
+        json.dumps(
+            {
+                "artifact_type": "document_understanding_map_v1",
+                "mode": "long_context",
+                "source_id": "mapped_source",
+                "cross_chunk_proposals": [
+                    {
+                        "head": "PumpFault",
+                        "relation": "CAUSES",
+                        "tail": "SealWear",
+                        "confidence": 0.9,
+                        "relation_family": "CAUSES",
+                        "supporting_spans": [
+                            {
+                                "source_id": "mapped_source",
+                                "chunk_id": "mapped_source:chunk:0001:abc",
+                                "text": "Pump fault is described.",
+                            },
+                            {
+                                "source_id": "mapped_source",
+                                "chunk_id": "mapped_source:chunk:0002:def",
+                                "text": "Seal wear is listed as the mechanism.",
+                            },
+                        ],
+                    },
+                    {
+                        "head": "PumpFault",
+                        "relation": "CAUSES",
+                        "tail": "SealWear",
+                        "supporting_spans": [
+                            {
+                                "source_id": "mapped_source",
+                                "chunk_id": "mapped_source:chunk:0001:abc",
+                                "text": "Only one span.",
+                            }
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    chunk_prompt_context_path.write_text(
+        json.dumps(
+            {
+                "source_id": "mapped_source",
+                "chunk_id": "mapped_source:chunk:0001:abc",
+                "chunk_index": 1,
+                "mode": "long_context",
+                "entity_terms": ["PumpFault"],
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_source_kg_construction_workflow(
+        SourceKGConstructionWorkflowConfig(
+            output_dir=output_dir,
+            sources=(
+                KGConstructionSource(
+                    source_id="mapped_source",
+                    source_type="manual_table",
+                    scenario="shared",
+                    text=_entity_only_source_csv(),
+                    metadata={
+                        "source_format": "csv",
+                        "document_understanding_map_path": str(document_map_path),
+                        "chunk_prompt_context_path": str(chunk_prompt_context_path),
+                    },
+                ),
+            ),
+            run_id="kgbuild_document_understanding_unit",
+        )
+    )
+
+    review_queue = json.loads(result.review_queue_path.read_text(encoding="utf-8"))
+    cross_chunk_items = [
+        item
+        for item in review_queue
+        if item["item_type"] == "cross_chunk_relation_candidate"
+    ]
+    proposal_rows = [
+        json.loads(line)
+        for line in (output_dir / "cross_chunk_proposals.jsonl").read_text().splitlines()
+    ]
+    artifact_diff = json.loads((output_dir / "kg_construction_diff.json").read_text())
+    published_edges = _read_csv_rows(output_dir / "published_edges.csv")
+
+    assert len(cross_chunk_items) == 1
+    assert cross_chunk_items[0]["priority"] == 96
+    assert [row["validation_status"] for row in proposal_rows] == [
+        "review_required",
+        "rejected",
+    ]
+    assert proposal_rows[0]["confidence"] == 0.6
+    assert "at least two supporting spans" in proposal_rows[1]["validation_errors"][0]
+    assert published_edges == []
+    assert artifact_diff["artifacts"]["document_map"]["changed"] is False
+    assert artifact_diff["artifacts"]["cross_chunk_proposals"]["added_count"] == 0
+    assert artifact_diff["artifacts"]["cross_chunk_proposals"]["changed_count"] == 0
+
+
 def test_source_kg_construction_workflow_protects_existing_outputs(
     tmp_path: Path,
 ) -> None:
@@ -311,29 +428,21 @@ def _toy_generic_source_csv() -> str:
     )
 
 
+def _entity_only_source_csv() -> str:
+    return "\n".join(
+        [
+            "id,name,label,head,relation,tail,scenario,evidence,confidence",
+            "PumpFault,Pump fault,Fault,,,,shared,pump fault row,0.82",
+            "SealWear,Seal wear,RootCause,,,,shared,seal wear row,0.82",
+            "",
+        ]
+    )
+
+
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
 
 
 def _required_artifact_keys() -> set[str]:
-    return {
-        "nodes",
-        "edges",
-        "published_nodes",
-        "published_edges",
-        "kg_construction_diff",
-        "source_library_manifest",
-        "draft_manifest",
-        "profile_manifest",
-        "alignment_manifest",
-        "source_audit_graph_manifest",
-        "semantic_layer_manifest",
-        "rca_view_manifest",
-        "review_queue",
-        "review_decisions",
-        "publish_manifest",
-        "publish_report",
-        "summary",
-        "manifest",
-    }
+    return set(KG_CONSTRUCTION_REQUIRED_ARTIFACT_KEYS)

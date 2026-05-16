@@ -166,6 +166,10 @@ class KGConstructionBuildResponse(BaseModel):
     semantic_layer_manifest_path: str | None = None
     rca_view_manifest_path: str | None = None
     review_queue_path: str | None = None
+    document_understanding_manifest_path: str | None = None
+    document_map_path: str | None = None
+    chunk_prompt_context_path: str | None = None
+    cross_chunk_proposals_path: str | None = None
     publish_manifest_path: str | None = None
     publish_report_path: str | None = None
     diff_path: str | None = None
@@ -266,6 +270,10 @@ class KGConstructionBuildRecord(BaseModel):
     semantic_layer_manifest_path: str | None = None
     rca_view_manifest_path: str | None = None
     review_queue_path: str | None = None
+    document_understanding_manifest_path: str | None = None
+    document_map_path: str | None = None
+    chunk_prompt_context_path: str | None = None
+    cross_chunk_proposals_path: str | None = None
     publish_manifest_path: str | None = None
     publish_report_path: str | None = None
     diff_path: str | None = None
@@ -552,6 +560,10 @@ def run_kg_construction_build(
         semantic_layer_manifest_path=str(result.semantic_layer_manifest_path),
         rca_view_manifest_path=str(result.rca_view_manifest_path),
         review_queue_path=str(result.review_queue_path),
+        document_understanding_manifest_path=str(result.document_understanding_manifest_path),
+        document_map_path=str(result.document_map_path),
+        chunk_prompt_context_path=str(result.chunk_prompt_context_path),
+        cross_chunk_proposals_path=str(result.cross_chunk_proposals_path),
         publish_manifest_path=str(result.publish_manifest_path),
         publish_report_path=str(result.publish_report_path),
         diff_path=str(result.diff_path),
@@ -1000,6 +1012,26 @@ def _build_record_from_manifest_path(manifest_path: Path) -> KGConstructionBuild
             artifacts,
             "review_queue",
             fallback=default_artifacts["review_queue"],
+        ),
+        document_understanding_manifest_path=_artifact_path(
+            artifacts,
+            "document_understanding_manifest",
+            fallback=default_artifacts["document_understanding_manifest"],
+        ),
+        document_map_path=_artifact_path(
+            artifacts,
+            "document_map",
+            fallback=default_artifacts["document_map"],
+        ),
+        chunk_prompt_context_path=_artifact_path(
+            artifacts,
+            "chunk_prompt_context",
+            fallback=default_artifacts["chunk_prompt_context"],
+        ),
+        cross_chunk_proposals_path=_artifact_path(
+            artifacts,
+            "cross_chunk_proposals",
+            fallback=default_artifacts["cross_chunk_proposals"],
         ),
         publish_manifest_path=_artifact_path(
             artifacts,

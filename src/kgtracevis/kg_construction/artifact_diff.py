@@ -43,6 +43,20 @@ def build_kg_construction_artifact_snapshot(output_dir: str | Path) -> dict[str,
             artifact_paths["review_queue"],
             key_fields=("item_type", "target_key"),
         ),
+        "document_understanding_manifest": _json_object_snapshot(
+            artifact_paths["document_understanding_manifest"],
+        ),
+        "document_map": _json_object_snapshot(
+            artifact_paths["document_map"],
+        ),
+        "chunk_prompt_context": _jsonl_record_snapshot(
+            artifact_paths["chunk_prompt_context"],
+            key_fields=("source_id", "chunk_id"),
+        ),
+        "cross_chunk_proposals": _jsonl_record_snapshot(
+            artifact_paths["cross_chunk_proposals"],
+            key_fields=("proposal_id",),
+        ),
         "alignment_manifest": _json_object_snapshot(
             artifact_paths["alignment_manifest"],
         ),
@@ -80,6 +94,22 @@ def build_kg_construction_diff(
         "review_queue": _diff_records(
             before.get("review_queue"),
             after.get("review_queue"),
+        ),
+        "document_understanding_manifest": _diff_objects(
+            before.get("document_understanding_manifest"),
+            after.get("document_understanding_manifest"),
+        ),
+        "document_map": _diff_objects(
+            before.get("document_map"),
+            after.get("document_map"),
+        ),
+        "chunk_prompt_context": _diff_records(
+            before.get("chunk_prompt_context"),
+            after.get("chunk_prompt_context"),
+        ),
+        "cross_chunk_proposals": _diff_records(
+            before.get("cross_chunk_proposals"),
+            after.get("cross_chunk_proposals"),
         ),
         "alignment_manifest": _diff_objects(
             before.get("alignment_manifest"),
@@ -174,6 +204,28 @@ def _json_list_snapshot(path: Path, *, key_fields: tuple[str, ...]) -> dict[str,
         raise ValueError(f"diff artifact must be a JSON array: {path}")
     rows = [row for row in payload if isinstance(row, dict)]
     records = {_record_key(row, key_fields): _jsonable(row) for row in rows}
+    return {
+        "kind": "records",
+        "path": str(path),
+        "exists": True,
+        "key_fields": list(key_fields),
+        "count": len(records),
+        "records": dict(sorted(records.items())),
+    }
+
+
+def _jsonl_record_snapshot(path: Path, *, key_fields: tuple[str, ...]) -> dict[str, Any]:
+    if not path.is_file():
+        return _missing_record_snapshot(path)
+    rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise ValueError(f"diff artifact row must be a JSON object: {path}:{line_number}")
+        rows.append(_jsonable(payload))
+    records = {_record_key(row, key_fields): row for row in rows}
     return {
         "kind": "records",
         "path": str(path),

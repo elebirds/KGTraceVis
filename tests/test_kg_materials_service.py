@@ -191,8 +191,10 @@ def test_material_extraction_supports_no_key_offline_fixture_provider(
     assert source_text not in json.dumps(manifest)
 
 
-def test_material_extraction_long_context_writes_document_map(
+@pytest.mark.parametrize("mode", ["long_context", "agentic"])
+def test_material_extraction_document_understanding_writes_document_map(
     tmp_path: Path,
+    mode: str,
 ) -> None:
     """Document understanding mode should create advisory map artifacts."""
     source_text = (
@@ -214,7 +216,7 @@ def test_material_extraction_long_context_writes_document_map(
     response = extract_kg_material_to_structured_records(
         "mapped_note",
         KGMaterialExtractionRunRequest(
-            document_understanding_mode="long_context",
+            document_understanding_mode=mode,
             overwrite=True,
         ),
         client=client,
@@ -223,9 +225,13 @@ def test_material_extraction_long_context_writes_document_map(
 
     assert response.status == "extracted"
     assert response.document_understanding_map_path is not None
-    assert response.material.extraction.document_understanding_mode == "long_context"
+    assert response.chunk_prompt_context_path is not None
+    assert response.material.extraction.document_understanding_mode == mode
     assert response.material.extraction.document_understanding_map_path == (
         response.document_understanding_map_path
+    )
+    assert response.material.extraction.chunk_prompt_context_path == (
+        response.chunk_prompt_context_path
     )
     assert client.prompts
     assert "Document-level context for terminology only" in client.prompts[0]
@@ -234,25 +240,40 @@ def test_material_extraction_long_context_writes_document_map(
     document_map = json.loads(
         Path(response.document_understanding_map_path).read_text(encoding="utf-8")
     )
-    assert document_map["mode"] == "long_context"
+    assert document_map["mode"] == mode
     assert document_map["artifact_type"] == "document_understanding_map_v1"
     assert document_map["cross_chunk_proposals"] == []
     assert document_map["glossary"][0]["term"] == "CM"
     assert document_map["sections"][0]["title"] == "Pump Section"
     assert "not DraftKG" in document_map["claim_boundary"]
+    prompt_context_rows = [
+        json.loads(line)
+        for line in Path(response.chunk_prompt_context_path)
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert prompt_context_rows[0]["mode"] == mode
+    assert prompt_context_rows[0]["source_id"] == "mapped_note"
+    assert "CM" in prompt_context_rows[0]["glossary_terms"]
 
     manifest = json.loads(Path(response.extraction_manifest_path).read_text(encoding="utf-8"))
-    assert manifest["document_understanding"]["mode"] == "long_context"
+    assert manifest["document_understanding"]["mode"] == mode
     assert manifest["document_understanding"]["artifact_path"] == (
         response.document_understanding_map_path
+    )
+    assert manifest["document_understanding"]["chunk_prompt_context_path"] == (
+        response.chunk_prompt_context_path
     )
     build_sources = prepare_kg_material_construction_build(
         KGMaterialSelectedBuildRequest(material_ids=["mapped_note"]),
         material_root=tmp_path,
     )
-    assert build_sources.sources[0].metadata["document_understanding_mode"] == "long_context"
+    assert build_sources.sources[0].metadata["document_understanding_mode"] == mode
     assert build_sources.sources[0].metadata["document_understanding_map_path"] == (
         response.document_understanding_map_path
+    )
+    assert build_sources.sources[0].metadata["chunk_prompt_context_path"] == (
+        response.chunk_prompt_context_path
     )
 
 
