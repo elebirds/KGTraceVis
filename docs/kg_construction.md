@@ -412,6 +412,14 @@ sources and sent through the same document understanding, chunk IE,
 brainstorming, review queue, semantic projection, and publish snapshot stages as
 any other source.
 
+When the DS-MVTec dataset card contains a source-level `defects_dict`, material
+extraction adds a deterministic `mvtec_source_taxonomy` DraftKG supplement. This
+supplement parses object/defect labels from the source text, adds object-defect,
+morphology, location, and low-confidence plausible-mechanism candidate edges,
+and records the supplement in `extraction_manifest.json`. The plausible
+mechanism rows are explicitly review-only label-derived hypotheses; they are not
+verified MVTec factory root causes and are not published without review.
+
 ```bash
 uv run python scripts/build_mvtec_llm_source_pack.py \
   --output-dir runs/mvtec_llm_source_pack \

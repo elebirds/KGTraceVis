@@ -126,6 +126,14 @@ candidate or hypothesis material until a reviewer accepts source-backed edges.
 Generated catalogs, hand-curated KG snapshots, and LLM-produced tables are not
 valid source inputs for the MVTec validation path.
 
+For raw-material MVTec evaluation, the material pipeline may add a
+deterministic `mvtec_source_taxonomy` supplement when a source document contains
+the DS-MVTec `defects_dict`. The supplement creates reviewable DraftKG
+candidates for object-defect coverage, label-derived morphology/location
+constraints, and low-confidence plausible mechanism categories. It records its
+counts in the extraction manifest and does not treat those mechanism candidates
+as reviewed RCA facts.
+
 Profiles can opt into a deliberately small semantic derivation DSL: two-hop
 rules that derive one relation from two existing semantic relations. Derived
 edges are still source-backed candidates because their evidence cites the

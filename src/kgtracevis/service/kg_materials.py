@@ -36,7 +36,12 @@ from kgtracevis.kg_construction.document_extraction import (
     extract_draft_kg_from_chunks_with_report,
     parse_source_material,
 )
-from kgtracevis.kg_construction.draft import DraftEntity, DraftRelation, KGConstructionSource
+from kgtracevis.kg_construction.draft import (
+    DraftEntity,
+    DraftKG,
+    DraftRelation,
+    KGConstructionSource,
+)
 from kgtracevis.kg_construction.hypothesis_brainstorming import (
     DEFAULT_HYPOTHESIS_BRAINSTORMING_PROMPT_VERSION,
     HypothesisBrainstormingClient,
@@ -46,6 +51,9 @@ from kgtracevis.kg_construction.hypothesis_brainstorming import (
     OfflineHypothesisFixtureClient,
     OpenAICompatibleHypothesisBrainstormingClient,
     run_hypothesis_brainstorming,
+)
+from kgtracevis.kg_construction.mvtec_taxonomy_extraction import (
+    extract_mvtec_taxonomy_from_document,
 )
 from kgtracevis.kg_construction.review_queue import review_queue_payload
 from kgtracevis.service.kg_construction import (
@@ -856,6 +864,12 @@ def extract_kg_material_to_structured_records(
         document_context=document_understanding_map,
     )
     draft = extraction_result.draft
+    candidate_augmentations: list[dict[str, Any]] = []
+    mvtec_taxonomy_result = extract_mvtec_taxonomy_from_document(document)
+    if mvtec_taxonomy_result.has_candidates:
+        draft = DraftKG.combine((draft, mvtec_taxonomy_result.draft))
+        if mvtec_taxonomy_result.summary is not None:
+            candidate_augmentations.append(mvtec_taxonomy_result.summary.to_payload())
     records = _structured_records_from_draft(draft)
     _write_jsonl(records_path, records)
     _write_jsonl(
@@ -962,6 +976,7 @@ def extract_kg_material_to_structured_records(
             if hypothesis_result is not None
             else None
         ),
+        candidate_augmentations=candidate_augmentations,
         extraction_run_id=extraction_run_id,
         provider=request.provider,
         request=request,
@@ -1588,6 +1603,7 @@ def _material_extraction_manifest(
     document_understanding_map: dict[str, Any] | None,
     hypothesis_result_manifest: dict[str, Any] | None,
     hypothesis_artifact_paths: Mapping[str, Path] | None,
+    candidate_augmentations: list[dict[str, Any]],
     extraction_run_id: str,
     provider: str,
     request: KGMaterialExtractionRunRequest,
@@ -1645,6 +1661,7 @@ def _material_extraction_manifest(
                 "LLM extraction proposes source-attached candidates only; review, "
                 "alignment, semantic projection, and RCA view build remain separate."
             ),
+            "candidate_augmentations": candidate_augmentations,
         },
         "document_understanding": {
             "mode": request.document_understanding_mode,

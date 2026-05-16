@@ -103,6 +103,13 @@ from kgtracevis.kg_construction.mvtec_source_bundle import (
     DownloadableSource,
     download_mvtec_source_bundle,
 )
+from kgtracevis.kg_construction.mvtec_taxonomy_extraction import (
+    MVTecTaxonomyExtractionResult,
+    MVTecTaxonomyExtractionSummary,
+    draft_from_mvtec_taxonomy,
+    extract_mvtec_taxonomy_from_document,
+    parse_mvtec_defects_dict,
+)
 from kgtracevis.kg_construction.pipeline import KGConstructionResult, run_kg_construction
 from kgtracevis.kg_construction.profiles import (
     GENERIC_PROFILE,
@@ -197,6 +204,8 @@ __all__ = [
     "HypothesisProvider",
     "LLMDocumentIEExtractor",
     "MVTEC_PROFILE",
+    "MVTecTaxonomyExtractionResult",
+    "MVTecTaxonomyExtractionSummary",
     "OfflineDocumentIEExtractor",
     "OfflineHypothesisFixtureClient",
     "OpenAICompatibleHypothesisBrainstormingClient",
@@ -246,12 +255,14 @@ __all__ = [
     "draft_relation_to_kg_edge",
     "draft_rows_from_draft",
     "draft_status_to_review_status",
+    "draft_from_mvtec_taxonomy",
     "edge_weight",
     "export_edges_csv",
     "export_kg_csv",
     "export_nodes_csv",
     "extract_candidate_entities",
     "extract_candidate_triples",
+    "extract_mvtec_taxonomy_from_document",
     "extract_source_draft",
     "load_source_registry",
     "load_source_text",
@@ -262,6 +273,7 @@ __all__ = [
     "profile_from_mapping",
     "profile_for_scenario",
     "profile_to_manifest",
+    "parse_mvtec_defects_dict",
     "project_semantic_layer",
     "review_decision_for_edge",
     "review_decision_for_item",
