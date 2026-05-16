@@ -94,6 +94,7 @@ def test_source_kg_compiler_evaluation_reports_strict_generated_only(
     assert report["baseline_comparison"]["status"] == "compared"
     assert report["strict_runtime"]["strict_generated_only"] is True
     assert report["strict_runtime"]["default_kg_layers_loaded"] is False
+    assert report["strict_runtime"]["tep_root_kgd_reasoner_enabled"] is True
     assert report["strict_runtime"]["loaded_node_files"] == [
         result.compiled_output_dir.joinpath("nodes.csv").as_posix()
     ]

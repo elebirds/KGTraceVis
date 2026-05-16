@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from kgtracevis.kg.graph import KGEdge, KGNode, KnowledgeGraph
 from kgtracevis.schema.validators import load_evidence_json
 from kgtracevis.workflows.root_cause_provider_selection import (
     build_pipeline,
@@ -22,7 +23,29 @@ def test_root_cause_reasoner_is_single_tep_root_kgd_provider() -> None:
 def test_single_provider_leaves_non_tep_cases_on_generic_paths() -> None:
     """The TEP provider returns empty for non-TEP evidence, allowing generic fallback."""
     evidence = load_evidence_json("data/examples/ds_mvtec_example.json")
-    result = build_pipeline().analyze(evidence, top_k=2)
+    graph = KnowledgeGraph(
+        nodes=[
+            KGNode("ScratchDefect", "Scratch defect", "Defect", "mvtec", ("scratch",)),
+            KGNode("MechanicalContact", "Mechanical contact", "CandidateCause", "mvtec", ()),
+        ],
+        edges=[
+            KGEdge(
+                head="ScratchDefect",
+                relation="HAS_PLAUSIBLE_CAUSE",
+                tail="MechanicalContact",
+                scenario="mvtec",
+                source="test_root_cause_provider_selection",
+                evidence="Scratch defects can be plausibly caused by contact.",
+                confidence=0.7,
+                weight=0.3,
+                review_status="auto",
+                feedback_count=0,
+                accepted_count=0,
+                rejected_count=0,
+            ),
+        ],
+    )
+    result = build_pipeline(graph=graph).analyze(evidence, top_k=2)
 
     assert result.top_k_paths
     assert result.ranked_root_causes

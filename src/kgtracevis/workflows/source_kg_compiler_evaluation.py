@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from kgtracevis.core import KGTracePipeline
 from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
 from kgtracevis.schema.validators import load_evidence_json
 from kgtracevis.source_kg_compiler.models import SourceKGLLMClient, SourceKGProgressCallback
@@ -19,6 +18,7 @@ from kgtracevis.source_kg_compiler.workflow import (
     SourceKGCompilerConfig,
     run_source_kg_compiler_workflow,
 )
+from kgtracevis.workflows.root_cause_provider_selection import build_pipeline
 
 DEFAULT_KGBUILDER_MATERIALS_DIR = Path.home() / "code" / "KGBuilder" / "materials"
 DEFAULT_KGBUILDER_OUTPUTS_DIR = Path.home() / "code" / "KGBuilder" / "outputs"
@@ -214,7 +214,7 @@ def _analyze_samples(
     started_at: float | None = None,
 ) -> list[dict[str, Any]]:
     started = time.perf_counter() if started_at is None else started_at
-    pipeline = KGTracePipeline(graph=graph)
+    pipeline = build_pipeline(graph=graph)
     reports: list[dict[str, Any]] = []
     _emit_progress(
         progress_callback,
@@ -372,6 +372,7 @@ def _evaluation_report(
         "strict_runtime": {
             "strict_generated_only": True,
             "default_kg_layers_loaded": False,
+            "tep_root_kgd_reasoner_enabled": True,
             "loaded_node_files": [compiled_output_dir.joinpath("nodes.csv").as_posix()],
             "loaded_edge_files": [compiled_output_dir.joinpath("edges.csv").as_posix()],
             "forbidden_default_layers": [
