@@ -36,6 +36,7 @@ from kgtracevis.service.kg_construction import (
     KGConstructionReviewQueueRequest,
     get_kg_construction_build,
     get_kg_construction_build_artifact_path,
+    get_kg_construction_build_job,
     get_kg_construction_review_queue,
     list_kg_construction_builds,
     list_kg_construction_source_uploads,
@@ -43,6 +44,7 @@ from kgtracevis.service.kg_construction import (
     review_kg_construction_edge,
     run_kg_construction_build,
     save_kg_construction_source_upload,
+    submit_kg_construction_build_job,
     validate_kg_construction_build,
     validate_kg_construction_overlay,
 )
@@ -342,6 +344,30 @@ def create_app() -> FastAPI:
             return run_kg_construction_build(request).model_dump(mode="json")
         except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/build-jobs")
+    def kg_construction_build_job_submit(
+        request: KGConstructionBuildRequest,
+    ) -> dict[str, object]:
+        try:
+            return submit_kg_construction_build_job(request).model_dump(mode="json")
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/build-jobs/{job_id}")
+    def kg_construction_build_job_status(
+        job_id: str,
+        after_sequence: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=0, le=500)] = 200,
+    ) -> dict[str, object]:
+        try:
+            return get_kg_construction_build_job(
+                job_id,
+                after_sequence=after_sequence,
+                limit=limit,
+            ).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/kg/construction/builds")
     def kg_construction_builds() -> dict[str, object]:

@@ -23,6 +23,8 @@ Remove the old KG construction pipeline while preserving the current source KG c
   management, with extraction reduced to "compiler-ready source registration".
 * Keep API-compatible construction endpoints as a thin compatibility shell over
   `source_kg_compiler`; do not keep the old DraftKG/review/publish engine.
+* Expose asynchronous KG build jobs with pollable progress so API clients do not
+  appear frozen during long LLM compiler runs.
 * Remove imports/references to deleted legacy code.
 
 ## Acceptance Criteria
@@ -32,6 +34,8 @@ Remove the old KG construction pipeline while preserving the current source KG c
 * [x] No default analysis path depends on removed legacy KG construction code.
 * [x] Material records can still be registered/uploaded and converted into
       source compiler inputs.
+* [x] KG build API clients can submit a background build job and poll compiler
+      progress events.
 * [x] `data/kg/tep_root_kgd` remains untouched.
 
 ## Out of Scope
@@ -44,3 +48,5 @@ Remove the old KG construction pipeline while preserving the current source KG c
 ## Technical Notes
 
 * Created for direct implementation after user decision.
+* Progress events come from the source KG compiler `progress_callback` and are
+  persisted as JSONL under the source KG build root.

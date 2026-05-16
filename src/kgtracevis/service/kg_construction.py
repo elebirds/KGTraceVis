@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import threading
 import uuid
 from collections import Counter
 from datetime import UTC, datetime
@@ -25,6 +26,7 @@ from kgtracevis.source_kg_compiler import (
 )
 
 DEFAULT_SOURCE_KG_BUILD_DIR = Path("runs/source_kg_builds")
+MAX_PROGRESS_EVENTS_IN_RESPONSE = 200
 
 ConstructionSourceType = Literal[
     "structured_records",
@@ -169,6 +171,27 @@ class KGConstructionBuildResponse(BaseModel):
     published_nodes_path: str | None = None
     published_edges_path: str | None = None
     summary: dict[str, Any]
+    claim_boundary: str = CLAIM_BOUNDARY
+
+
+class KGConstructionBuildJobResponse(BaseModel):
+    """Progress envelope for one asynchronous source KG compiler job."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str
+    run_id: str
+    status: Literal["queued", "running", "succeeded", "failed"]
+    submitted_at: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    output_dir: str
+    progress_path: str
+    progress_event_count: int = 0
+    last_event: dict[str, Any] | None = None
+    events: list[dict[str, Any]] = Field(default_factory=list)
+    result: dict[str, Any] | None = None
+    error: str | None = None
     claim_boundary: str = CLAIM_BOUNDARY
 
 
@@ -358,10 +381,15 @@ class KGConstructionSourceListResponse(BaseModel):
     sources: list[KGConstructionUploadedSource]
 
 
+_BUILD_JOBS: dict[str, KGConstructionBuildJobResponse] = {}
+_BUILD_JOB_LOCK = threading.Lock()
+
+
 def run_kg_construction_build(
     request: KGConstructionBuildRequest,
     *,
     build_root: Path | None = None,
+    progress_callback: Any | None = None,
 ) -> KGConstructionBuildResponse:
     """Compile provided sources with the current source KG compiler."""
     output_dir = (build_root or DEFAULT_SOURCE_KG_BUILD_DIR) / safe_output_name(
@@ -377,6 +405,7 @@ def run_kg_construction_build(
             llm_client=OpenAICompatibleSourceKGLLM(),
             default_scenario=default_scenario,
             overwrite=request.overwrite,
+            progress_callback=progress_callback,
         )
     )
     summary = _build_summary(
@@ -413,6 +442,61 @@ def run_kg_construction_build(
         rca_view_manifest_path=result.artifact_paths.runtime_views_manifest.as_posix(),
         summary=summary,
     )
+
+
+def submit_kg_construction_build_job(
+    request: KGConstructionBuildRequest,
+    *,
+    build_root: Path | None = None,
+) -> KGConstructionBuildJobResponse:
+    """Start a source KG compiler build in the background and return progress state."""
+    root = build_root or DEFAULT_SOURCE_KG_BUILD_DIR
+    run_id = request.run_id or f"sourcekg_{uuid.uuid4().hex[:12]}"
+    job_request = request.model_copy(update={"run_id": run_id})
+    output_dir = root / safe_output_name(job_request.output_name)
+    job_id = run_id
+    progress_path = _job_progress_path(job_id, build_root=root)
+    job = KGConstructionBuildJobResponse(
+        job_id=job_id,
+        run_id=run_id,
+        status="queued",
+        submitted_at=_utc_now(),
+        output_dir=output_dir.as_posix(),
+        progress_path=progress_path.as_posix(),
+    )
+    _store_build_job(job, build_root=root)
+    thread = threading.Thread(
+        target=_run_kg_construction_build_job,
+        args=(job_id, job_request, root),
+        name=f"kg-source-build-{job_id}",
+        daemon=True,
+    )
+    thread.start()
+    return get_kg_construction_build_job(job_id, build_root=root)
+
+
+def get_kg_construction_build_job(
+    job_id: str,
+    *,
+    build_root: Path | None = None,
+    after_sequence: int = 0,
+    limit: int = MAX_PROGRESS_EVENTS_IN_RESPONSE,
+) -> KGConstructionBuildJobResponse:
+    """Return current progress state for one asynchronous compiler job."""
+    root = build_root or DEFAULT_SOURCE_KG_BUILD_DIR
+    with _BUILD_JOB_LOCK:
+        job = _BUILD_JOBS.get(job_id)
+    if job is None:
+        status_path = _job_status_path(job_id, build_root=root)
+        if not status_path.is_file():
+            raise ValueError(f"unknown construction build job_id: {job_id}")
+        job = KGConstructionBuildJobResponse.model_validate(_read_json(status_path))
+    events = [
+        event
+        for event in _read_progress_events(Path(job.progress_path))
+        if int(event.get("sequence") or 0) > after_sequence
+    ][:limit]
+    return job.model_copy(update={"events": events})
 
 
 def save_kg_construction_source_upload(
@@ -784,6 +868,144 @@ def _queue_summary(edges: list[KGConstructionReviewQueueEdge]) -> KGConstruction
     )
 
 
+def _run_kg_construction_build_job(
+    job_id: str,
+    request: KGConstructionBuildRequest,
+    build_root: Path,
+) -> None:
+    """Thread target for one async compiler build."""
+    _update_build_job(
+        job_id,
+        build_root=build_root,
+        status="running",
+        started_at=_utc_now(),
+    )
+
+    def progress_callback(event: dict[str, Any]) -> None:
+        _append_build_job_progress(job_id, event, build_root=build_root)
+
+    try:
+        result = run_kg_construction_build(
+            request,
+            build_root=build_root,
+            progress_callback=progress_callback,
+        )
+    except Exception as exc:  # pragma: no cover - exercised by API/runtime failure paths.
+        _append_build_job_progress(
+            job_id,
+            {
+                "stage": "build_job",
+                "event": "job_failed",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+            build_root=build_root,
+        )
+        _update_build_job(
+            job_id,
+            build_root=build_root,
+            status="failed",
+            finished_at=_utc_now(),
+            error=f"{type(exc).__name__}: {exc}",
+        )
+        return
+    _append_build_job_progress(
+        job_id,
+        {
+            "stage": "build_job",
+            "event": "job_succeeded",
+            "output_dir": result.output_dir,
+            "node_count": int(result.summary.get("node_count") or 0),
+            "edge_count": int(result.summary.get("edge_count") or 0),
+        },
+        build_root=build_root,
+    )
+    _update_build_job(
+        job_id,
+        build_root=build_root,
+        status="succeeded",
+        finished_at=_utc_now(),
+        result=result.model_dump(mode="json"),
+    )
+
+
+def _store_build_job(
+    job: KGConstructionBuildJobResponse,
+    *,
+    build_root: Path,
+) -> None:
+    with _BUILD_JOB_LOCK:
+        _BUILD_JOBS[job.job_id] = job
+    _write_json(
+        _job_status_path(job.job_id, build_root=build_root),
+        job.model_dump(mode="json"),
+    )
+
+
+def _update_build_job(
+    job_id: str,
+    *,
+    build_root: Path,
+    **updates: Any,
+) -> KGConstructionBuildJobResponse:
+    current = get_kg_construction_build_job(job_id, build_root=build_root, limit=0)
+    progress_events = _read_progress_events(Path(current.progress_path))
+    if progress_events:
+        updates.setdefault("progress_event_count", len(progress_events))
+        updates.setdefault("last_event", progress_events[-1])
+    updated = current.model_copy(update=updates)
+    _store_build_job(updated, build_root=build_root)
+    return updated
+
+
+def _append_build_job_progress(
+    job_id: str,
+    event: dict[str, Any],
+    *,
+    build_root: Path,
+) -> None:
+    current = get_kg_construction_build_job(job_id, build_root=build_root, limit=0)
+    progress_path = Path(current.progress_path)
+    progress_path.parent.mkdir(parents=True, exist_ok=True)
+    sequence = current.progress_event_count + 1
+    payload = {
+        "sequence": sequence,
+        "recorded_at": _utc_now(),
+        "job_id": job_id,
+        "run_id": current.run_id,
+        **event,
+    }
+    with progress_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, sort_keys=True) + "\n")
+    _update_build_job(
+        job_id,
+        build_root=build_root,
+        progress_event_count=sequence,
+        last_event=payload,
+    )
+
+
+def _read_progress_events(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    events: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        loaded = json.loads(line)
+        if isinstance(loaded, dict):
+            events.append(loaded)
+    return events
+
+
+def _job_status_path(job_id: str, *, build_root: Path) -> Path:
+    return build_root / "_jobs" / safe_output_name(job_id) / "status.json"
+
+
+def _job_progress_path(job_id: str, *, build_root: Path) -> Path:
+    return build_root / "_jobs" / safe_output_name(job_id) / "progress.jsonl"
+
+
 def _safe_filename(value: str) -> str:
     name = Path(value).name
     if not name or name in {".", ".."}:
@@ -808,6 +1030,7 @@ __all__ = [
     "ConstructionSourceFormat",
     "ConstructionSourceType",
     "KGConstructionBuildDetail",
+    "KGConstructionBuildJobResponse",
     "KGConstructionBuildListResponse",
     "KGConstructionBuildRecord",
     "KGConstructionBuildRequest",
@@ -830,6 +1053,7 @@ __all__ = [
     "KGConstructionUploadedSource",
     "get_kg_construction_build",
     "get_kg_construction_build_artifact_path",
+    "get_kg_construction_build_job",
     "get_kg_construction_review_queue",
     "list_kg_construction_builds",
     "list_kg_construction_source_uploads",
@@ -838,6 +1062,7 @@ __all__ = [
     "run_kg_construction_build",
     "safe_output_name",
     "save_kg_construction_source_upload",
+    "submit_kg_construction_build_job",
     "validate_kg_construction_build",
     "validate_kg_construction_overlay",
 ]
