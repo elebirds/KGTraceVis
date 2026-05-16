@@ -1744,3 +1744,38 @@ Completed Document Understanding Mode iteration with prompt-context artifacts, c
 ### Next Steps
 
 - None - task complete
+
+
+## Session 46: Complete retrieval-backed document understanding reader
+
+**Date**: 2026-05-16
+**Task**: Complete retrieval-backed document understanding reader
+**Branch**: `main`
+
+### Summary
+
+Implemented real document-understanding mode with OpenAI/fixture clients, retrieval-backed agentic reading plans, chunk-scoped prompt context, cross-chunk review staging, RCA opt-in policy, docs, frontend contract, and verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bb6c313` | (see git log) |
+| `461bb78` | (see git log) |
+| `558f6c4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
