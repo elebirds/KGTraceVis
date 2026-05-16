@@ -61,7 +61,12 @@ def parsed_source_content_summary(
 
 def parse_source_for_extraction(source: KGConstructionSource) -> ParsedSourceContent:
     """Parse a source into rows or chunks without emitting KG facts."""
-    if source.source_type in {"structured_records", "manual_table", "tep_variable_mapping"}:
+    if source.source_type in {
+        "structured_records",
+        "manual_table",
+        "mvtec_ad_catalog",
+        "tep_variable_mapping",
+    }:
         if source.path is not None:
             rows = tuple(load_structured_records(source.path))
             path = str(source.path)

@@ -10,6 +10,7 @@ from kgtracevis.kg_construction.extractors.document_llm import (
     LLMDocumentIEExtractor,
     OfflineDocumentIEExtractor,
 )
+from kgtracevis.kg_construction.extractors.mvtec_catalog import MVTecCatalogExtractor
 from kgtracevis.kg_construction.extractors.structured import (
     StructuredRecordExtractor,
     default_extractor_registry,
@@ -24,6 +25,7 @@ __all__ = [
     "ExtractorRegistry",
     "KGSourceExtractor",
     "LLMDocumentIEExtractor",
+    "MVTecCatalogExtractor",
     "OfflineDocumentIEExtractor",
     "ParsedKGSourceExtractor",
     "StructuredRecordExtractor",

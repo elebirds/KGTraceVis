@@ -69,6 +69,11 @@ def parse_args() -> argparse.Namespace:
         help="Explicit TEP_KG RCA edges.jsonl path.",
     )
     parser.add_argument(
+        "--mvtec-ad-catalog",
+        type=Path,
+        help="MVTec AD defect catalog CSV/JSON/JSONL path.",
+    )
+    parser.add_argument(
         "--toy-generic-structured-source",
         action="store_true",
         help="Build a tiny generic manual-table source for smoke tests and demos.",
@@ -102,8 +107,8 @@ def main() -> None:
         raise SystemExit(
             "No source inputs provided. Pass --tep-semantic-lift-dir, "
             "--tep-semantic-nodes/--tep-semantic-edges, --tep-variable-mapping, "
-            "--tep-rca-graph-dir, --source-library, --toy-generic-structured-source, "
-            "or --toy-generic-document-source."
+            "--tep-rca-graph-dir, --mvtec-ad-catalog, --source-library, "
+            "--toy-generic-structured-source, or --toy-generic-document-source."
         )
 
     try:
@@ -183,6 +188,15 @@ def _build_sources(args: argparse.Namespace) -> list[KGConstructionSource]:
                     "nodes_path": args.tep_rca_nodes,
                     "edges_path": args.tep_rca_edges,
                 },
+            )
+        )
+    if args.mvtec_ad_catalog is not None:
+        sources.append(
+            KGConstructionSource(
+                source_id="mvtec_ad_catalog",
+                source_type="mvtec_ad_catalog",
+                scenario="mvtec",
+                path=args.mvtec_ad_catalog,
             )
         )
     if args.toy_generic_structured_source:

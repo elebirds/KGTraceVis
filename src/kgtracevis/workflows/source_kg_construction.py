@@ -15,6 +15,7 @@ from kgtracevis.kg_construction import (
     KGConstructionManifest,
     KGConstructionReviewDecision,
     KGConstructionSource,
+    MVTecCatalogExtractor,
     OfflineDocumentIEExtractor,
     RcaProfile,
     StructuredRecordExtractor,
@@ -763,6 +764,7 @@ def _runtime_extractor_registry() -> ExtractorRegistry:
     return ExtractorRegistry(
         [
             StructuredRecordExtractor(),
+            MVTecCatalogExtractor(),
             OfflineDocumentIEExtractor(),
             TepSemanticLiftExtractor(),
             TepVariableMappingExtractor(),
@@ -815,6 +817,7 @@ def _materialize_text_source(
     source_types_with_inline_text = {
         "structured_records",
         "manual_table",
+        "mvtec_ad_catalog",
         *DOCUMENT_TEXT_SOURCE_TYPES,
     }
     if source.source_type not in source_types_with_inline_text:

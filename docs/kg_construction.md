@@ -40,6 +40,7 @@ remain useful for reproducible examples, tests, and paper-facing exports.
 Supported or planned source classes include:
 
 - dataset labels and benchmark tables;
+- MVTec AD defect catalogs via `source_type=mvtec_ad_catalog`;
 - adapter/model output records;
 - mask geometry and wafer-map feature outputs;
 - official papers and dataset documentation;
@@ -59,6 +60,10 @@ The reusable backend MVP is implemented under `src/kgtracevis/kg_construction/`:
   and manifest DTOs;
 - `pipeline.py` runs registered extractors and validates KG rows;
 - `tep_import.py` adapts TEP semantic-lift outputs into `scenario=tep` drafts.
+- `extractors/mvtec_catalog.py` adapts MVTec AD category/defect catalog rows
+  into reviewable visual anomaly and plausible mechanism candidates. MVTec
+  candidate causes are explicitly marked as investigation hypotheses, not
+  verified root-cause labels.
 
 Use the maintained CLI entry point to materialize candidate CSV artifacts:
 
@@ -67,6 +72,15 @@ uv run python scripts/build_source_kg.py \
   --tep-semantic-lift-dir /Users/hhm/code/TEP_KG/data/processed/kg \
   --tep-variable-mapping /Users/hhm/code/TEP_KG/outputs/kg/tep_variable_mapping.csv \
   --output-dir runs/source_kg_build/tep_candidate \
+  --overwrite
+```
+
+For MVTec catalog construction:
+
+```bash
+uv run python scripts/build_source_kg.py \
+  --mvtec-ad-catalog data/external/Defect_Spectrum/mvtec_ad_catalog.csv \
+  --output-dir runs/source_kg_build/mvtec_catalog \
   --overwrite
 ```
 

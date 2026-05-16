@@ -426,6 +426,86 @@ def test_source_kg_construction_workflow_protects_existing_outputs(
         )
 
 
+def test_source_kg_construction_workflow_builds_mvtec_catalog_kg(
+    tmp_path: Path,
+) -> None:
+    """MVTec catalog input should become reviewable RCA-oriented KG candidates."""
+    output_dir = tmp_path / "mvtec_catalog_build"
+    catalog_path = tmp_path / "mvtec_ad_catalog.csv"
+    catalog_path.write_text(_mvtec_catalog_csv(), encoding="utf-8")
+
+    result = run_source_kg_construction_workflow(
+        SourceKGConstructionWorkflowConfig(
+            output_dir=output_dir,
+            sources=(
+                KGConstructionSource(
+                    source_id="mvtec_catalog",
+                    source_type="mvtec_ad_catalog",
+                    scenario="mvtec",
+                    path=catalog_path,
+                ),
+            ),
+            run_id="kgbuild_mvtec_catalog_unit",
+        )
+    )
+
+    node_ids = {row["id"] for row in _read_csv_rows(result.nodes_path)}
+    edge_rows = _read_csv_rows(result.edges_path)
+    edge_keys = {
+        (row["head"], row["relation"], row["tail"])
+        for row in edge_rows
+    }
+    profile_manifest = json.loads(
+        result.profile_manifest_path.read_text(encoding="utf-8")
+    )
+
+    assert result.summary["profile_version"] == "mvtec_rca_v1"
+    assert profile_manifest["ontology"] == "mvtec_rca_v1"
+    assert {
+        "BottleObject",
+        "BottleBrokenLargeDefect",
+        "CableObject",
+        "CableCutOuterInsulationDefect",
+        "BottleBreakage",
+        "CableInsulationDamage",
+    } <= node_ids
+    assert (
+        "BottleObject",
+        "HAS_ANOMALY",
+        "BottleBrokenLargeDefect",
+    ) in edge_keys
+    assert (
+        "BottleBrokenLargeDefect",
+        "HAS_PLAUSIBLE_CAUSE",
+        "BottleBreakage",
+    ) in edge_keys
+    assert (
+        "BottleObject",
+        "SUGGESTS_PLAUSIBLE_MECHANISM",
+        "BottleBreakage",
+    ) in edge_keys
+    assert (
+        "CableObject",
+        "SUGGESTS_PLAUSIBLE_MECHANISM",
+        "CableInsulationDamage",
+    ) in edge_keys
+    assert (
+        "BottleObject",
+        "SUGGESTS_PLAUSIBLE_MECHANISM",
+        "CableInsulationDamage",
+    ) not in edge_keys
+    assert (
+        "CableObject",
+        "SUGGESTS_PLAUSIBLE_MECHANISM",
+        "BottleBreakage",
+    ) not in edge_keys
+    assert all(
+        "not a verified root-cause label" in row["evidence"]
+        for row in edge_rows
+        if row["relation"] == "HAS_PLAUSIBLE_CAUSE"
+    )
+
+
 def _manual_source_csv() -> str:
     return "\n".join(
         [
@@ -456,6 +536,28 @@ def _entity_only_source_csv() -> str:
             "id,name,label,head,relation,tail,scenario,evidence,confidence",
             "PumpFault,Pump fault,Fault,,,,shared,pump fault row,0.82",
             "SealWear,Seal wear,RootCause,,,,shared,seal wear row,0.82",
+            "",
+        ]
+    )
+
+
+def _mvtec_catalog_csv() -> str:
+    return "\n".join(
+        [
+            (
+                "category_folder,category_label,defect_folder,defect_official_name,"
+                "defect_superclass,top_level_anomaly_class,dataset_fact_source,"
+                "semantic_mapping_source"
+            ),
+            (
+                "bottle,Bottle,broken_large,Broken large,broken,structural_damage,"
+                "MVTec AD catalog fixture,KGTraceVis MVTec catalog unit fixture"
+            ),
+            (
+                "cable,Cable,cut_outer_insulation,Cut outer insulation,cut,"
+                "structural_damage,MVTec AD catalog fixture,"
+                "KGTraceVis MVTec catalog unit fixture"
+            ),
             "",
         ]
     )

@@ -109,6 +109,7 @@ def run_kg_construction_acceptance_smoke(
     paths.append(material_path)
     paths.append(_run_material_brainstorm_smoke(config))
     paths.append(_run_runtime_overlay_smoke(material_result))
+    paths.append(_run_mvtec_catalog_smoke(config))
     tep_path, tep_result = _run_tep_smoke(config)
     paths.append(tep_path)
     paths.append(_run_tep_runtime_overlay_smoke(tep_result))
@@ -304,6 +305,33 @@ def _run_material_brainstorm_smoke(
     metadata["extraction_mode"] = result.summary["material_library"]["extraction_mode"]
     metadata["review_item_types"] = item_types
     return _passed_path("material_brainstorm", result, metadata=metadata)
+
+
+def _run_mvtec_catalog_smoke(
+    config: KGConstructionSmokeConfig,
+) -> KGConstructionSmokePath:
+    source_dir = config.output_dir / "mvtec_catalog_sources"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    catalog_path = source_dir / "mvtec_ad_catalog.csv"
+    catalog_path.write_text(_mvtec_catalog_csv(), encoding="utf-8")
+    result = run_source_kg_construction_workflow(
+        SourceKGConstructionWorkflowConfig(
+            output_dir=config.output_dir / "mvtec_catalog",
+            sources=(
+                KGConstructionSource(
+                    source_id="mvtec_ad_catalog",
+                    source_type="mvtec_ad_catalog",
+                    scenario="mvtec",
+                    path=catalog_path,
+                ),
+            ),
+            overwrite=config.overwrite,
+            run_id="kgbuild_smoke_mvtec_catalog",
+        )
+    )
+    metadata = _validate_required_artifacts(result)
+    metadata.update(_validate_mvtec_catalog_metadata(result.output_dir))
+    return _passed_path("mvtec_catalog", result, metadata=metadata)
 
 
 def _run_runtime_overlay_smoke(
@@ -543,6 +571,49 @@ def _validate_tep_rca_metadata(output_dir: Path) -> dict[str, Any]:
     }
 
 
+def _validate_mvtec_catalog_metadata(output_dir: Path) -> dict[str, Any]:
+    edge_rows = _read_csv_rows(output_dir / "edges.csv")
+    node_rows = _read_csv_rows(output_dir / "nodes.csv")
+    profile_manifest = json.loads(
+        (output_dir / "profile_manifest.json").read_text(encoding="utf-8")
+    )
+    edge_keys = {
+        (row.get("head"), row.get("relation"), row.get("tail"))
+        for row in edge_rows
+    }
+    required_edges = {
+        ("BottleObject", "HAS_ANOMALY", "BottleBrokenLargeDefect"),
+        ("BottleBrokenLargeDefect", "HAS_PLAUSIBLE_CAUSE", "BottleBreakage"),
+        ("BottleObject", "SUGGESTS_PLAUSIBLE_MECHANISM", "BottleBreakage"),
+        ("CableObject", "SUGGESTS_PLAUSIBLE_MECHANISM", "CableInsulationDamage"),
+    }
+    missing_edges = sorted(required_edges - edge_keys)
+    if missing_edges:
+        raise ValueError(f"MVTec smoke missing expected candidate edges: {missing_edges}")
+    forbidden_edges = {
+        ("BottleObject", "SUGGESTS_PLAUSIBLE_MECHANISM", "CableInsulationDamage"),
+        ("CableObject", "SUGGESTS_PLAUSIBLE_MECHANISM", "BottleBreakage"),
+    }
+    leaked_edges = sorted(forbidden_edges & edge_keys)
+    if leaked_edges:
+        raise ValueError(f"MVTec smoke produced cross-object mechanism edges: {leaked_edges}")
+    cause_edges = [
+        row for row in edge_rows if row.get("relation") == "HAS_PLAUSIBLE_CAUSE"
+    ]
+    if not cause_edges:
+        raise ValueError("MVTec smoke did not produce plausible-cause candidates")
+    if not all("not a verified root-cause label" in row.get("evidence", "") for row in cause_edges):
+        raise ValueError("MVTec smoke plausible-cause evidence lost claim boundary")
+    if profile_manifest.get("ontology") != "mvtec_rca_v1":
+        raise ValueError("MVTec smoke did not select the MVTec RCA profile")
+    return {
+        "mvtec_node_count": len(node_rows),
+        "mvtec_edge_count": len(edge_rows),
+        "mvtec_plausible_cause_edge_count": len(cause_edges),
+        "mvtec_profile_version": profile_manifest.get("ontology"),
+    }
+
+
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
@@ -663,3 +734,30 @@ def _material_brainstorm_hypothesis_fixture() -> dict[str, Any]:
             }
         ],
     }
+
+
+def _mvtec_catalog_csv() -> str:
+    return "\n".join(
+        [
+            (
+                "category_folder,category_label,defect_folder,defect_official_name,"
+                "defect_superclass,top_level_anomaly_class,dataset_fact_source,"
+                "semantic_mapping_source"
+            ),
+            (
+                "bottle,Bottle,broken_large,Broken large,broken,structural_damage,"
+                "MVTec AD catalog fixture,KGTraceVis MVTec catalog smoke fixture"
+            ),
+            (
+                "bottle,Bottle,contamination,Contamination,contamination,"
+                "surface_contamination,MVTec AD catalog fixture,"
+                "KGTraceVis MVTec catalog smoke fixture"
+            ),
+            (
+                "cable,Cable,cut_outer_insulation,Cut outer insulation,cut,"
+                "structural_damage,MVTec AD catalog fixture,"
+                "KGTraceVis MVTec catalog smoke fixture"
+            ),
+            "",
+        ]
+    )
