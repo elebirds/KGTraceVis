@@ -1753,7 +1753,20 @@ def test_image_upload_mode_defaults_to_unknown_label_when_unspecified(
         kwargs["runs_dir"] = tmp_path / "run_artifacts"
         return original(*args, **kwargs)
 
+    class _FakeMVTecUploadPredictor:
+        def predict(self, _image_path: Path) -> dict[str, object]:
+            return {
+                "score": 0.71,
+                "confidence": 0.71,
+                "metadata": {"fixture": "service_upload"},
+            }
+
     monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
+    monkeypatch.setattr(
+        service_runs,
+        "_build_mvtec_upload_predictor",
+        lambda **_kwargs: _FakeMVTecUploadPredictor(),
+    )
     client = TestClient(app)
     with Path("runs/real_model_pipeline/assets/mvtec/input_root/capsule/test/crack/000.png").open(
         "rb"

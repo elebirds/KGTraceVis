@@ -405,10 +405,102 @@ TEP_PROFILE = RcaProfile(
 )
 
 
+MVTEC_PROFILE = RcaProfile(
+    domain_id="mvtec",
+    scenario="mvtec",
+    ontology="mvtec_rca_v1",
+    keep_labels=frozenset(
+        {
+            "AnomalyType",
+            "CauseCategory",
+            "Dataset",
+            "Defect",
+            "DefectType",
+            "Location",
+            "Morphology",
+            "Object",
+            "Product",
+            "RootCause",
+        }
+    ),
+    relation_whitelist=frozenset(
+        {
+            "ALIGNS_TO",
+            "BELONGS_TO",
+            "HAS_ANOMALY",
+            "HAS_COMPONENT",
+            "HAS_LOCATION",
+            "HAS_MORPHOLOGY",
+            "HAS_PLAUSIBLE_CAUSE",
+            "OCCURS_ON",
+            "PART_OF",
+            "SUGGESTS_PLAUSIBLE_MECHANISM",
+            "SUGGESTS_ROOT_CAUSE",
+        }
+    ),
+    relation_rewrites={
+        "CONTAINS": "HAS_COMPONENT",
+        "HAS_DEFECT": "HAS_ANOMALY",
+        "LOCATED_ON": "OCCURS_ON",
+    },
+    semantic_derived_relation_rules=(
+        SemanticDerivedRelationRule(
+            rule_id="mvtec_object_plausible_mechanism",
+            left_relation="HAS_ANOMALY",
+            right_relation="HAS_PLAUSIBLE_CAUSE",
+            target_relation="SUGGESTS_PLAUSIBLE_MECHANISM",
+            relation_family="CAUSES",
+            confidence_policy="min",
+        ),
+    ),
+    relation_families={
+        "ALIGNS_TO": "ALIGNMENT",
+        "BELONGS_TO": "SEMANTIC_SUPPORT",
+        "HAS_ANOMALY": "OBSERVATION",
+        "HAS_COMPONENT": "PART_OF",
+        "HAS_LOCATION": "SEMANTIC_SUPPORT",
+        "HAS_MORPHOLOGY": "SEMANTIC_SUPPORT",
+        "HAS_PLAUSIBLE_CAUSE": "CAUSES",
+        "OCCURS_ON": "SEMANTIC_SUPPORT",
+        "PART_OF": "PART_OF",
+        "SUGGESTS_PLAUSIBLE_MECHANISM": "CAUSES",
+        "SUGGESTS_ROOT_CAUSE": "CAUSES",
+    },
+    propagation_families=frozenset({"OBSERVATION", "CAUSES"}),
+    relation_family_policies={
+        "OBSERVATION": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.55,
+            attenuation=0.85,
+            edge_weight_multiplier=0.9,
+            auto_source_trust=0.65,
+        ),
+        "CAUSES": RelationFamilyPolicy(
+            propagation_enabled=True,
+            propagation_direction="forward",
+            propagation_priority=0.5,
+            attenuation=0.85,
+            edge_weight_multiplier=0.95,
+            auto_source_trust=0.45,
+        ),
+        "PART_OF": RelationFamilyPolicy(propagation_enabled=False),
+        "SEMANTIC_SUPPORT": RelationFamilyPolicy(propagation_enabled=False),
+        "ALIGNMENT": RelationFamilyPolicy(propagation_enabled=False),
+    },
+    root_candidate_labels=frozenset({"RootCause", "CauseCategory"}),
+    observable_labels=frozenset({"AnomalyType", "Defect", "Morphology", "Location"}),
+    task_view="visual_candidate_explanation_view",
+    confidence_policy="mvtec_source_grounded_candidate_confidence",
+)
+
+
 def profile_for_scenario(scenario: str) -> RcaProfile:
     """Return the default profile for a scenario."""
     if scenario == "tep":
         return TEP_PROFILE
+    if scenario == "mvtec":
+        return MVTEC_PROFILE
     return GENERIC_PROFILE
 
 

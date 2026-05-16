@@ -11,9 +11,11 @@ import pytest
 
 from kgtracevis.kg_construction.document_extraction import (
     DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
+    OpenAICompatibleDocumentUnderstandingClient,
     OpenAICompatibleKGExtractionClient,
     SourceTextChunk,
     chunk_source_document,
+    document_understanding_response_schema,
     extract_draft_kg_from_chunks,
     extract_draft_kg_from_chunks_with_report,
     extract_draft_kg_from_source_material,
@@ -21,6 +23,10 @@ from kgtracevis.kg_construction.document_extraction import (
     parse_source_material,
 )
 from kgtracevis.kg_construction.draft import KGConstructionSource
+from kgtracevis.kg_construction.hypothesis_brainstorming import (
+    OpenAICompatibleHypothesisBrainstormingClient,
+    hypothesis_brainstorming_response_schema,
+)
 
 
 def test_parse_html_and_chunk_ids_are_deterministic() -> None:
@@ -462,6 +468,7 @@ def test_openai_compatible_deepseek_ie_disables_thinking_by_default() -> None:
 
     request = fake_openai.requests[0]
     assert request["extra_body"] == {"thinking": {"type": "disabled"}}
+    assert request["response_format"] == {"type": "json_object"}
 
 
 def test_openai_compatible_deepseek_thinking_can_use_provider_default() -> None:
@@ -493,6 +500,71 @@ def test_openai_compatible_deepseek_thinking_can_use_provider_default() -> None:
     )
 
     assert "extra_body" not in fake_openai.requests[0]
+
+
+def test_openai_compatible_deepseek_document_understanding_uses_json_object() -> None:
+    """DeepSeek v4flash uses JSON mode instead of OpenAI json_schema format."""
+    fake_openai = FakeOpenAIChatClient()
+    source = KGConstructionSource(
+        source_id="du_source",
+        source_type="plain_text",
+        scenario="mvtec",
+        text="MVTec bottle defects include broken_large.",
+    )
+    document = parse_source_material(source)
+    chunks = chunk_source_document(document)
+    client = OpenAICompatibleDocumentUnderstandingClient(
+        api_key="unit-key",
+        base_url="https://api.deepseek.com",
+        model="deepseek-v4-flash",
+        client=fake_openai,
+    )
+
+    client.understand_document(
+        document,
+        chunks,
+        mode="agentic",
+        step_name="outline",
+        prompt="Return JSON.",
+        response_schema=document_understanding_response_schema(),
+    )
+
+    request = fake_openai.requests[0]
+    assert request["response_format"] == {"type": "json_object"}
+    assert request["extra_body"] == {"thinking": {"type": "disabled"}}
+
+
+def test_openai_compatible_deepseek_brainstorming_uses_json_object() -> None:
+    """Open-ended brainstorming keeps DeepSeek provider defaults and JSON mode."""
+    fake_openai = FakeOpenAIChatClient()
+    source = KGConstructionSource(
+        source_id="brainstorm_source",
+        source_type="plain_text",
+        scenario="mvtec",
+        text="Broken bottle examples need evidence review.",
+    )
+    document = parse_source_material(source)
+    chunks = chunk_source_document(document)
+    client = OpenAICompatibleHypothesisBrainstormingClient(
+        api_key="unit-key",
+        base_url="https://api.deepseek.com",
+        model="deepseek-v4-flash",
+        client=fake_openai,
+    )
+
+    client.brainstorm(
+        document,
+        chunks,
+        document_map=None,
+        draft_kg=None,
+        semantic_context=None,
+        prompt="Return JSON.",
+        response_schema=hypothesis_brainstorming_response_schema(),
+    )
+
+    request = fake_openai.requests[0]
+    assert request["response_format"] == {"type": "json_object"}
+    assert "extra_body" not in request
 
 
 def test_chunk_ie_continue_on_error_skips_invalid_candidates() -> None:

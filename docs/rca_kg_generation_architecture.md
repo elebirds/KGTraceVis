@@ -117,6 +117,15 @@ relation-family policy defines whether propagation is enabled plus the default
 direction, priority, attenuation, and edge-weight multiplier used by the RCA
 reasoning view.
 
+The built-in `mvtec` profile supports MVTec document-source construction. It is
+not a prebuilt MVTec KG. It provides only the semantic boundary needed to keep
+visual anomaly observations, object/defect morphology, plausible mechanisms,
+and evidence-review tasks in the RCA-oriented schema. Because MVTec AD does not
+ship verified factory root-cause labels, MVTec cause/mechanism output remains
+candidate or hypothesis material until a reviewer accepts source-backed edges.
+Generated catalogs, hand-curated KG snapshots, and LLM-produced tables are not
+valid source inputs for the MVTec validation path.
+
 Profiles can opt into a deliberately small semantic derivation DSL: two-hop
 rules that derive one relation from two existing semantic relations. Derived
 edges are still source-backed candidates because their evidence cites the

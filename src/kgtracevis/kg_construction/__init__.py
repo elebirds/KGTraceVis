@@ -106,6 +106,7 @@ from kgtracevis.kg_construction.mvtec_source_bundle import (
 from kgtracevis.kg_construction.pipeline import KGConstructionResult, run_kg_construction
 from kgtracevis.kg_construction.profiles import (
     GENERIC_PROFILE,
+    MVTEC_PROFILE,
     TEP_PROFILE,
     RcaProfile,
     RelationFamilyPolicy,
@@ -195,6 +196,7 @@ __all__ = [
     "HypothesisMode",
     "HypothesisProvider",
     "LLMDocumentIEExtractor",
+    "MVTEC_PROFILE",
     "OfflineDocumentIEExtractor",
     "OfflineHypothesisFixtureClient",
     "OpenAICompatibleHypothesisBrainstormingClient",

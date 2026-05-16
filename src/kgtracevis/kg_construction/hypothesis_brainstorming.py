@@ -17,7 +17,9 @@ from kgtracevis.kg_construction.document_extraction import (
     ParsedSourceDocument,
     SourceTextChunk,
     _loads_json_object_payload,
+    _openai_compatible_max_tokens,
     _openai_compatible_request_options,
+    _openai_compatible_response_format,
     _stage_deepseek_thinking_policy,
 )
 from kgtracevis.kg_construction.draft import DraftKG
@@ -210,6 +212,7 @@ class OpenAICompatibleHypothesisBrainstormingClient:
         base_url: str | None = None,
         model: str | None = None,
         temperature: float = 0.2,
+        max_tokens: int | None = None,
         use_json_schema: bool = True,
         client: Any | None = None,
         deepseek_thinking: DeepSeekThinkingPolicy | None = None,
@@ -218,6 +221,7 @@ class OpenAICompatibleHypothesisBrainstormingClient:
         self.base_url = base_url if base_url is not None else os.environ.get("OPENAI_BASE_URL")
         self.model = model if model is not None else os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
         self.temperature = temperature
+        self.max_tokens = _openai_compatible_max_tokens(max_tokens)
         self.use_json_schema = use_json_schema
         self.deepseek_thinking = _stage_deepseek_thinking_policy(
             env_name="KGTRACEVIS_HYPOTHESIS_DEEPSEEK_THINKING",
@@ -239,9 +243,14 @@ class OpenAICompatibleHypothesisBrainstormingClient:
         """Call an OpenAI-compatible model and return advisory JSON."""
         del chunks, document_map, draft_kg, semantic_context
         client = self._resolved_client()
+        response_format = self._response_format(response_schema)
+        request_kwargs: dict[str, Any] = {}
+        if response_format is not None:
+            request_kwargs["response_format"] = response_format
         completion = client.chat.completions.create(
             model=self.model,
             temperature=self.temperature,
+            max_tokens=self.max_tokens,
             messages=[
                 {
                     "role": "system",
@@ -252,7 +261,7 @@ class OpenAICompatibleHypothesisBrainstormingClient:
                 },
                 {"role": "user", "content": prompt},
             ],
-            response_format=self._response_format(response_schema),
+            **request_kwargs,
             **_openai_compatible_request_options(
                 model=self.model,
                 base_url=self.base_url,
@@ -285,17 +294,14 @@ class OpenAICompatibleHypothesisBrainstormingClient:
         self._client = OpenAI(**kwargs)
         return self._client
 
-    def _response_format(self, response_schema: Mapping[str, Any]) -> dict[str, Any]:
-        if self.use_json_schema:
-            return {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "kgtracevis_hypothesis_brainstorming",
-                    "schema": dict(response_schema),
-                    "strict": False,
-                },
-            }
-        return {"type": "json_object"}
+    def _response_format(self, response_schema: Mapping[str, Any]) -> dict[str, Any] | None:
+        return _openai_compatible_response_format(
+            response_schema=response_schema,
+            schema_name="kgtracevis_hypothesis_brainstorming",
+            model=self.model,
+            base_url=self.base_url,
+            use_json_schema=self.use_json_schema,
+        )
 
 
 def hypothesis_brainstorming_response_schema() -> dict[str, Any]:
@@ -351,6 +357,7 @@ def run_hypothesis_brainstorming(
             response_schema=hypothesis_brainstorming_response_schema(),
         )
         payload = _coerce_brainstorming_payload(response, source_id=document.source_id)
+        payload = _ensure_review_surface(payload, document, chunks)
         generator_type = "client"
     return _normalized_result(
         document,
@@ -394,6 +401,9 @@ def build_hypothesis_brainstorming_prompt(
         "Every output is a suggestion, not a fact. Do not write or imply "
         "published KG edges. Include supporting_spans copied from chunk text or "
         "explicit missing_evidence. Mark risk and recommended review action. "
+        "Return at least one reviewable item. If the source is too weak for a "
+        "hypothesis, return an evidence_tasks item describing the missing "
+        "evidence needed before any RCA claim can be made. "
         "Relation suggestions must use allowed relation values when proposing "
         f"candidate edges: {', '.join(sorted(ALLOWED_DOCUMENT_IE_RELATIONS))}.\n"
         f"Hypothesis influence mode: {influence}; this first implementation is "
@@ -468,6 +478,25 @@ def _normalize_brainstorming_response(raw: Mapping[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _ensure_review_surface(
+    payload: BrainstormingPayload,
+    document: ParsedSourceDocument,
+    chunks: Sequence[SourceTextChunk],
+) -> BrainstormingPayload:
+    """Keep live brainstorming auditable even when the model returns an empty pool."""
+    if (
+        payload.hypotheses
+        or payload.evidence_tasks
+        or payload.profile_gaps
+        or payload.alignment_suggestions
+        or payload.semantic_layer_suggestions
+        or payload.review_items
+    ):
+        return payload
+    fallback = _deterministic_brainstorming_payload(document, chunks)
+    return payload.model_copy(update={"evidence_tasks": fallback.evidence_tasks})
+
+
 def _normalize_mapping_list(
     value: Any,
     *,
@@ -535,6 +564,13 @@ def _normalize_evidence_task_row(row: dict[str, Any]) -> dict[str, Any]:
     )
     if question:
         row["question"] = question
+    else:
+        missing = _normalize_string_list(row.get("missing_evidence"))
+        row["question"] = (
+            missing[0]
+            if missing
+            else "What source evidence is needed before this RCA hypothesis can be reviewed?"
+        )
     row["missing_evidence"] = _normalize_string_list(row.get("missing_evidence"))
     row["risk"] = _normalize_risk(row.get("risk"))
     row["recommended_review_action"] = str(

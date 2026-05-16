@@ -695,7 +695,11 @@ def build_document_ie_prompt(
         f"source_id: {chunk.source_id}\n"
         f"chunk_id: {chunk.chunk_id}\n"
         f"scenario: {chunk.scenario}\n\n"
-        "Return JSON with keys `entities` and `relations`.\n\n"
+        "Return compact JSON with keys `entities` and `relations`. Each entity "
+        "must include id, name, label, and evidence. Each relation must include "
+        "head, relation, tail, and evidence. Use label, not type, for entity "
+        "category. Limit output to at most 12 entities and 16 relations; do not "
+        "expand long defect dictionaries exhaustively.\n\n"
         f"Source text:\n{chunk.text}"
     )
 
@@ -951,7 +955,14 @@ def build_document_understanding_prompt(
         "suggest cross-chunk relations, include at least two supporting_spans "
         "with chunk_id and copied text/evidence. Use allowed document IE "
         f"relations only: {', '.join(sorted(ALLOWED_DOCUMENT_IE_RELATIONS))}.\n"
-        "Keep all evidence snippets traceable to chunk text.\n"
+        "Keep all evidence snippets traceable to chunk text. Return one compact "
+        "top-level JSON object with only these list fields when relevant: "
+        "sections, glossary, entity_inventory, relation_hints, "
+        "ontology_suggestions, cross_chunk_proposals, unresolved_questions, "
+        "review_hints. Do not nest output under document_map, do not emit "
+        "chunk_maps, and keep each list to at most 5 concise items. "
+        "Use objects for unresolved_questions, for example "
+        "{\"question\":\"...\",\"rationale\":\"...\"}.\n"
         f"{prior_summary}\n"
         f"source_id: {document.source_id}\n"
         f"source_type: {document.source_type}\n"
@@ -1281,6 +1292,7 @@ def _coerce_document_understanding_payload(
             raise TypeError(type(response).__name__)
         if not isinstance(payload, Mapping):
             raise TypeError(type(payload).__name__)
+        payload = _normalize_document_understanding_response(payload)
         return DocumentUnderstandingMapPayload.model_validate(payload)
     except (TypeError, json.JSONDecodeError, ValidationError) as exc:
         raise ValueError(
@@ -1288,6 +1300,80 @@ def _coerce_document_understanding_payload(
             f"(source_id={source_id!r}, step_name={step_name!r}): "
             "expected a JSON object matching document_understanding_map_v1"
         ) from exc
+
+
+def _normalize_document_understanding_response(
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Normalize common LLM document-map shapes before schema validation."""
+    normalized = dict(payload)
+    if (
+        "document_map" in normalized
+        and isinstance(normalized["document_map"], Mapping)
+        and not any(
+            key in normalized
+            for key in (
+                "sections",
+                "glossary",
+                "entity_inventory",
+                "relation_hints",
+                "ontology_suggestions",
+                "cross_chunk_proposals",
+                "unresolved_questions",
+                "review_hints",
+            )
+        )
+    ):
+        normalized = dict(normalized["document_map"])
+    mapping_list_keys = {
+        "sections": "title",
+        "glossary": "term",
+        "entity_inventory": "name",
+        "relation_hints": "rationale",
+        "ontology_suggestions": "label",
+        "cross_chunk_proposals": "rationale",
+        "unresolved_questions": "question",
+        "agent_steps": "step_name",
+    }
+    for key, text_key in mapping_list_keys.items():
+        if key in normalized:
+            normalized[key] = _document_understanding_mapping_list(
+                normalized.get(key),
+                text_key=text_key,
+            )
+    if "review_hints" in normalized:
+        normalized["review_hints"] = [
+            _document_understanding_text(item)
+            for item in _json_list(normalized.get("review_hints"))
+            if _document_understanding_text(item)
+        ]
+    return normalized
+
+
+def _document_understanding_mapping_list(
+    value: Any,
+    *,
+    text_key: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in _json_list(value):
+        if isinstance(item, Mapping):
+            rows.append(dict(item))
+            continue
+        text = _document_understanding_text(item)
+        if text:
+            rows.append({text_key: text})
+    return rows
+
+
+def _document_understanding_text(value: Any) -> str:
+    if isinstance(value, Mapping):
+        for key in ("text", "question", "hint", "term", "name", "title", "rationale"):
+            text = str(value.get(key) or "").strip()
+            if text:
+                return text
+        return ""
+    return str(value).strip()
 
 
 def _merge_document_understanding_step(
@@ -1385,6 +1471,7 @@ class OpenAICompatibleKGExtractionClient:
         base_url: str | None = None,
         model: str | None = None,
         temperature: float = 0.0,
+        max_tokens: int | None = None,
         use_json_schema: bool = True,
         client: Any | None = None,
         deepseek_thinking: DeepSeekThinkingPolicy | None = None,
@@ -1393,6 +1480,7 @@ class OpenAICompatibleKGExtractionClient:
         self.base_url = base_url if base_url is not None else os.environ.get("OPENAI_BASE_URL")
         self.model = model if model is not None else os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
         self.temperature = temperature
+        self.max_tokens = _openai_compatible_max_tokens(max_tokens)
         self.use_json_schema = use_json_schema
         self.deepseek_thinking = _stage_deepseek_thinking_policy(
             env_name="KGTRACEVIS_DOCUMENT_IE_DEEPSEEK_THINKING",
@@ -1410,9 +1498,13 @@ class OpenAICompatibleKGExtractionClient:
         """Call an OpenAI-compatible model and return its JSON IE payload."""
         client = self._resolved_client()
         response_format = self._response_format(response_schema)
+        request_kwargs: dict[str, Any] = {}
+        if response_format is not None:
+            request_kwargs["response_format"] = response_format
         completion = client.chat.completions.create(
             model=self.model,
             temperature=self.temperature,
+            max_tokens=self.max_tokens,
             messages=[
                 {
                     "role": "system",
@@ -1423,7 +1515,7 @@ class OpenAICompatibleKGExtractionClient:
                 },
                 {"role": "user", "content": prompt},
             ],
-            response_format=response_format,
+            **request_kwargs,
             **_openai_compatible_request_options(
                 model=self.model,
                 base_url=self.base_url,
@@ -1453,17 +1545,14 @@ class OpenAICompatibleKGExtractionClient:
         self._client = OpenAI(**kwargs)
         return self._client
 
-    def _response_format(self, response_schema: Mapping[str, Any]) -> dict[str, Any]:
-        if self.use_json_schema:
-            return {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "kgtracevis_document_ie",
-                    "schema": dict(response_schema),
-                    "strict": False,
-                },
-            }
-        return {"type": "json_object"}
+    def _response_format(self, response_schema: Mapping[str, Any]) -> dict[str, Any] | None:
+        return _openai_compatible_response_format(
+            response_schema=response_schema,
+            schema_name="kgtracevis_document_ie",
+            model=self.model,
+            base_url=self.base_url,
+            use_json_schema=self.use_json_schema,
+        )
 
 
 class OpenAICompatibleDocumentUnderstandingClient:
@@ -1476,6 +1565,7 @@ class OpenAICompatibleDocumentUnderstandingClient:
         base_url: str | None = None,
         model: str | None = None,
         temperature: float = 0.0,
+        max_tokens: int | None = None,
         use_json_schema: bool = True,
         client: Any | None = None,
         deepseek_thinking: DeepSeekThinkingPolicy | None = None,
@@ -1484,6 +1574,7 @@ class OpenAICompatibleDocumentUnderstandingClient:
         self.base_url = base_url if base_url is not None else os.environ.get("OPENAI_BASE_URL")
         self.model = model if model is not None else os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
         self.temperature = temperature
+        self.max_tokens = _openai_compatible_max_tokens(max_tokens)
         self.use_json_schema = use_json_schema
         self.deepseek_thinking = _stage_deepseek_thinking_policy(
             env_name="KGTRACEVIS_DOCUMENT_UNDERSTANDING_DEEPSEEK_THINKING",
@@ -1505,9 +1596,14 @@ class OpenAICompatibleDocumentUnderstandingClient:
         """Call an OpenAI-compatible model and return advisory DU JSON."""
         del chunks, mode, prior_steps
         client = self._resolved_client()
+        response_format = self._response_format(response_schema)
+        request_kwargs: dict[str, Any] = {}
+        if response_format is not None:
+            request_kwargs["response_format"] = response_format
         completion = client.chat.completions.create(
             model=self.model,
             temperature=self.temperature,
+            max_tokens=self.max_tokens,
             messages=[
                 {
                     "role": "system",
@@ -1518,7 +1614,7 @@ class OpenAICompatibleDocumentUnderstandingClient:
                 },
                 {"role": "user", "content": prompt},
             ],
-            response_format=self._response_format(response_schema),
+            **request_kwargs,
             **_openai_compatible_request_options(
                 model=self.model,
                 base_url=self.base_url,
@@ -1553,17 +1649,56 @@ class OpenAICompatibleDocumentUnderstandingClient:
         self._client = OpenAI(**kwargs)
         return self._client
 
-    def _response_format(self, response_schema: Mapping[str, Any]) -> dict[str, Any]:
-        if self.use_json_schema:
-            return {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "kgtracevis_document_understanding",
-                    "schema": dict(response_schema),
-                    "strict": False,
-                },
-            }
+    def _response_format(self, response_schema: Mapping[str, Any]) -> dict[str, Any] | None:
+        return _openai_compatible_response_format(
+            response_schema=response_schema,
+            schema_name="kgtracevis_document_understanding",
+            model=self.model,
+            base_url=self.base_url,
+            use_json_schema=self.use_json_schema,
+        )
+
+
+def _openai_compatible_response_format(
+    *,
+    response_schema: Mapping[str, Any],
+    schema_name: str,
+    model: str,
+    base_url: str | None,
+    use_json_schema: bool,
+) -> dict[str, Any] | None:
+    """Return a provider-compatible response_format payload when supported."""
+    if _is_deepseek_compatible(model=model, base_url=base_url):
         return {"type": "json_object"}
+    if use_json_schema:
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_name,
+                "schema": dict(response_schema),
+                "strict": False,
+            },
+        }
+    return {"type": "json_object"}
+
+
+def _openai_compatible_max_tokens(explicit: int | None) -> int:
+    if explicit is not None:
+        return max(1, int(explicit))
+    raw = os.environ.get("OPENAI_MAX_TOKENS") or os.environ.get(
+        "KGTRACEVIS_OPENAI_MAX_TOKENS"
+    )
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            return 4096
+    return 4096
+
+
+def _is_deepseek_compatible(*, model: str, base_url: str | None) -> bool:
+    provider_hint = f"{model} {base_url or ''}".lower()
+    return "deepseek" in provider_hint
 
 
 def _openai_compatible_request_options(
@@ -1572,8 +1707,9 @@ def _openai_compatible_request_options(
     base_url: str | None,
     deepseek_thinking: DeepSeekThinkingPolicy,
 ) -> dict[str, Any]:
-    provider_hint = f"{model} {base_url or ''}".lower()
-    if "deepseek" not in provider_hint or deepseek_thinking != "disabled":
+    if not _is_deepseek_compatible(model=model, base_url=base_url):
+        return {}
+    if deepseek_thinking != "disabled":
         return {}
     return {"extra_body": {"thinking": {"type": "disabled"}}}
 
@@ -1622,7 +1758,11 @@ def _loads_json_object_payload(content: str) -> dict[str, Any]:
         payload = json.loads(candidate)
         if isinstance(payload, dict):
             return payload
-    raise ValueError("OpenAI-compatible response did not contain a JSON object")
+    snippet = stripped.replace("\n", " ")[:300]
+    raise ValueError(
+        "OpenAI-compatible response did not contain a JSON object"
+        f"; response_prefix={snippet!r}"
+    )
 
 
 def _first_balanced_json_object(content: str) -> str | None:
@@ -2071,9 +2211,78 @@ def _coerce_extracted_payload(
 ) -> ExtractedKGPayload:
     try:
         payload = json.loads(response) if isinstance(response, str) else dict(response)
+        payload = _normalize_extracted_payload_shape(payload)
         return ExtractedKGPayload.model_validate(payload)
     except (TypeError, json.JSONDecodeError, ValidationError) as exc:
         raise ValueError(f"invalid IE payload for {chunk_id}") from exc
+
+
+def _normalize_extracted_payload_shape(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize common LLM IE aliases before Pydantic validation."""
+    normalized = dict(payload)
+    entities = _json_list(
+        normalized.get("entities")
+        or normalized.get("nodes")
+        or normalized.get("candidate_entities")
+    )
+    relations = _json_list(
+        normalized.get("relations")
+        or normalized.get("edges")
+        or normalized.get("triples")
+        or normalized.get("candidate_relations")
+    )
+    normalized_entities: list[dict[str, Any]] = []
+    reference_map: dict[str, str] = {}
+    for item in entities:
+        if not isinstance(item, Mapping):
+            continue
+        entity = _normalize_extracted_entity_shape(item)
+        normalized_entities.append(entity)
+        normalized_ref = str(entity.get("id") or "").strip()
+        for key in ("id", "entity_id", "node_id", "entity", "node", "value", "name"):
+            raw_ref = str(item.get(key) or "").strip()
+            if raw_ref and normalized_ref:
+                reference_map[raw_ref] = normalized_ref
+    normalized["entities"] = normalized_entities
+    normalized["relations"] = [
+        _normalize_extracted_relation_shape(item, reference_map=reference_map)
+        for item in relations
+        if isinstance(item, Mapping)
+    ]
+    return normalized
+
+
+def _normalize_extracted_entity_shape(item: Mapping[str, Any]) -> dict[str, Any]:
+    entity = dict(item)
+    entity.setdefault("id", entity.get("entity") or entity.get("node") or entity.get("value"))
+    entity.setdefault("name", entity.get("text") or entity.get("id"))
+    if _is_weak_extracted_entity_id(entity.get("id")):
+        entity["id"] = entity.get("name")
+    entity.setdefault("label", entity.get("type") or entity.get("category"))
+    return entity
+
+
+def _normalize_extracted_relation_shape(
+    item: Mapping[str, Any],
+    *,
+    reference_map: Mapping[str, str],
+) -> dict[str, Any]:
+    relation = dict(item)
+    relation.setdefault("head", relation.get("source") or relation.get("from"))
+    relation.setdefault("tail", relation.get("target") or relation.get("to"))
+    relation.setdefault("relation", relation.get("predicate") or relation.get("type"))
+    head = str(relation.get("head") or "").strip()
+    tail = str(relation.get("tail") or "").strip()
+    if head in reference_map:
+        relation["head"] = reference_map[head]
+    if tail in reference_map:
+        relation["tail"] = reference_map[tail]
+    return relation
+
+
+def _is_weak_extracted_entity_id(value: Any) -> bool:
+    text = str(value or "").strip()
+    return not text or not any(char.isalpha() for char in text)
 
 
 def _coerce_entity_candidates_for_chunk(

@@ -402,6 +402,33 @@ and chunk audit, source-grounded candidate generation, DraftKG conversion,
 alignment/projection/review queues, and versioned build artifacts. The LLM is
 one adapter inside that workspace and cannot skip review or publish.
 
+MVTec has a dedicated raw-material smoke path for validating that boundary. The
+source pack builder copies only raw or near-raw materials, such as the official
+MVTec AD page snapshot, Defect Spectrum MVTec notes, local source-bundle README
+files, and optional PatchCore paper metadata. It deliberately excludes derived
+KG/catalog artifacts such as `domain_knowledge.json`, `mvtec_ad_catalog.csv`,
+and `mvtec_ad_kg.ttl`. The resulting pack is then registered as material
+sources and sent through the same document understanding, chunk IE,
+brainstorming, review queue, semantic projection, and publish snapshot stages as
+any other source.
+
+```bash
+uv run python scripts/build_mvtec_llm_source_pack.py \
+  --output-dir runs/mvtec_llm_source_pack \
+  --overwrite
+
+uv run python scripts/smoke_mvtec_llm_kg_construction.py \
+  --output-dir runs/mvtec_llm_kg_smoke \
+  --provider offline_fixture \
+  --overwrite
+```
+
+For live LLM testing, switch the smoke provider to `openai`; the script loads
+`.env.local` and `.env` before constructing the OpenAI-compatible clients. MVTec
+does not provide verified factory RCA labels, so this smoke treats causal
+mechanisms as reviewable hypotheses and evidence tasks. It must not publish
+plausible-cause/root-cause edges as facts.
+
 Domain profile policy now controls more of the semantic/RCA shape. Profiles can
 define semantic projection rules that rewrite a source relation and optionally
 swap endpoints before the semantic layer is built. They also define
