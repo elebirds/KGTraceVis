@@ -297,7 +297,9 @@ and RCA reasoning all consume these build artifacts.
   `nodes`, `edges`, `published_nodes`, `published_edges`,
   `source_library_manifest`, `draft_manifest`, `profile_manifest`, `alignment_manifest`,
   `source_audit_graph_manifest`, `semantic_layer_manifest`,
-  `rca_view_manifest`, `review_queue`, `review_decisions`, `publish_manifest`,
+  `rca_view_manifest`, `review_queue`, `review_decisions`,
+  `document_understanding_manifest`, `document_map`,
+  `chunk_prompt_context`, `cross_chunk_proposals`, `publish_manifest`,
   `publish_report`,
   `kg_construction_diff`, `summary`, `manifest`
 
@@ -322,6 +324,30 @@ and RCA reasoning all consume these build artifacts.
   and the claim boundary that LLM output is unreviewed candidate material.
   Manifests should use chunk locators and text hashes instead of duplicating
   full source text; full text belongs in the source-chunk audit store.
+- Document understanding modes (`chunk`, `long_context`, `agentic`) are
+  advisory construction inputs, not authority layers. `chunk` keeps the current
+  per-chunk IE behavior. Non-chunk modes may write
+  `document_understanding_map.json` at material-extraction time and must record
+  any prompt-injected terminology context in `chunk_prompt_context.jsonl`.
+  Prompt context may include aliases, glossary terms, and relation-family hints,
+  but every extracted DraftKG candidate must still quote evidence from the
+  current chunk.
+- Source-to-KG construction must aggregate document-understanding artifacts into
+  first-class build outputs: `document_understanding_manifest.json`,
+  `document_map.json`, `chunk_prompt_context.jsonl`, and
+  `cross_chunk_proposals.jsonl`. These artifact keys must appear anywhere build
+  artifacts are surfaced: workflow result dataclasses, service response DTOs,
+  build registry records, material direct-build responses, manifest/summary
+  artifact maps, service artifact lookup, frontend API contracts, and artifact
+  diff snapshots.
+- Cross-chunk relation proposals are high-risk review inputs. Construction may
+  accept them only when they include head text, tail text, an allowed relation,
+  and at least two supporting spans. Accepted proposals are capped to
+  conservative confidence, written to `cross_chunk_proposals.jsonl`, and added
+  to `review_queue.json` as `cross_chunk_relation_candidate` items. Rejected
+  proposals remain in the proposal artifact with validation errors. Neither
+  accepted nor rejected proposals create KG CSV edges or published edges without
+  a later explicit review/promotion path.
 - Domain profiles own semantic projection and RCA relation-family policy.
   Projection rules may rewrite relations and swap endpoints before semantic
   layer export, and opt-in derived-edge rules may create conservative two-hop
@@ -428,6 +454,10 @@ and RCA reasoning all consume these build artifacts.
 | `review_queue.json` contains alignment items | service DTO parses them and keeps `review_status=auto` filters working |
 | Candidate edge is accepted/rejected | edge CSV and queue payload counters stay synchronized |
 | Non-edge review item is accepted/rejected | queue payload and decision log update, but KG CSV rows are not republished as reviewed facts |
+| Document understanding map is absent | construction still writes empty document-understanding artifacts with zero counts |
+| Prompt context exists | expose it as `chunk_prompt_context.jsonl`; do not copy full source text into the context artifact |
+| Cross-chunk proposal has fewer than two spans | mark rejected in `cross_chunk_proposals.jsonl`; do not add review item |
+| Cross-chunk proposal passes validation | add a `cross_chunk_relation_candidate` review item; do not write a KG edge |
 | Review replay lacks source_library_manifest.json | fail with a deterministic source reconstruction error |
 
 ### 5. Good/Base/Bad Cases
@@ -437,9 +467,14 @@ and RCA reasoning all consume these build artifacts.
 - Good: TEP build imports semantic lift, variable mapping, and RCA graph
   artifacts while preserving `relation_family`, propagation flags, and
   FaultAnchor/root-candidate metadata.
+- Good: a material extraction with `document_understanding_mode=long_context`
+  writes a document map and chunk prompt context, then chunk IE still grounds
+  candidate evidence in the current chunk.
 - Base: old build directories with only `nodes.csv`, `edges.csv`, and
   `kg_construction_manifest.json` remain readable through fallback paths.
 - Bad: parser audit stores a source document chunk's full text in the manifest.
+- Bad: a cross-chunk proposal is converted directly to `DraftRelation` or
+  `published_edges.csv` before review.
 - Bad: automatic external ID alignment creates hundreds of semantic/runtime
   `ALIGNS_TO` edges that are later skipped by semantic projection.
 
@@ -457,6 +492,14 @@ and RCA reasoning all consume these build artifacts.
   and queue filtering works for both edge and alignment items.
 - Parser audit tests assert row values and full document text are not written
   into `source_audit_graph_manifest.json`.
+- Material extraction tests assert non-chunk document understanding modes return
+  both document map and chunk prompt context paths, while chunk-mode behavior
+  stays backward compatible.
+- Construction workflow tests assert valid cross-chunk proposals enter review,
+  invalid proposals are rejected with deterministic errors, and
+  `published_edges.csv` remains unaffected.
+- Service/API/frontend contract tests assert the four document-understanding
+  construction artifacts are exposed wherever build artifacts are listed.
 
 ### 7. Wrong vs Correct
 
@@ -495,6 +538,19 @@ source_audit_graph_manifest.parsed_sources[*].chunks[*].text
 
 ```text
 source_audit_graph_manifest.parsed_sources[*].parser_metadata.chunk_char_ranges
+```
+
+#### Wrong
+
+```python
+draft.relations += tuple(cross_chunk_proposals)
+```
+
+#### Correct
+
+```python
+write_cross_chunk_proposals_jsonl(proposals)
+review_queue.append(cross_chunk_relation_candidate)
 ```
 
 ## Scenario: Candidate KG Overlay Validation

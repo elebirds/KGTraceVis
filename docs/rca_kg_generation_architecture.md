@@ -219,6 +219,10 @@ semantic_layer_manifest.json
 rca_view_manifest.json
 review_queue.json
 review_decisions.jsonl
+document_understanding_manifest.json
+document_map.json
+chunk_prompt_context.jsonl
+cross_chunk_proposals.jsonl
 publish_manifest.json
 publish_report.json
 kg_construction_diff.json
@@ -310,10 +314,13 @@ For richer document work, extraction requests can set
 implementation produces a deterministic `document_understanding_map.json`
 containing parser/chunk coverage, sections, glossary entries, entity inventory,
 relation-family hints, ontology suggestions, unresolved questions, and review
-hints. That map may be injected into chunk prompts as terminology context, but
-strict evidence grounding remains local to the current chunk. In other words,
-document understanding can guide extraction; it cannot publish KG facts or make
-cross-chunk claims without a separate reviewable proposal stage.
+hints. That map may be injected into chunk prompts as terminology context, and
+the injected context is audited in `chunk_prompt_context.jsonl`; strict evidence
+grounding remains local to the current chunk. Cross-chunk relation proposals are
+accepted only as review items when they include an allowed relation, endpoints,
+and at least two supporting spans. In other words, document understanding can
+guide extraction; it cannot publish KG facts or bypass review for cross-chunk
+claims.
 
 ## Example Commands
 
