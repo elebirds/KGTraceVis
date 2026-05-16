@@ -489,6 +489,11 @@ def chunk_source_document(
                     metadata={
                         "parser": document.parser,
                         "path": str(document.path) if document.path is not None else "",
+                        **{
+                            str(key): str(value)
+                            for key, value in document.metadata.items()
+                            if isinstance(value, str | int | float | bool)
+                        },
                     },
                 )
             )
@@ -684,12 +689,14 @@ def build_document_ie_prompt(
 ) -> str:
     """Build a source-constrained IE prompt for one text chunk."""
     context = _document_context_prompt(document_context, chunk_id=chunk.chunk_id)
+    role_guidance = _source_role_prompt(chunk)
     return (
         f"Prompt version: {prompt_version}.\n"
         "Extract only candidate industrial KG entities and relations explicitly "
         "supported by the source text chunk. Do not infer causal facts beyond the "
         "text. Use concise evidence copied from the chunk for every candidate.\n\n"
         f"{context}"
+        f"{role_guidance}"
         "Allowed relation values are: "
         f"{', '.join(sorted(ALLOWED_DOCUMENT_IE_RELATIONS))}.\n\n"
         f"source_id: {chunk.source_id}\n"
@@ -702,6 +709,29 @@ def build_document_ie_prompt(
         "expand long defect dictionaries exhaustively.\n\n"
         f"Source text:\n{chunk.text}"
     )
+
+
+def _source_role_prompt(chunk: SourceTextChunk) -> str:
+    role = str(chunk.metadata.get("source_pack_role") or "").strip()
+    if not role:
+        return ""
+    lines = [f"Source role: {role}."]
+    if any(token in role for token in ("root_cause", "cause_table", "mechanism")):
+        lines.append(
+            "This source is root-cause/mechanism context. When the chunk explicitly "
+            "states a defect, symptom, or anomaly and its cause, prioritize "
+            "`DefectOrAnomaly HAS_PLAUSIBLE_CAUSE CauseOrMechanism` candidates. "
+            "Use the source wording for cause entity names instead of generic IDs, "
+            "label causes as RootCause or CauseCategory, label symptoms as Defect "
+            "or AnomalyType, and copy the exact defect/cause phrase as evidence."
+        )
+    elif any(token in role for token in ("taxonomy", "defect_label", "dataset")):
+        lines.append(
+            "This source is taxonomy/context material. Extract object, defect, "
+            "morphology, and location candidates when explicitly listed, but do "
+            "not infer process root causes unless the chunk states them."
+        )
+    return "\n".join(lines) + "\n\n"
 
 
 def build_document_understanding_map(
@@ -2282,7 +2312,9 @@ def _normalize_extracted_relation_shape(
 
 def _is_weak_extracted_entity_id(value: Any) -> bool:
     text = str(value or "").strip()
-    return not text or not any(char.isalpha() for char in text)
+    if not text or not any(char.isalpha() for char in text):
+        return True
+    return re.fullmatch(r"(?i)(?:e|n|id|node|entity)\d{1,5}", text) is not None
 
 
 def _coerce_entity_candidates_for_chunk(

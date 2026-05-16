@@ -405,12 +405,15 @@ one adapter inside that workspace and cannot skip review or publish.
 MVTec has a dedicated raw-material smoke path for validating that boundary. The
 source pack builder copies only raw or near-raw materials, such as the official
 MVTec AD page snapshot, Defect Spectrum MVTec notes, local source-bundle README
-files, and optional PatchCore paper metadata. It deliberately excludes derived
-KG/catalog artifacts such as `domain_knowledge.json`, `mvtec_ad_catalog.csv`,
-and `mvtec_ad_kg.ttl`. The resulting pack is then registered as material
-sources and sent through the same document understanding, chunk IE,
-brainstorming, review queue, semantic projection, and publish snapshot stages as
-any other source.
+files, optional PatchCore paper metadata, and locally available manufacturing
+process/root-cause PDFs. It deliberately excludes derived KG/catalog artifacts
+such as `domain_knowledge.json`, `mvtec_ad_catalog.csv`, and
+`mvtec_ad_kg.ttl`. The resulting pack is then registered as material sources
+and sent through the same document understanding, chunk IE, brainstorming,
+review queue, semantic projection, and publish snapshot stages as any other
+source. Source-pack role metadata is propagated onto chunks so process/root-cause
+PDFs can guide chunk IE toward explicit `CAUSES` or `HAS_PLAUSIBLE_CAUSE`
+candidates without giving the LLM write access to the KG.
 
 When the DS-MVTec dataset card contains a source-level `defects_dict`, material
 extraction adds a deterministic `mvtec_source_taxonomy` DraftKG supplement. This
@@ -444,6 +447,12 @@ relation-family RCA defaults for propagation enablement, direction, priority,
 attenuation, and edge-weight scaling. Source-backed extractor metadata still
 wins when it explicitly supplies those RCA fields; otherwise the profile makes
 the reasoning-view defaults reproducible across domains.
+
+Profiles can additionally declare endpoint label constraints for relations. The
+semantic layer applies those constraints after node keep-list and relation
+whitelist checks, so source IE mistakes such as `Defect HAS_LOCATION Defect` are
+skipped while valid shapes such as `Defect OCCURS_ON Location` or
+`RootCause CAUSES Defect` are retained.
 
 Profiles can now be loaded as JSON Domain Packs with `--profile-path` or the
 workflow/service `profile_path` field. Each build writes

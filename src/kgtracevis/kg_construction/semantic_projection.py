@@ -31,9 +31,11 @@ def project_semantic_layer(draft: DraftKG, profile: RcaProfile) -> SemanticLayer
         if entity.label in profile.keep_labels
     ]
     nodes = tuple(clean_kg_nodes(entity_rows))
-    node_ids = {node.id for node in nodes}
+    node_labels = {node.id: node.label for node in nodes}
+    node_ids = set(node_labels)
     relation_rows: list[KGEdge] = []
     skipped_relations: list[str] = []
+    label_constraint_skipped_relations: list[str] = []
     for relation in draft.relations:
         projected = _project_relation(relation, profile=profile)
         if projected.relation not in profile.relation_whitelist:
@@ -42,6 +44,14 @@ def project_semantic_layer(draft: DraftKG, profile: RcaProfile) -> SemanticLayer
         edge = projected.to_kg_edge()
         if edge.head not in node_ids or edge.tail not in node_ids:
             skipped_relations.append(relation.draft_id)
+            continue
+        if not profile.relation_endpoints_allowed(
+            edge.relation,
+            head_label=node_labels[edge.head],
+            tail_label=node_labels[edge.tail],
+        ):
+            skipped_relations.append(relation.draft_id)
+            label_constraint_skipped_relations.append(relation.draft_id)
             continue
         relation_rows.append(edge)
     base_edges = tuple(clean_kg_edges(relation_rows))
@@ -59,6 +69,10 @@ def project_semantic_layer(draft: DraftKG, profile: RcaProfile) -> SemanticLayer
         ),
         "skipped_relation_count": len(skipped_relations),
         "skipped_relation_ids": skipped_relations[:100],
+        "label_constraint_skipped_relation_count": len(
+            label_constraint_skipped_relations
+        ),
+        "label_constraint_skipped_relation_ids": label_constraint_skipped_relations[:100],
         "derived_edge_count": len(derived_edges),
         "derived_edge_ids": [edge.edge_id for edge in derived_edges[:100]],
     }

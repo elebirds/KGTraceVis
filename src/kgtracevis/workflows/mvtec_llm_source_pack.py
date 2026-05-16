@@ -155,6 +155,42 @@ def _default_material_specs(
             provenance_role="dataset_defect_label_context",
         ),
         MVTecSourceMaterialSpec(
+            material_id="mvtec_ad_paper_pdf",
+            title="MVTec AD CVPR dataset paper PDF",
+            path=config.mvtec_source_bundle_dir / "raw" / "mvtec_ad_cvpr_2019.pdf",
+            material_type="pdf",
+            provenance_role="official_dataset_paper_context",
+        ),
+        MVTecSourceMaterialSpec(
+            material_id="visual_defect_survey_html",
+            title="Visual-based defect detection and classification survey",
+            path=config.mvtec_source_bundle_dir / "visual_defect_survey_mdpi.html",
+            material_type="webpage",
+            provenance_role="industrial_visual_defect_taxonomy_context",
+        ),
+        MVTecSourceMaterialSpec(
+            material_id="injection_molding_root_causes_pdf",
+            title="Injection molding defect root-cause paper",
+            path=(
+                config.mvtec_source_bundle_dir
+                / "raw"
+                / "injection_molding_root_causes.pdf"
+            ),
+            material_type="pdf",
+            provenance_role="manufacturing_process_root_cause_context",
+        ),
+        MVTecSourceMaterialSpec(
+            material_id="injection_molding_defects_chart_pdf",
+            title="Plastic injection molding defects chart",
+            path=(
+                config.mvtec_source_bundle_dir
+                / "raw"
+                / "plastic_injection_molding_defects_chart.pdf"
+            ),
+            material_type="pdf",
+            provenance_role="manufacturing_defect_cause_table_context",
+        ),
+        MVTecSourceMaterialSpec(
             material_id="mvtec_source_bundle_readme",
             title="MVTec source bundle README",
             path=config.mvtec_source_bundle_dir / "README.md",

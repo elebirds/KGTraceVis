@@ -115,7 +115,9 @@ observable labels, task view names, and confidence policy. A projection rule can
 map a source relation to a semantic relation and optionally swap endpoints. A
 relation-family policy defines whether propagation is enabled plus the default
 direction, priority, attenuation, and edge-weight multiplier used by the RCA
-reasoning view.
+reasoning view. Profiles may also declare relation endpoint label constraints,
+which are enforced during semantic projection to filter malformed LLM IE edges
+without changing the source DraftKG audit trail.
 
 The built-in `mvtec` profile supports MVTec document-source construction. It is
 not a prebuilt MVTec KG. It provides only the semantic boundary needed to keep
@@ -133,6 +135,13 @@ candidates for object-defect coverage, label-derived morphology/location
 constraints, and low-confidence plausible mechanism categories. It records its
 counts in the extraction manifest and does not treat those mechanism candidates
 as reviewed RCA facts.
+
+The MVTec source-pack workflow can also include locally available raw PDFs for
+the official MVTec paper and manufacturing process/root-cause references. Those
+PDFs are parsed, chunked, optionally summarized by document understanding, and
+sent through source-constrained chunk IE. Root-cause source roles only influence
+prompt guidance; extracted relations still pass through profile whitelists,
+endpoint label constraints, review queue generation, and publish policy.
 
 Profiles can opt into a deliberately small semantic derivation DSL: two-hop
 rules that derive one relation from two existing semantic relations. Derived

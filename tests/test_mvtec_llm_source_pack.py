@@ -59,6 +59,53 @@ def test_mvtec_llm_source_pack_uses_raw_materials_and_excludes_derived_kg(
     assert result.manifest["source_policy"]["excluded"].startswith("prebuilt KG")
 
 
+def test_mvtec_llm_source_pack_includes_optional_pdf_rca_sources(
+    tmp_path: Path,
+) -> None:
+    """Optional paper/process PDFs should enter the pack when locally available."""
+    source_bundle = tmp_path / "source_bundle"
+    defect_spectrum = tmp_path / "Defect_Spectrum"
+    raw_dir = source_bundle / "raw"
+    raw_dir.mkdir(parents=True)
+    (defect_spectrum / "DS-MVTec").mkdir(parents=True)
+    (source_bundle / "mvtec_ad_official_page.html").write_text(
+        "<html><body>MVTec AD has industrial anomaly detection data.</body></html>",
+        encoding="utf-8",
+    )
+    (source_bundle / "README.md").write_text("MVTec source bundle notes.", encoding="utf-8")
+    (defect_spectrum / "DS-MVTec" / "DS-MVTec.md").write_text(
+        "# DS-MVTec\n\n## defect classes\nbottle broken_large",
+        encoding="utf-8",
+    )
+    (source_bundle / "visual_defect_survey_mdpi.html").write_text(
+        "<html><body>scratches, shape error, crack, bump defects</body></html>",
+        encoding="utf-8",
+    )
+    (raw_dir / "mvtec_ad_cvpr_2019.pdf").write_bytes(b"%PDF-1.3\nfixture")
+    (raw_dir / "injection_molding_root_causes.pdf").write_bytes(b"%PDF-1.7\nfixture")
+    (raw_dir / "plastic_injection_molding_defects_chart.pdf").write_bytes(
+        b"%PDF-1.6\nfixture"
+    )
+
+    result = build_mvtec_llm_source_pack(
+        MVTecLLMSourcePackConfig(
+            output_dir=tmp_path / "pack",
+            mvtec_source_bundle_dir=source_bundle,
+            defect_spectrum_dir=defect_spectrum,
+            include_patchcore=False,
+        )
+    )
+
+    by_id = {item["material_id"]: item for item in result.manifest["materials"]}
+
+    assert by_id["mvtec_ad_paper_pdf"]["material_type"] == "pdf"
+    assert by_id["injection_molding_root_causes_pdf"]["metadata"][
+        "source_pack_role"
+    ] == "manufacturing_process_root_cause_context"
+    assert by_id["injection_molding_defects_chart_pdf"]["material_type"] == "pdf"
+    assert by_id["visual_defect_survey_html"]["material_type"] == "webpage"
+
+
 def test_smoke_mvtec_llm_kg_construction_cli_runs_offline_fixture(
     tmp_path: Path,
 ) -> None:

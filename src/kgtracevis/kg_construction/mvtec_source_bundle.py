@@ -37,14 +37,57 @@ DEFAULT_MVTEC_SOURCES: tuple[DownloadableSource, ...] = (
     ),
     DownloadableSource(
         source_id="mvtec_ad_paper_pdf",
-        title="MVTec AD comprehensive dataset paper PDF",
+        title="MVTec AD CVPR dataset paper PDF",
         url=(
-            "https://www.mvtec.com/fileadmin/Redaktion/mvtec.com/05_research_teaching/"
-            "datasets/mvtec_ad.pdf"
+            "https://openaccess.thecvf.com/content_CVPR_2019/papers/"
+            "Bergmann_MVTec_AD_--_A_Comprehensive_Real-World_Dataset_for_"
+            "Unsupervised_Anomaly_CVPR_2019_paper.pdf"
         ),
-        filename="raw/mvtec_ad.pdf",
+        filename="raw/mvtec_ad_cvpr_2019.pdf",
         source_type="official_dataset_paper",
         used_for="MVTec AD benchmark and industrial inspection context",
+        binary=True,
+    ),
+    DownloadableSource(
+        source_id="visual_defect_survey_html",
+        title="Visual-based defect detection and classification survey",
+        url="https://www.mdpi.com/1424-8220/20/5/1459",
+        filename="visual_defect_survey_mdpi.html",
+        source_type="industrial_visual_defect_survey",
+        used_for=(
+            "Industrial visual defect taxonomy, surface-defect categories, and "
+            "inspection context"
+        ),
+    ),
+    DownloadableSource(
+        source_id="injection_molding_root_causes_pdf",
+        title="Identifying possible root causes of defects for injection molding",
+        url=(
+            "https://pub-mediabox-storage.rxweb-prd.com/exhibitor/document/"
+            "exh-ac965eb8-1f7e-4577-9ffa-6bad7499d9de/"
+            "bf787ad1-f74c-4a00-a5fa-2b0e66adda3e.pdf"
+        ),
+        filename="raw/injection_molding_root_causes.pdf",
+        source_type="manufacturing_defect_root_cause_paper",
+        used_for=(
+            "Process-level cause candidates for cracks, contamination, burn marks, "
+            "and injection-molding visual defects"
+        ),
+        binary=True,
+    ),
+    DownloadableSource(
+        source_id="injection_molding_defects_chart_pdf",
+        title="Plastic injection molding defects chart",
+        url=(
+            "https://upmold.com/wp-content/uploads/Data-center/"
+            "Plastic-Injection-Molding-Defects-Chart.pdf"
+        ),
+        filename="raw/plastic_injection_molding_defects_chart.pdf",
+        source_type="manufacturing_defect_cause_table",
+        used_for=(
+            "Defect-to-cause table for contamination, cracking, deformation, "
+            "surface appearance, and process remedies"
+        ),
         binary=True,
     ),
     DownloadableSource(

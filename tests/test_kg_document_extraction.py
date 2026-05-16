@@ -13,7 +13,9 @@ from kgtracevis.kg_construction.document_extraction import (
     DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
     OpenAICompatibleDocumentUnderstandingClient,
     OpenAICompatibleKGExtractionClient,
+    ParsedSourceDocument,
     SourceTextChunk,
+    build_document_ie_prompt,
     chunk_source_document,
     document_understanding_response_schema,
     extract_draft_kg_from_chunks,
@@ -359,6 +361,75 @@ def test_document_ie_coerces_entity_ids_and_scenarios_before_draft_kg() -> None:
     assert draft.relations[0].tail == "SealWear"
     assert draft.relations[0].relation == "SUGGESTS_ROOT_CAUSE"
     assert draft.relations[0].scenario == "tep"
+
+
+def test_document_ie_replaces_generic_llm_entity_ids_with_names() -> None:
+    """Generic IDs like E6 should not collide across PDF chunks or sources."""
+    client = FakeIEClient(
+        {
+            "entities": [
+                {
+                    "id": "E6",
+                    "name": "Cavity imbalance",
+                    "label": "CauseCategory",
+                    "evidence": "Cavity Imbalance is an uneven filling behavior.",
+                },
+                {
+                    "id": "E7",
+                    "name": "Burn mark",
+                    "label": "Defect",
+                    "evidence": "Burn mark can be caused by trapped air.",
+                },
+            ],
+            "relations": [
+                {
+                    "head": "E6",
+                    "relation": "CAUSES",
+                    "tail": "E7",
+                    "evidence": "Burn mark can be caused by trapped air.",
+                }
+            ],
+        }
+    )
+
+    draft = extract_draft_kg_from_source_material(
+        KGConstructionSource(
+            source_id="pdf_ie_unit",
+            source_type="plain_text",
+            scenario="mvtec",
+            text=(
+                "Cavity Imbalance is an uneven filling behavior. "
+                "Burn mark can be caused by trapped air."
+            ),
+        ),
+        client,
+    )
+
+    assert {entity.entity_id_suggestion for entity in draft.entities} == {
+        "CavityImbalance",
+        "BurnMark",
+    }
+    assert draft.relations[0].head == "CavityImbalance"
+    assert draft.relations[0].tail == "BurnMark"
+
+
+def test_chunk_metadata_guides_root_cause_pdf_extraction_prompt() -> None:
+    """Source-pack role metadata should survive chunking and guide IE prompts."""
+    document = ParsedSourceDocument(
+        source_id="injection_pdf",
+        source_type="pdf",
+        scenario="mvtec",
+        text="Crack is caused by high residual stress during filling.",
+        parser="pdf",
+        metadata={"source_pack_role": "manufacturing_process_root_cause_context"},
+    )
+
+    chunk = chunk_source_document(document)[0]
+    prompt = build_document_ie_prompt(chunk)
+
+    assert chunk.metadata["source_pack_role"] == "manufacturing_process_root_cause_context"
+    assert "root-cause/mechanism context" in prompt
+    assert "HAS_PLAUSIBLE_CAUSE" in prompt
 
 
 def test_document_ie_rejects_invalid_scenario() -> None:

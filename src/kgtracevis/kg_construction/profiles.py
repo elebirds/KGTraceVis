@@ -89,6 +89,9 @@ class RcaProfile:
     semantic_projection_rules: dict[str, SemanticProjectionRule] = field(default_factory=dict)
     semantic_derived_relation_rules: tuple[SemanticDerivedRelationRule, ...] = ()
     relation_families: dict[str, str] = field(default_factory=dict)
+    relation_label_constraints: dict[str, tuple[frozenset[str], frozenset[str]]] = (
+        field(default_factory=dict)
+    )
     propagation_families: frozenset[str] = frozenset()
     relation_family_policies: dict[str, RelationFamilyPolicy] = field(default_factory=dict)
     root_candidate_labels: frozenset[str] = frozenset()
@@ -117,6 +120,20 @@ class RcaProfile:
         if explicit.strip():
             return explicit.strip().upper()
         return self.relation_families.get(self.rewrite_relation(relation), "")
+
+    def relation_endpoints_allowed(
+        self,
+        relation: str,
+        *,
+        head_label: str,
+        tail_label: str,
+    ) -> bool:
+        """Return whether a relation satisfies any configured label constraints."""
+        constraint = self.relation_label_constraints.get(self.rewrite_relation(relation))
+        if constraint is None:
+            return True
+        allowed_heads, allowed_tails = constraint
+        return head_label in allowed_heads and tail_label in allowed_tails
 
     def propagation_enabled_for(self, relation_family: str, explicit: bool | None = None) -> bool:
         """Return whether a relation family participates in propagation."""
@@ -417,6 +434,7 @@ MVTEC_PROFILE = RcaProfile(
             "Defect",
             "DefectType",
             "Location",
+            "Mechanism",
             "Morphology",
             "Object",
             "Product",
@@ -427,6 +445,7 @@ MVTEC_PROFILE = RcaProfile(
         {
             "ALIGNS_TO",
             "BELONGS_TO",
+            "CAUSES",
             "HAS_ANOMALY",
             "HAS_COMPONENT",
             "HAS_LOCATION",
@@ -456,6 +475,7 @@ MVTEC_PROFILE = RcaProfile(
     relation_families={
         "ALIGNS_TO": "ALIGNMENT",
         "BELONGS_TO": "SEMANTIC_SUPPORT",
+        "CAUSES": "CAUSES",
         "HAS_ANOMALY": "OBSERVATION",
         "HAS_COMPONENT": "PART_OF",
         "HAS_LOCATION": "SEMANTIC_SUPPORT",
@@ -465,6 +485,24 @@ MVTEC_PROFILE = RcaProfile(
         "PART_OF": "PART_OF",
         "SUGGESTS_PLAUSIBLE_MECHANISM": "CAUSES",
         "SUGGESTS_ROOT_CAUSE": "CAUSES",
+    },
+    relation_label_constraints={
+        "CAUSES": (
+            frozenset({"CauseCategory", "Defect", "Mechanism", "RootCause"}),
+            frozenset({"AnomalyType", "Defect"}),
+        ),
+        "HAS_LOCATION": (
+            frozenset({"AnomalyType", "Defect", "Object"}),
+            frozenset({"Component", "Location"}),
+        ),
+        "HAS_PLAUSIBLE_CAUSE": (
+            frozenset({"AnomalyType", "Defect"}),
+            frozenset({"CauseCategory", "Mechanism", "RootCause"}),
+        ),
+        "OCCURS_ON": (
+            frozenset({"AnomalyType", "Defect"}),
+            frozenset({"Component", "Location", "Object"}),
+        ),
     },
     propagation_families=frozenset({"OBSERVATION", "CAUSES"}),
     relation_family_policies={
@@ -567,6 +605,9 @@ def profile_from_mapping(
             uppercase_keys=True,
             uppercase_values=True,
         ),
+        relation_label_constraints=_relation_label_constraints(
+            payload.get("relation_label_constraints", {})
+        ),
         propagation_families=propagation_families,
         relation_family_policies=family_policies,
         root_candidate_labels=_string_set(
@@ -615,6 +656,15 @@ def profile_to_manifest(profile: RcaProfile) -> dict[str, object]:
             for rule in profile.semantic_derived_relation_rules
         ],
         "relation_families": dict(sorted(profile.relation_families.items())),
+        "relation_label_constraints": {
+            relation: {
+                "head_labels": sorted(head_labels),
+                "tail_labels": sorted(tail_labels),
+            }
+            for relation, (head_labels, tail_labels) in sorted(
+                profile.relation_label_constraints.items()
+            )
+        },
         "propagation_families": sorted(profile.propagation_families),
         "relation_family_policies": {
             family: {
@@ -719,6 +769,34 @@ def _semantic_projection_rules(value: Any) -> dict[str, SemanticProjectionRule]:
             ),
         )
     return rules
+
+
+def _relation_label_constraints(
+    value: Any,
+) -> dict[str, tuple[frozenset[str], frozenset[str]]]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("RCA profile relation_label_constraints must be an object")
+    result: dict[str, tuple[frozenset[str], frozenset[str]]] = {}
+    for relation, item in value.items():
+        if not isinstance(relation, str) or not relation.strip():
+            raise ValueError("RCA profile relation_label_constraints keys must be strings")
+        if not isinstance(item, Mapping):
+            raise ValueError(
+                "RCA profile relation_label_constraints values must be objects"
+            )
+        result[relation.strip().upper()] = (
+            _string_set(
+                item.get("head_labels", ()),
+                field_name=f"relation_label_constraints.{relation}.head_labels",
+            ),
+            _string_set(
+                item.get("tail_labels", ()),
+                field_name=f"relation_label_constraints.{relation}.tail_labels",
+            ),
+        )
+    return result
 
 
 def _semantic_derived_relation_rules(value: Any) -> tuple[SemanticDerivedRelationRule, ...]:

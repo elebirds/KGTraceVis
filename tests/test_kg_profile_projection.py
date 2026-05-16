@@ -50,6 +50,12 @@ def test_load_rca_profile_pack_from_json(tmp_path: Path) -> None:
                     }
                 ],
                 "relation_families": {"observed_by": "observation"},
+                "relation_label_constraints": {
+                    "observed_by": {
+                        "head_labels": ["Equipment"],
+                        "tail_labels": ["Variable"],
+                    }
+                },
                 "relation_family_policies": {
                     "observation": {
                         "propagation_enabled": True,
@@ -95,6 +101,12 @@ def test_load_rca_profile_pack_from_json(tmp_path: Path) -> None:
             "target_relation": "OBSERVED_BY",
         }
     ]
+    assert manifest["relation_label_constraints"] == {
+        "OBSERVED_BY": {
+            "head_labels": ["Equipment"],
+            "tail_labels": ["Variable"],
+        }
+    }
 
 
 def test_profile_projection_can_derive_source_backed_two_hop_edges() -> None:
@@ -547,3 +559,93 @@ def test_projection_swap_skips_edges_when_swapped_endpoint_is_not_kept() -> None
 
     assert semantic.edges == ()
     assert semantic.manifest["skipped_relation_ids"] == ["relation-pressure-pump"]
+
+
+def test_profile_projection_skips_relation_when_endpoint_labels_do_not_match() -> None:
+    """Profile label constraints keep source IE mistakes out of semantic rows."""
+    profile = RcaProfile(
+        domain_id="unit",
+        scenario="shared",
+        ontology="unit_rca_v1",
+        keep_labels=frozenset({"Defect", "Location"}),
+        relation_whitelist=frozenset({"HAS_LOCATION"}),
+        relation_families={"HAS_LOCATION": "SEMANTIC_SUPPORT"},
+        relation_label_constraints={
+            "HAS_LOCATION": (
+                frozenset({"Defect"}),
+                frozenset({"Location"}),
+            )
+        },
+    )
+    draft = DraftKG(
+        entities=(
+            DraftEntity(
+                draft_id="entity-flow-mark",
+                source_id="unit_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="FlowMark",
+                name="Flow mark",
+                label="Defect",
+                evidence="flow mark row",
+            ),
+            DraftEntity(
+                draft_id="entity-crack",
+                source_id="unit_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="Crack",
+                name="Crack",
+                label="Defect",
+                evidence="crack row",
+            ),
+            DraftEntity(
+                draft_id="entity-gate",
+                source_id="unit_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                entity_id_suggestion="GateArea",
+                name="Gate area",
+                label="Location",
+                evidence="gate row",
+            ),
+        ),
+        relations=(
+            DraftRelation(
+                draft_id="relation-bad-location",
+                source_id="unit_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                head="FlowMark",
+                relation="HAS_LOCATION",
+                tail="Crack",
+                evidence="flow mark appears near a crack",
+                confidence=0.7,
+            ),
+            DraftRelation(
+                draft_id="relation-good-location",
+                source_id="unit_source",
+                extractor_name="unit",
+                extractor_version="v1",
+                scenario="shared",
+                head="FlowMark",
+                relation="HAS_LOCATION",
+                tail="GateArea",
+                evidence="flow mark appears near the gate area",
+                confidence=0.8,
+            ),
+        ),
+    )
+
+    semantic = project_semantic_layer(draft, profile)
+
+    assert [edge.edge_id for edge in semantic.edges] == [
+        "FlowMark|HAS_LOCATION|GateArea|shared"
+    ]
+    assert semantic.manifest["label_constraint_skipped_relation_ids"] == [
+        "relation-bad-location"
+    ]

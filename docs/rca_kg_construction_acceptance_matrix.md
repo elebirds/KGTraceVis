@@ -82,7 +82,7 @@ top-k RCA path is contract/runtime valid, but not overlay-contribution accepted.
 | LLM document extraction boundary | Accepted as controlled adapter | OpenAI/offline fixture providers emit DraftKG candidates and material audit artifacts; no-key provider selection is exposed in KG Studio and does not publish facts |
 | Document understanding mode | Accepted as advisory reader | `long_context` can use an OpenAI-compatible/fixture `DocumentUnderstandingClient`; `agentic` runs retrieval-backed named reader steps and records selected chunk IDs; maps guide chunk IE and cross-chunk review items but do not publish facts or relax chunk evidence grounding |
 | Reviewed cross-chunk RCA opt-in | Accepted as review-only staging policy | Accepted proposals default to non-propagating, unscored reviewed edges; explicit `review_acceptance_policy`/`rca_policy` can apply capped RCA fields only after review accept and relation/family validation |
-| MVTec raw-material LLM construction | Accepted as source-grounded smoke path | `scripts/build_mvtec_llm_source_pack.py` and `scripts/smoke_mvtec_llm_kg_construction.py`; excludes derived catalog/KG files, parses DS-MVTec `defects_dict` into DraftKG candidate taxonomy, and treats plausible causes as reviewable hypotheses |
+| MVTec raw-material LLM construction | Accepted as source-grounded smoke path | `scripts/build_mvtec_llm_source_pack.py` and `scripts/smoke_mvtec_llm_kg_construction.py`; excludes derived catalog/KG files, parses DS-MVTec `defects_dict` into DraftKG candidate taxonomy, includes local raw PDFs such as manufacturing root-cause references when available, and treats plausible causes as reviewable hypotheses |
 
 ## Commands
 
@@ -154,6 +154,9 @@ published RCA-like MVTec cause edges are not created by the LLM path.
   `review_status=auto` until reviewed or policy-allowed.
 - The MVTec validation path must start from raw or near-raw documents, not from
   generated catalogs or prebuilt KG snapshots.
+- MVTec process/root-cause PDFs may guide chunk IE through source-pack role
+  metadata, but extracted edges still pass profile relation whitelists, endpoint
+  label constraints, review queues, and publish policy.
 - Document understanding and hypothesis brainstorming are independent axes:
   `chunk`, `long_context`, and `agentic` can be mixed with
   `hypothesis_mode=brainstorm`.
@@ -192,23 +195,23 @@ The latest acceptance pass in this thread ran:
 ```bash
 uv run --extra dev ruff check .
 uv run --extra dev mypy src tests scripts
-uv run --extra dev pytest -q
-cd web && npm run typecheck
+uv run pytest -q
 cd web && npm run build
-uv run python scripts/run_examples.py
-uv run python scripts/smoke_rca_kg_construction.py --tep-kg-root /Users/hhm/code/TEP_KG --require-tep --overwrite
-uv run python scripts/smoke_mvtec_llm_kg_construction.py --output-dir /tmp/kgtracevis_mvtec_llm_smoke --provider offline_fixture --overwrite
-uv run python scripts/smoke_mvtec_llm_kg_construction.py --output-dir /tmp/kgtracevis_mvtec_llm_live --provider openai --max-materials 2 --overwrite
-uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_smoke/material_direct --example-dir data/examples --output-path runs/source_kg_smoke/material_direct/kg_overlay_validation_report.json
-uv run python scripts/validate_kg_overlay.py --build-dir runs/source_kg_smoke/tep --example-dir data/examples --overlay-only-runtime --overlay-only-import --output-path runs/source_kg_smoke/tep/kg_overlay_validation_report.json
+uv run python scripts/smoke_rca_kg_construction.py --output-dir /tmp/kgtracevis_brainstorm_smoke --tep-kg-root /Users/hhm/code/TEP_KG --require-tep --overwrite
+uv run python scripts/smoke_mvtec_llm_kg_construction.py --source-pack /tmp/kgtracevis_mvtec_source_pack_rca/mvtec_llm_source_pack.json --output-dir /tmp/kgtracevis_mvtec_pdf_offline_verify --provider offline_fixture --overwrite
+uv run python scripts/smoke_mvtec_llm_kg_construction.py --source-pack /tmp/kgtracevis_mvtec_source_pack_rca/mvtec_llm_source_pack.json --output-dir /tmp/kgtracevis_mvtec_pdf_live_constrained --provider openai --max-materials 3 --document-understanding-mode long_context --overwrite
 ```
 
-At that pass, the test suite reported `372 passed, 2 skipped`, and the RCA-KG
+At that pass, the test suite reported `380 passed, 2 skipped`, and the RCA-KG
 construction smoke reported six passing paths: `toy_generic`,
 `material_direct`, `material_brainstorm`, `runtime_overlay`, `tep`, and
-`tep_runtime_overlay`. The live MVTec smoke used DeepSeek/OpenAI-compatible
-`openai` provider settings from `.env.local` / `.env` and produced reviewable
-missing-evidence tasks without publishing RCA-like cause edges.
+`tep_runtime_overlay`. The live MVTec smoke used OpenAI-compatible `openai`
+provider settings from `.env.local` / `.env` and a raw-source pack containing
+`mvtec_ad_official_page`, `ds_mvtec_dataset_card`, and
+`injection_molding_root_causes_pdf`. It produced `130` nodes and `406` edges,
+including four source-backed PDF `CAUSES` candidates, skipped malformed
+endpoint-label shapes in semantic projection, and did not publish RCA-like
+cause edges.
 
 ## Remaining Non-Goals
 
