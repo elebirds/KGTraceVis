@@ -80,6 +80,78 @@ RETURN head.id AS head,
        rel.accepted_count AS accepted_count,
        rel.rejected_count AS rejected_count
 """
+UPSERT_NODE_QUERY = """
+MERGE (node:KGEntity {id: $id})
+SET node.name = $name,
+    node.entity_label = $label,
+    node.scenario = $scenario,
+    node.aliases = $aliases,
+    node.description = $description
+RETURN node.id AS id,
+       node.name AS name,
+       node.entity_label AS label,
+       node.scenario AS scenario,
+       node.aliases AS aliases,
+       node.description AS description
+"""
+DELETE_NODE_QUERY = """
+MATCH (node:KGEntity {id: $id})
+OPTIONAL MATCH (node)-[rel]-()
+WITH node, count(rel) AS deleted_relationship_count
+DETACH DELETE node
+RETURN 1 AS deleted_node_count,
+       deleted_relationship_count AS deleted_relationship_count
+"""
+UPSERT_EDGE_QUERY = """
+MATCH (head:KGEntity {{id: $head}})
+MATCH (tail:KGEntity {{id: $tail}})
+MERGE (head)-[rel:`{relation}` {{edge_id: $edge_id}}]->(tail)
+SET rel.scenario = $scenario,
+    rel.source = $source,
+    rel.evidence = $evidence,
+    rel.confidence = $confidence,
+    rel.weight = $weight,
+    rel.review_status = $review_status,
+    rel.feedback_count = $feedback_count,
+    rel.accepted_count = $accepted_count,
+    rel.rejected_count = $rejected_count
+RETURN head.id AS head,
+       tail.id AS tail,
+       type(rel) AS relation,
+       rel.scenario AS scenario,
+       rel.source AS source,
+       rel.evidence AS evidence,
+       rel.confidence AS confidence,
+       rel.weight AS weight,
+       rel.review_status AS review_status,
+       rel.feedback_count AS feedback_count,
+       rel.accepted_count AS accepted_count,
+       rel.rejected_count AS rejected_count
+"""
+UPDATE_EDGE_CONFIDENCE_QUERY = """
+MATCH (head:KGEntity)-[rel {edge_id: $edge_id}]->(tail:KGEntity)
+SET rel.confidence = $confidence,
+    rel.weight = $weight
+RETURN head.id AS head,
+       tail.id AS tail,
+       type(rel) AS relation,
+       rel.scenario AS scenario,
+       rel.source AS source,
+       rel.evidence AS evidence,
+       rel.confidence AS confidence,
+       rel.weight AS weight,
+       rel.review_status AS review_status,
+       rel.feedback_count AS feedback_count,
+       rel.accepted_count AS accepted_count,
+       rel.rejected_count AS rejected_count
+"""
+DELETE_EDGE_QUERY = """
+MATCH ()-[rel {edge_id: $edge_id}]->()
+WITH collect(rel) AS rels
+WITH rels, size(rels) AS deleted_edge_count
+FOREACH (rel IN rels | DELETE rel)
+RETURN deleted_edge_count AS deleted_edge_count
+"""
 
 
 class Neo4jResult(Protocol):
@@ -245,6 +317,66 @@ class Neo4jKGRepository:
             edges = [_edge_from_record(str(record["head"]), record) for record in records]
         return KnowledgeGraph(nodes, edges)
 
+    def upsert_node(self, node: KGNode) -> KGNode:
+        """Create or update one runtime KG node."""
+        with self.driver.session(database=self.config.database) as session:
+            records = list(session.run(UPSERT_NODE_QUERY, _node_parameters(node)))
+        if not records:
+            raise ValueError(f"failed to upsert KG node: {node.id}")
+        return _node_from_record(records[0])
+
+    def delete_node(self, node_id: str) -> dict[str, int]:
+        """Delete one runtime KG node and its incident edges."""
+        with self.driver.session(database=self.config.database) as session:
+            records = list(session.run(DELETE_NODE_QUERY, {"id": node_id}))
+        if not records:
+            return {"deleted_node_count": 0, "deleted_relationship_count": 0}
+        record = records[0]
+        return {
+            "deleted_node_count": int(record.get("deleted_node_count") or 0),
+            "deleted_relationship_count": int(
+                record.get("deleted_relationship_count") or 0
+            ),
+        }
+
+    def upsert_edge(self, edge: KGEdge) -> KGEdge:
+        """Create or update one runtime KG edge."""
+        _require_relation(edge.relation)
+        query = UPSERT_EDGE_QUERY.format(relation=edge.relation)
+        with self.driver.session(database=self.config.database) as session:
+            records = list(session.run(query, _edge_parameters(edge)))
+        if not records:
+            raise ValueError(
+                "failed to upsert KG edge; head or tail node was not found: "
+                f"{edge.head}|{edge.relation}|{edge.tail}|{edge.scenario}"
+            )
+        return _edge_from_record(str(records[0]["head"]), records[0])
+
+    def update_edge_confidence(self, edge_id: str, confidence: float) -> KGEdge:
+        """Update one edge confidence and its derived weight."""
+        weight = round(1.0 - confidence, 6)
+        with self.driver.session(database=self.config.database) as session:
+            records = list(
+                session.run(
+                    UPDATE_EDGE_CONFIDENCE_QUERY,
+                    {
+                        "edge_id": edge_id,
+                        "confidence": confidence,
+                        "weight": weight,
+                    },
+                )
+            )
+        if not records:
+            raise ValueError(f"unknown KG edge: {edge_id}")
+        return _edge_from_record(str(records[0]["head"]), records[0])
+
+    def delete_edge(self, edge_id: str) -> dict[str, int]:
+        """Delete runtime KG edge relationships by stable edge ID."""
+        with self.driver.session(database=self.config.database) as session:
+            records = list(session.run(DELETE_EDGE_QUERY, {"edge_id": edge_id}))
+        deleted = int(records[0].get("deleted_edge_count") or 0) if records else 0
+        return {"deleted_edge_count": deleted}
+
 
 def _scenario_values(scenario: str | None) -> list[str]:
     if not scenario:
@@ -255,6 +387,34 @@ def _scenario_values(scenario: str | None) -> list[str]:
 def _require_relation(relation: str) -> None:
     if not RELATION_PATTERN.fullmatch(relation):
         raise ValueError(f"invalid Neo4j relation type: {relation}")
+
+
+def _node_parameters(node: KGNode) -> dict[str, object]:
+    return {
+        "id": node.id,
+        "name": node.name,
+        "label": node.label,
+        "scenario": node.scenario,
+        "aliases": list(node.aliases),
+        "description": node.description,
+    }
+
+
+def _edge_parameters(edge: KGEdge) -> dict[str, object]:
+    return {
+        "edge_id": edge.edge_id,
+        "head": edge.head,
+        "tail": edge.tail,
+        "scenario": edge.scenario,
+        "source": edge.source,
+        "evidence": edge.evidence,
+        "confidence": edge.confidence,
+        "weight": edge.weight,
+        "review_status": edge.review_status,
+        "feedback_count": edge.feedback_count,
+        "accepted_count": edge.accepted_count,
+        "rejected_count": edge.rejected_count,
+    }
 
 
 def _node_from_record(record: Mapping[str, Any]) -> KGNode:

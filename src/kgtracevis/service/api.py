@@ -63,6 +63,16 @@ from kgtracevis.service.kg_materials import (
     register_kg_material,
     save_kg_material_upload,
 )
+from kgtracevis.service.kg_runtime_edit import (
+    RuntimeKGEdgeConfidenceRequest,
+    RuntimeKGEdgeRequest,
+    RuntimeKGNodeRequest,
+    delete_runtime_kg_edge,
+    delete_runtime_kg_node,
+    update_runtime_kg_edge_confidence,
+    upsert_runtime_kg_edge,
+    upsert_runtime_kg_node,
+)
 from kgtracevis.service.kg_source_drafts import (
     KGSourceDraftRequest,
     generate_source_kg_draft,
@@ -189,6 +199,49 @@ def create_app() -> FastAPI:
     @app.post("/api/kg/source-draft")
     def kg_source_draft(request: KGSourceDraftRequest) -> dict[str, object]:
         return generate_source_kg_draft(request).model_dump(mode="json")
+
+    @app.post("/api/kg/runtime/nodes")
+    def kg_runtime_node_upsert(request: RuntimeKGNodeRequest) -> dict[str, object]:
+        try:
+            return upsert_runtime_kg_node(request).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.delete("/api/kg/runtime/nodes/{node_id}")
+    def kg_runtime_node_delete(node_id: str) -> dict[str, object]:
+        try:
+            return delete_runtime_kg_node(node_id).model_dump(mode="json")
+        except ValueError as exc:
+            status_code = 404 if "unknown KG node" in str(exc) else 400
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    @app.post("/api/kg/runtime/edges")
+    def kg_runtime_edge_upsert(request: RuntimeKGEdgeRequest) -> dict[str, object]:
+        try:
+            return upsert_runtime_kg_edge(request).model_dump(mode="json")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.patch("/api/kg/runtime/edges/{edge_id}/confidence")
+    def kg_runtime_edge_confidence_update(
+        edge_id: str,
+        request: RuntimeKGEdgeConfidenceRequest,
+    ) -> dict[str, object]:
+        try:
+            return update_runtime_kg_edge_confidence(edge_id, request).model_dump(
+                mode="json"
+            )
+        except ValueError as exc:
+            status_code = 404 if "unknown KG edge" in str(exc) else 400
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    @app.delete("/api/kg/runtime/edges/{edge_id}")
+    def kg_runtime_edge_delete(edge_id: str) -> dict[str, object]:
+        try:
+            return delete_runtime_kg_edge(edge_id).model_dump(mode="json")
+        except ValueError as exc:
+            status_code = 404 if "unknown KG edge" in str(exc) else 400
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
     @app.get("/api/kg/materials")
     def kg_materials() -> dict[str, object]:

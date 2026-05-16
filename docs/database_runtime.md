@@ -100,3 +100,25 @@ run-detail snapshot table.
 Uploaded source files and generated visualization artifacts can still live under
 the run artifact directory so the API can serve files, but list/detail/feedback
 state should be queried from Postgres by default.
+
+## Runtime KG Edits
+
+Backend KG edit APIs write directly to the Neo4j runtime graph:
+
+```http
+POST /api/kg/runtime/nodes
+DELETE /api/kg/runtime/nodes/{node_id}
+POST /api/kg/runtime/edges
+PATCH /api/kg/runtime/edges/{edge_id}/confidence
+DELETE /api/kg/runtime/edges/{edge_id}
+```
+
+Node upserts set the `KGEntity` properties used by runtime snapshots:
+`id`, `name`, `entity_label`, `scenario`, `aliases`, and `description`.
+Edge upserts require the source-constrained KG fields used by CSV imports:
+`source`, `evidence`, `confidence`, `review_status`, and feedback counters.
+Confidence updates also update `weight` to `1 - confidence`.
+
+These APIs do not mutate tracked `data/kg/*.csv` seed files. If a later explicit
+CSV import writes the same `node.id` or `edge.edge_id`, the imported seed row may
+overwrite matching Neo4j properties.
