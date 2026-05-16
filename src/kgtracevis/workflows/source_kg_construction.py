@@ -333,6 +333,7 @@ def _cross_chunk_proposal_records(
     review_items: list[ReviewQueueItem] = []
     for document_map in document_maps:
         source_id = str(document_map.get("source_id") or "document_understanding")
+        scenario = str(document_map.get("scenario") or "shared").strip() or "shared"
         proposals = document_map.get("cross_chunk_proposals", [])
         if not isinstance(proposals, list):
             raise ValueError(f"cross_chunk_proposals must be a list for source {source_id}")
@@ -342,6 +343,7 @@ def _cross_chunk_proposal_records(
             record = _cross_chunk_proposal_record(
                 proposal,
                 source_id=source_id,
+                scenario=scenario,
                 index=index,
                 run_id=run_id,
             )
@@ -355,6 +357,7 @@ def _cross_chunk_proposal_record(
     proposal: Mapping[str, Any],
     *,
     source_id: str,
+    scenario: str,
     index: int,
     run_id: str,
 ) -> dict[str, Any]:
@@ -381,10 +384,11 @@ def _cross_chunk_proposal_record(
     if len(spans) < 2:
         errors.append("cross-chunk proposal requires at least two supporting spans")
     validation_status = "rejected" if errors else "review_required"
-    return {
+    record = {
         "proposal_id": proposal_id,
         "run_id": run_id,
         "source_id": source_id,
+        "scenario": scenario,
         "head": head,
         "relation": relation,
         "tail": tail,
@@ -400,6 +404,11 @@ def _cross_chunk_proposal_record(
             or "relation combines document-level evidence across multiple spans"
         ),
     }
+    for policy_key in ("review_acceptance_policy", "rca_policy"):
+        policy_value = proposal.get(policy_key)
+        if isinstance(policy_value, Mapping):
+            record[policy_key] = dict(policy_value)
+    return record
 
 
 def _cross_chunk_review_item(record: Mapping[str, Any]) -> ReviewQueueItem:
@@ -419,7 +428,7 @@ def _cross_chunk_review_item(record: Mapping[str, Any]) -> ReviewQueueItem:
         evidence=evidence or str(record["why_hint_only"]),
         confidence=_proposal_confidence(record.get("confidence")),
         review_status="auto",
-        scenario="shared",
+        scenario=str(record.get("scenario") or "shared"),
         relation_family=str(record["relation_family"]),
         graph_impact="can introduce RCA traversal relation after explicit review",
         recommended_action="verify_all_spans_then_accept_or_reject",

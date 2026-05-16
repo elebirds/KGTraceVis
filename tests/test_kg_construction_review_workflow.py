@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -19,6 +20,7 @@ from kgtracevis.workflows.kg_construction_review import (
 )
 from kgtracevis.workflows.source_kg_construction import (
     SourceKGConstructionWorkflowConfig,
+    SourceKGConstructionWorkflowResult,
     run_source_kg_construction_workflow,
 )
 
@@ -207,6 +209,208 @@ def test_review_workflow_accepts_non_edge_review_item(
     assert artifact_diff["artifacts"]["summary_counts"]["changed_count"] == 1
 
 
+def test_review_workflow_accepts_cross_chunk_proposal_into_reviewed_edge(
+    tmp_path: Path,
+) -> None:
+    """Accepted cross-chunk proposals should stage a reviewed edge after review."""
+    output_dir = tmp_path / "cross_chunk_candidate"
+    document_map_path = tmp_path / "document_understanding_map.json"
+    document_map_path.write_text(
+        json.dumps(
+            {
+                "artifact_type": "document_understanding_map_v1",
+                "mode": "agentic",
+                "source_id": "mapped_source",
+                "scenario": "tep",
+                "cross_chunk_proposals": [
+                    {
+                        "head": "PumpFault",
+                        "relation": "CAUSES",
+                        "tail": "SealWear",
+                        "confidence": 0.58,
+                        "relation_family": "CAUSES",
+                        "supporting_spans": [
+                            {
+                                "source_id": "mapped_source",
+                                "chunk_id": "mapped_source:chunk:0001:aaa",
+                                "text": "Pump fault starts the abnormal event.",
+                            },
+                            {
+                                "source_id": "mapped_source",
+                                "chunk_id": "mapped_source:chunk:0002:bbb",
+                                "text": "Seal wear is listed as the downstream mechanism.",
+                            },
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    build = run_source_kg_construction_workflow(
+        SourceKGConstructionWorkflowConfig(
+            output_dir=output_dir,
+            sources=(
+                KGConstructionSource(
+                    source_id="mapped_source",
+                    source_type="manual_table",
+                    scenario="tep",
+                    text=_cross_chunk_entity_source_csv(scenario="tep"),
+                    metadata={
+                        "source_format": "csv",
+                        "document_understanding_map_path": str(document_map_path),
+                    },
+                ),
+            ),
+            run_id="kgbuild_review_cross_chunk",
+        )
+    )
+    review_queue = json.loads(build.review_queue_path.read_text(encoding="utf-8"))
+    proposal_item = next(
+        item
+        for item in review_queue
+        if item["item_type"] == "cross_chunk_relation_candidate"
+    )
+
+    result = review_kg_construction_item_artifact(
+        ReviewKGConstructionItemConfig(
+            output_dir=build.output_dir,
+            action="accept",
+            target_key=proposal_item["target_key"],
+            item_type="cross_chunk_relation_candidate",
+            reviewer="unit-test",
+            note="verified both supporting spans",
+            proposed_payload={
+                "relation": "UNSUPPORTED_CAUSAL_FACT",
+                "confidence": 1.0,
+                "validation_status": "review_required",
+            },
+        )
+    )
+
+    edge_rows = _read_csv_rows(build.edges_path)
+    published_edges = _read_csv_rows(result.published_edges_path)
+    refreshed_queue = json.loads(build.review_queue_path.read_text(encoding="utf-8"))
+    refreshed_item = next(
+        item for item in refreshed_queue if item["target_key"] == proposal_item["target_key"]
+    )
+    artifact_diff = json.loads(result.diff_path.read_text(encoding="utf-8"))
+
+    assert len(edge_rows) == 1
+    assert edge_rows[0]["head"] == "PumpFault"
+    assert edge_rows[0]["relation"] == "CAUSES"
+    assert edge_rows[0]["tail"] == "SealWear"
+    assert edge_rows[0]["scenario"] == "tep"
+    assert edge_rows[0]["confidence"] == "0.58"
+    assert edge_rows[0]["review_status"] == "reviewed"
+    assert edge_rows[0]["propagation_enabled"] == "false"
+    assert edge_rows[0]["rca_score"] == "0"
+    assert edge_rows[0]["confidence_policy"] == "human_reviewed_cross_chunk_proposal"
+    assert edge_rows[0]["kg_build_id"] == "kgbuild_review_cross_chunk"
+    assert len(published_edges) == 1
+    assert published_edges[0]["scenario"] == "tep"
+    assert published_edges[0]["review_status"] == "reviewed"
+    assert refreshed_item["review_status"] == "reviewed"
+    assert refreshed_item["candidate_payload"]["staged_edge"]["relation"] == "CAUSES"
+    assert result.summary["review_status_counts"] == {"reviewed": 1}
+    assert artifact_diff["artifacts"]["edges"]["added_count"] == 1
+
+
+def test_review_workflow_applies_explicit_cross_chunk_rca_policy(
+    tmp_path: Path,
+) -> None:
+    """Accepted proposals may opt into capped RCA staging after review."""
+    proposal = _cross_chunk_proposal(
+        review_acceptance_policy={
+            "propagation_enabled": True,
+            "propagation_direction": "forward",
+            "propagation_priority": 0.95,
+            "rca_score": 0.95,
+            "rca_score_confidence": 0.8,
+            "source_trust": 0.95,
+        }
+    )
+    build, proposal_item = _build_cross_chunk_review_case(
+        tmp_path,
+        proposal=proposal,
+        run_id="kgbuild_review_cross_chunk_rca",
+    )
+
+    result = review_kg_construction_item_artifact(
+        ReviewKGConstructionItemConfig(
+            output_dir=build.output_dir,
+            action="accept",
+            target_key=proposal_item["target_key"],
+            item_type="cross_chunk_relation_candidate",
+            reviewer="unit-test",
+            note="verified and opted into RCA staging",
+        )
+    )
+
+    edge_rows = _read_csv_rows(build.edges_path)
+    refreshed_queue = json.loads(build.review_queue_path.read_text(encoding="utf-8"))
+    refreshed_item = next(
+        item for item in refreshed_queue if item["target_key"] == proposal_item["target_key"]
+    )
+
+    assert edge_rows[0]["propagation_enabled"] == "true"
+    assert edge_rows[0]["propagation_priority"] == "0.75"
+    assert edge_rows[0]["source_trust"] == "0.8"
+    assert edge_rows[0]["rca_score"] == "0.7"
+    assert edge_rows[0]["rca_score_confidence"] == "0.7"
+    assert edge_rows[0]["confidence_policy"] == (
+        "human_reviewed_cross_chunk_proposal_with_rca_policy"
+    )
+    assert refreshed_item["candidate_payload"]["review_acceptance_policy_result"][
+        "status"
+    ] == "applied"
+    assert result.summary["review_status_counts"] == {"reviewed": 1}
+
+
+def test_review_workflow_ignores_unsupported_cross_chunk_rca_policy(
+    tmp_path: Path,
+) -> None:
+    """Unsupported RCA opt-in stays deterministic and conservative."""
+    proposal = _cross_chunk_proposal(
+        relation="HAS_LOCATION",
+        relation_family="LOCATION",
+        rca_policy={
+            "propagation_enabled": True,
+            "rca_score": 0.9,
+        },
+    )
+    build, proposal_item = _build_cross_chunk_review_case(
+        tmp_path,
+        proposal=proposal,
+        run_id="kgbuild_review_cross_chunk_ignored_rca",
+    )
+
+    review_kg_construction_item_artifact(
+        ReviewKGConstructionItemConfig(
+            output_dir=build.output_dir,
+            action="accept",
+            target_key=proposal_item["target_key"],
+            item_type="cross_chunk_relation_candidate",
+            reviewer="unit-test",
+            note="reviewed relation but RCA policy unsupported",
+        )
+    )
+
+    edge_rows = _read_csv_rows(build.edges_path)
+    refreshed_queue = json.loads(build.review_queue_path.read_text(encoding="utf-8"))
+    refreshed_item = next(
+        item for item in refreshed_queue if item["target_key"] == proposal_item["target_key"]
+    )
+
+    assert edge_rows[0]["relation"] == "HAS_LOCATION"
+    assert edge_rows[0]["propagation_enabled"] == "false"
+    assert edge_rows[0]["rca_score"] == "0"
+    assert edge_rows[0]["confidence_policy"] == "human_reviewed_cross_chunk_proposal"
+    assert refreshed_item["candidate_payload"]["review_acceptance_policy_result"][
+        "status"
+    ] == "ignored"
+
+
 def test_review_source_kg_cli_accepts_non_edge_review_item(
     tmp_path: Path,
 ) -> None:
@@ -341,6 +545,87 @@ def _alignment_source_csv() -> str:
             "",
         ]
     )
+
+
+def _cross_chunk_entity_source_csv(*, scenario: str = "shared") -> str:
+    return "\n".join(
+        [
+            "id,name,label,head,relation,tail,scenario,evidence,confidence",
+            f"PumpFault,Pump fault,Fault,,,,{scenario},pump fault row,0.82",
+            f"SealWear,Seal wear,RootCause,,,,{scenario},seal wear row,0.82",
+            "",
+        ]
+    )
+
+
+def _cross_chunk_proposal(**overrides: object) -> dict[str, Any]:
+    proposal: dict[str, Any] = {
+        "head": "PumpFault",
+        "relation": "CAUSES",
+        "tail": "SealWear",
+        "confidence": 0.58,
+        "relation_family": "CAUSES",
+        "supporting_spans": [
+            {
+                "source_id": "mapped_source",
+                "chunk_id": "mapped_source:chunk:0001:aaa",
+                "text": "Pump fault starts the abnormal event.",
+            },
+            {
+                "source_id": "mapped_source",
+                "chunk_id": "mapped_source:chunk:0002:bbb",
+                "text": "Seal wear is listed as the downstream mechanism.",
+            },
+        ],
+    }
+    proposal.update(overrides)
+    return proposal
+
+
+def _build_cross_chunk_review_case(
+    tmp_path: Path,
+    *,
+    proposal: dict[str, Any],
+    run_id: str,
+) -> tuple[SourceKGConstructionWorkflowResult, dict[str, Any]]:
+    output_dir = tmp_path / run_id
+    document_map_path = tmp_path / f"{run_id}_document_understanding_map.json"
+    document_map_path.write_text(
+        json.dumps(
+            {
+                "artifact_type": "document_understanding_map_v1",
+                "mode": "agentic",
+                "source_id": "mapped_source",
+                "cross_chunk_proposals": [proposal],
+            }
+        ),
+        encoding="utf-8",
+    )
+    build = run_source_kg_construction_workflow(
+        SourceKGConstructionWorkflowConfig(
+            output_dir=output_dir,
+            sources=(
+                KGConstructionSource(
+                    source_id="mapped_source",
+                    source_type="manual_table",
+                    scenario="shared",
+                    text=_cross_chunk_entity_source_csv(),
+                    metadata={
+                        "source_format": "csv",
+                        "document_understanding_map_path": str(document_map_path),
+                    },
+                ),
+            ),
+            run_id=run_id,
+        )
+    )
+    review_queue = json.loads(build.review_queue_path.read_text(encoding="utf-8"))
+    proposal_item = next(
+        item
+        for item in review_queue
+        if item["item_type"] == "cross_chunk_relation_candidate"
+    )
+    return build, proposal_item
 
 
 def _write_alignment_source_library(tmp_path: Path, source_path: Path) -> Path:

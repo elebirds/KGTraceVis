@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
-from kgtracevis.kg_construction.document_extraction import SourceTextChunk
+from kgtracevis.kg_construction.document_extraction import (
+    AGENTIC_DOCUMENT_READER_STEPS,
+    ParsedSourceDocument,
+    SourceTextChunk,
+    build_document_understanding_map,
+)
 from kgtracevis.service import kg_materials as service_kg_materials
 from kgtracevis.service.kg_materials import (
     KGMaterialExtractionRunRequest,
@@ -277,6 +283,143 @@ def test_material_extraction_document_understanding_writes_document_map(
     )
 
 
+def test_long_context_document_understanding_uses_injected_client_and_chunk_context(
+    tmp_path: Path,
+) -> None:
+    """Injected long-context DU clients should drive map and scoped IE prompts."""
+    source_text = (
+        "ChunkOneOnly PumpFault appears in the first section. "
+        "Condition Monitoring (CM) observes the alert. "
+        "This paragraph includes enough supporting detail to force a chunk split.\n\n"
+        "ChunkTwoOnly SealWear appears in the second section. "
+        "Seal wear is discussed as a follow-up mechanism. "
+        "This paragraph also carries extra context for the second chunk."
+    )
+    save_kg_material_upload(
+        material_id="long_context_note",
+        title="Long context note",
+        filename="long_context_note.txt",
+        content=source_text.encode(),
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+    du_client = DynamicDocumentUnderstandingClient()
+    ie_client = EmptyPromptCapturingIEClient()
+
+    response = extract_kg_material_to_structured_records(
+        "long_context_note",
+        KGMaterialExtractionRunRequest(
+            document_understanding_mode="long_context",
+            max_chars=200,
+            overlap_chars=0,
+            overwrite=True,
+        ),
+        client=ie_client,
+        document_understanding_client=du_client,
+        material_root=tmp_path,
+    )
+
+    document_map = json.loads(
+        Path(response.document_understanding_map_path or "").read_text(encoding="utf-8")
+    )
+    prompt_rows = [
+        json.loads(line)
+        for line in Path(response.chunk_prompt_context_path or "")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+
+    assert [call["step_name"] for call in du_client.calls] == ["long_context_document_map"]
+    assert document_map["reader_type"] == "long_context_llm"
+    assert document_map["entity_inventory"][0]["term"] == "ChunkOneOnly"
+    assert document_map["cross_chunk_proposals"][0]["head"] == "PumpFault"
+    assert len(prompt_rows) == 2
+    assert prompt_rows[0]["entity_terms"] == ["ChunkOneOnly"]
+    assert prompt_rows[1]["entity_terms"] == ["ChunkTwoOnly"]
+    assert "DocumentWideLeak" not in prompt_rows[0]["entity_terms"]
+    assert "DocumentWideLeak" not in prompt_rows[1]["entity_terms"]
+    assert len(ie_client.prompts) == 2
+    assert "candidate terminology: ChunkOneOnly" in ie_client.prompts[0]
+    assert "ChunkTwoOnly" not in ie_client.prompts[0]
+    assert "DocumentWideLeak" not in ie_client.prompts[0]
+    assert "candidate terminology: ChunkTwoOnly" in ie_client.prompts[1]
+    assert "ChunkOneOnly" not in ie_client.prompts[1]
+    assert "DocumentWideLeak" not in ie_client.prompts[1]
+
+
+def test_agentic_document_understanding_runs_named_steps(
+    tmp_path: Path,
+) -> None:
+    """Agentic mode should call multiple DU steps and persist agent metadata."""
+    source_text = (
+        "Agentic PumpFault appears in a first chunk with unique AlphaMarker text. "
+        "Extra words keep this source segment long enough for deterministic splitting. "
+        "Additional first-section maintenance notes extend the segment boundary.\n\n"
+        "A second chunk carries unrelated BetaMarker observations and local context. "
+        "Extra words keep this source segment long enough for deterministic splitting. "
+        "Additional second-section maintenance notes extend the segment boundary.\n\n"
+        "Agentic SealWear appears in a third chunk with unique GammaMarker text. "
+        "Extra words keep this source segment long enough for deterministic splitting. "
+        "Additional third-section maintenance notes extend the segment boundary.\n\n"
+        "A final chunk carries unrelated DeltaMarker details and closing context. "
+        "Extra words keep this source segment long enough for deterministic splitting. "
+        "Additional final-section maintenance notes extend the segment boundary."
+    )
+    save_kg_material_upload(
+        material_id="agentic_note",
+        title="Agentic note",
+        filename="agentic_note.txt",
+        content=source_text.encode(),
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+    du_client = StepDocumentUnderstandingClient()
+
+    response = extract_kg_material_to_structured_records(
+        "agentic_note",
+        KGMaterialExtractionRunRequest(
+            document_understanding_mode="agentic",
+            max_chars=200,
+            overlap_chars=0,
+            overwrite=True,
+        ),
+        client=EmptyIEClient(),
+        document_understanding_client=du_client,
+        material_root=tmp_path,
+    )
+
+    document_map = json.loads(
+        Path(response.document_understanding_map_path or "").read_text(encoding="utf-8")
+    )
+
+    assert [call["step_name"] for call in du_client.calls] == list(
+        AGENTIC_DOCUMENT_READER_STEPS
+    )
+    assert document_map["reader_type"] == "agentic_multi_step"
+    assert [step["step_name"] for step in document_map["agent_steps"]] == list(
+        AGENTIC_DOCUMENT_READER_STEPS
+    )
+    assert {step["status"] for step in document_map["agent_steps"]} == {"completed"}
+    assert document_map["sections"][0]["title"] == "LLM outline"
+    assert document_map["glossary"][0]["term"] == "APF"
+    assert document_map["cross_chunk_proposals"][0]["relation"] == "CAUSES"
+    assert document_map["document_reading_plan"]["strategy"] == (
+        "deterministic_chunk_summary_keyword_retrieval_v1"
+    )
+    outline_call = next(call for call in du_client.calls if call["step_name"] == "outline")
+    outline_step = next(
+        step for step in document_map["agent_steps"] if step["step_name"] == "outline"
+    )
+    assert outline_step["retrieval_strategy"] == "section_spread_first_middle_last"
+    assert len(outline_step["selected_chunk_ids"]) < document_map["chunk_count"]
+    assert len(outline_call["selected_chunk_ids"]) == len(outline_step["selected_chunk_ids"])
+    assert "AlphaMarker" in outline_call["prompt"]
+    assert "final-section" in outline_call["prompt"]
+    assert "BetaMarker" not in outline_call["prompt"]
+
+
 def test_offline_fixture_provider_requires_explicit_fixture(
     tmp_path: Path,
 ) -> None:
@@ -296,6 +439,41 @@ def test_offline_fixture_provider_requires_explicit_fixture(
             "missing_fixture_note",
             KGMaterialExtractionRunRequest(provider="offline_fixture", overwrite=True),
             material_root=tmp_path,
+        )
+
+
+def test_document_understanding_invalid_payload_error_is_precise() -> None:
+    """Invalid DU payloads should name the source and reader step once."""
+    document = ParsedSourceDocument(
+        source_id="bad_du_source",
+        source_type="txt",
+        scenario="shared",
+        text="Bad payload source text.",
+        parser="plain_text",
+    )
+    chunk = SourceTextChunk(
+        chunk_id="bad_du_source:chunk:0001:abc",
+        source_id="bad_du_source",
+        source_type="txt",
+        scenario="shared",
+        text="Bad payload source text.",
+        start_char=0,
+        end_char=24,
+        index=1,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"invalid document understanding payload "
+            r"\(source_id='bad_du_source', step_name='long_context_llm'\)"
+        ),
+    ):
+        build_document_understanding_map(
+            document,
+            [chunk],
+            mode="long_context",
+            client=InvalidDocumentUnderstandingClient(),
         )
 
 
@@ -531,7 +709,7 @@ class FakeIEClient:
         prompt: str,
         response_schema: dict[str, Any],
     ) -> dict[str, Any]:
-        del prompt, response_schema
+        del response_schema
         return {
             "entities": [
                 {
@@ -592,6 +770,162 @@ class PromptCapturingIEClient(FakeIEClient):
             prompt=prompt,
             response_schema=response_schema,
         )
+
+
+class EmptyPromptCapturingIEClient(EmptyIEClient):
+    """Empty IE client that records chunk prompts for scoped context tests."""
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    def extract_candidates(
+        self,
+        chunk: SourceTextChunk,
+        *,
+        prompt: str,
+        response_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        self.prompts.append(prompt)
+        return super().extract_candidates(
+            chunk,
+            prompt=prompt,
+            response_schema=response_schema,
+        )
+
+
+class DynamicDocumentUnderstandingClient:
+    """DU test client that derives chunk-scoped context from actual chunk IDs."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def understand_document(
+        self,
+        document: ParsedSourceDocument,
+        chunks: Sequence[SourceTextChunk],
+        *,
+        mode: str,
+        step_name: str,
+        prompt: str,
+        response_schema: Mapping[str, Any],
+        prior_steps: Sequence[Mapping[str, Any]] = (),
+    ) -> dict[str, Any]:
+        del prompt, response_schema, prior_steps
+        self.calls.append(
+            {"source_id": document.source_id, "mode": mode, "step_name": step_name}
+        )
+        return {
+            "sections": [
+                {"title": "First", "chunk_ids": [chunks[0].chunk_id]},
+                {"title": "Second", "chunk_ids": [chunks[1].chunk_id]},
+            ],
+            "entity_inventory": [
+                {"term": "ChunkOneOnly", "chunk_ids": [chunks[0].chunk_id]},
+                {"term": "ChunkTwoOnly", "chunk_ids": [chunks[1].chunk_id]},
+                {"term": "DocumentWideLeak"},
+            ],
+            "relation_hints": [
+                {
+                    "head": "PumpFault",
+                    "relation": "CAUSES",
+                    "tail": "SealWear",
+                    "relation_family": "CAUSES",
+                    "confidence": 0.7,
+                    "supporting_spans": [
+                        {
+                            "chunk_id": chunks[0].chunk_id,
+                            "text": "ChunkOneOnly PumpFault",
+                        },
+                        {
+                            "chunk_id": chunks[1].chunk_id,
+                            "text": "ChunkTwoOnly SealWear",
+                        },
+                    ],
+                }
+            ],
+        }
+
+
+class InvalidDocumentUnderstandingClient:
+    """DU test client that returns a syntactically valid but non-object payload."""
+
+    def understand_document(
+        self,
+        document: ParsedSourceDocument,
+        chunks: Sequence[SourceTextChunk],
+        *,
+        mode: str,
+        step_name: str,
+        prompt: str,
+        response_schema: Mapping[str, Any],
+        prior_steps: Sequence[Mapping[str, Any]] = (),
+    ) -> str:
+        del document, chunks, mode, step_name, prompt, response_schema, prior_steps
+        return "[]"
+
+
+class StepDocumentUnderstandingClient:
+    """DU test client that returns one payload per agentic reader step."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def understand_document(
+        self,
+        document: ParsedSourceDocument,
+        chunks: Sequence[SourceTextChunk],
+        *,
+        mode: str,
+        step_name: str,
+        prompt: str,
+        response_schema: Mapping[str, Any],
+        prior_steps: Sequence[Mapping[str, Any]] = (),
+    ) -> dict[str, Any]:
+        del response_schema
+        self.calls.append(
+            {
+                "source_id": document.source_id,
+                "mode": mode,
+                "step_name": step_name,
+                "prior_step_count": len(prior_steps),
+                "prompt": prompt,
+                "selected_chunk_ids": [chunk.chunk_id for chunk in chunks],
+            }
+        )
+        if step_name == "outline":
+            return {"sections": [{"title": "LLM outline", "chunk_ids": [chunks[0].chunk_id]}]}
+        if step_name == "glossary":
+            return {
+                "glossary": [
+                    {
+                        "term": "APF",
+                        "expansion": "Agentic PumpFault",
+                        "chunk_ids": [chunks[0].chunk_id],
+                    }
+                ]
+            }
+        if step_name == "entity_inventory":
+            return {
+                "entity_inventory": [
+                    {"term": "Agentic PumpFault", "chunk_ids": [chunks[0].chunk_id]},
+                    {"term": "Agentic SealWear", "chunk_ids": [chunks[-1].chunk_id]},
+                ]
+            }
+        if step_name == "relation_hints":
+            return {"relation_hints": [{"relation_family": "CAUSES"}]}
+        return {
+            "cross_chunk_proposals": [
+                {
+                    "head": "AgenticPumpFault",
+                    "relation": "CAUSES",
+                    "tail": "AgenticSealWear",
+                    "supporting_spans": [
+                        {"chunk_id": chunks[0].chunk_id, "text": "Agentic PumpFault"},
+                        {"chunk_id": chunks[-1].chunk_id, "text": "Agentic SealWear"},
+                    ],
+                }
+            ]
+        }
 
 
 def _offline_pump_fixture() -> dict[str, Any]:

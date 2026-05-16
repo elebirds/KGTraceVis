@@ -280,6 +280,7 @@ def test_source_kg_construction_workflow_reviews_cross_chunk_proposals(
                 "artifact_type": "document_understanding_map_v1",
                 "mode": "long_context",
                 "source_id": "mapped_source",
+                "scenario": "tep",
                 "cross_chunk_proposals": [
                     {
                         "head": "PumpFault",
@@ -312,6 +313,23 @@ def test_source_kg_construction_workflow_reviews_cross_chunk_proposals(
                             }
                         ],
                     },
+                    {
+                        "head": "PumpFault",
+                        "relation": "UNSUPPORTED_CAUSAL_FACT",
+                        "tail": "SealWear",
+                        "supporting_spans": [
+                            {
+                                "source_id": "mapped_source",
+                                "chunk_id": "mapped_source:chunk:0001:abc",
+                                "text": "Pump fault is described.",
+                            },
+                            {
+                                "source_id": "mapped_source",
+                                "chunk_id": "mapped_source:chunk:0002:def",
+                                "text": "Seal wear is listed as the mechanism.",
+                            },
+                        ],
+                    },
                 ],
             }
         ),
@@ -339,7 +357,7 @@ def test_source_kg_construction_workflow_reviews_cross_chunk_proposals(
                 KGConstructionSource(
                     source_id="mapped_source",
                     source_type="manual_table",
-                    scenario="shared",
+                    scenario="tep",
                     text=_entity_only_source_csv(),
                     metadata={
                         "source_format": "csv",
@@ -367,12 +385,16 @@ def test_source_kg_construction_workflow_reviews_cross_chunk_proposals(
 
     assert len(cross_chunk_items) == 1
     assert cross_chunk_items[0]["priority"] == 96
+    assert cross_chunk_items[0]["scenario"] == "tep"
     assert [row["validation_status"] for row in proposal_rows] == [
         "review_required",
         "rejected",
+        "rejected",
     ]
     assert proposal_rows[0]["confidence"] == 0.6
+    assert proposal_rows[0]["scenario"] == "tep"
     assert "at least two supporting spans" in proposal_rows[1]["validation_errors"][0]
+    assert "relation is not allowed" in proposal_rows[2]["validation_errors"][0]
     assert published_edges == []
     assert artifact_diff["artifacts"]["document_map"]["changed"] is False
     assert artifact_diff["artifacts"]["cross_chunk_proposals"]["added_count"] == 0

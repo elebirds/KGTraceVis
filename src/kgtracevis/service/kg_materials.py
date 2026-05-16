@@ -17,11 +17,15 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from kgtracevis.kg_construction.document_extraction import (
     ALLOWED_DOCUMENT_IE_RELATIONS,
     DEFAULT_DOCUMENT_IE_PROMPT_VERSION,
+    DEFAULT_DOCUMENT_UNDERSTANDING_PROMPT_VERSION,
     DocumentIEChunkExtractionSummary,
     DocumentIEClient,
     DocumentIEExtractionResult,
+    DocumentUnderstandingClient,
     DocumentUnderstandingMode,
     OfflineDocumentIEFixtureClient,
+    OfflineDocumentUnderstandingFixtureClient,
+    OpenAICompatibleDocumentUnderstandingClient,
     OpenAICompatibleKGExtractionClient,
     ParsedSourceDocument,
     SourceTextChunk,
@@ -56,6 +60,7 @@ MaterialType = Literal[
 MaterialStatus = Literal["registered", "uploaded", "extracted", "failed"]
 ExtractionStatus = Literal["not_started", "extracted", "failed"]
 DocumentIEProvider = Literal["openai", "offline_fixture"]
+DocumentUnderstandingProvider = Literal["none", "openai", "offline_fixture"]
 
 
 class KGMaterialExtractionState(BaseModel):
@@ -256,11 +261,15 @@ class KGMaterialExtractionRunRequest(BaseModel):
     source_format: ConstructionSourceFormat = "jsonl"
     prompt_version: str = DEFAULT_DOCUMENT_IE_PROMPT_VERSION
     document_understanding_mode: DocumentUnderstandingMode = "chunk"
+    document_understanding_provider: DocumentUnderstandingProvider = "none"
+    document_understanding_prompt_version: str = DEFAULT_DOCUMENT_UNDERSTANDING_PROMPT_VERSION
     default_confidence: float = Field(default=0.55, ge=0.0, le=1.0)
     strict_grounding: bool = True
     continue_on_chunk_error: bool = False
     document_ie_fixture_path: str | None = None
     document_ie_payload: dict[str, Any] | None = None
+    document_understanding_fixture_path: str | None = None
+    document_understanding_payload: dict[str, Any] | None = None
     overwrite: bool = False
 
     @model_validator(mode="after")
@@ -279,6 +288,31 @@ class KGMaterialExtractionRunRequest(BaseModel):
         if self.document_ie_fixture_path and self.document_ie_payload is not None:
             raise ValueError(
                 "provide either document_ie_fixture_path or document_ie_payload, not both"
+            )
+        if self.document_understanding_mode == "chunk" and (
+            self.document_understanding_provider != "none"
+            or self.document_understanding_fixture_path
+            or self.document_understanding_payload is not None
+        ):
+            raise ValueError(
+                "document_understanding_provider/payload require non-chunk "
+                "document_understanding_mode"
+            )
+        if self.document_understanding_provider != "offline_fixture" and (
+            self.document_understanding_fixture_path
+            or self.document_understanding_payload is not None
+        ):
+            raise ValueError(
+                "document_understanding_fixture_path/document_understanding_payload "
+                "require document_understanding_provider=offline_fixture"
+            )
+        if (
+            self.document_understanding_fixture_path
+            and self.document_understanding_payload is not None
+        ):
+            raise ValueError(
+                "provide either document_understanding_fixture_path or "
+                "document_understanding_payload, not both"
             )
         return self
 
@@ -661,6 +695,7 @@ def extract_kg_material_to_structured_records(
     request: KGMaterialExtractionRunRequest,
     *,
     client: DocumentIEClient | None = None,
+    document_understanding_client: DocumentUnderstandingClient | None = None,
     material_root: Path | None = None,
 ) -> KGMaterialExtractionRunResponse:
     """Extract one material into structured records consumable by construction."""
@@ -716,10 +751,17 @@ def extract_kg_material_to_structured_records(
     )
     document_understanding_map: dict[str, Any] | None = None
     if request.document_understanding_mode != "chunk":
+        du_client = _document_understanding_client_for_request(
+            material=material,
+            request=request,
+            client=document_understanding_client,
+        )
         document_understanding_map = build_document_understanding_map(
             document,
             chunks,
             mode=request.document_understanding_mode,
+            client=du_client,
+            prompt_version=request.document_understanding_prompt_version,
         )
         _write_json_object(document_understanding_map_path, document_understanding_map)
         _write_jsonl(
@@ -822,10 +864,17 @@ def extract_kg_material_to_structured_records(
             "source_format": request.source_format,
             "prompt_version": request.prompt_version,
             "document_understanding_mode": request.document_understanding_mode,
+            "document_understanding_provider": request.document_understanding_provider,
+            "document_understanding_prompt_version": (
+                request.document_understanding_prompt_version
+            ),
             "default_confidence": request.default_confidence,
             "strict_grounding": request.strict_grounding,
             "continue_on_chunk_error": request.continue_on_chunk_error,
             "document_ie_fixture_path": request.document_ie_fixture_path,
+            "document_understanding_fixture_path": (
+                request.document_understanding_fixture_path
+            ),
         },
         result_summary={
             "record_count": len(records),
@@ -1019,6 +1068,22 @@ def _document_ie_client_for_request(
     return OfflineDocumentIEFixtureClient(fixture), "offline_document_ie"
 
 
+def _document_understanding_client_for_request(
+    *,
+    material: KGMaterialRecord,
+    request: KGMaterialExtractionRunRequest,
+    client: DocumentUnderstandingClient | None,
+) -> DocumentUnderstandingClient | None:
+    if client is not None:
+        return client
+    if request.document_understanding_provider == "none":
+        return None
+    if request.document_understanding_provider == "openai":
+        return OpenAICompatibleDocumentUnderstandingClient()
+    fixture = _offline_document_understanding_fixture(material=material, request=request)
+    return OfflineDocumentUnderstandingFixtureClient(fixture)
+
+
 def _offline_document_ie_fixture(
     *,
     material: KGMaterialRecord,
@@ -1046,6 +1111,39 @@ def _offline_document_ie_fixture(
         "provider=offline_fixture requires document_ie_payload, "
         "document_ie_fixture_path, or material.metadata['document_ie_payload']/"
         "['document_ie_fixture_path']"
+    )
+
+
+def _offline_document_understanding_fixture(
+    *,
+    material: KGMaterialRecord,
+    request: KGMaterialExtractionRunRequest,
+) -> dict[str, Any]:
+    if request.document_understanding_payload is not None:
+        return request.document_understanding_payload
+    fixture_path = request.document_understanding_fixture_path or _first_metadata_text(
+        material.metadata,
+        "document_understanding_fixture_path",
+        "document_understanding_fixture",
+    )
+    if fixture_path:
+        path = Path(fixture_path)
+        if not path.is_file():
+            raise ValueError(f"offline document understanding fixture not found: {path}")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            return payload
+        raise ValueError(
+            f"offline document understanding fixture must be a JSON object: {path}"
+        )
+    inline = material.metadata.get("document_understanding_payload")
+    if isinstance(inline, dict):
+        return inline
+    raise ValueError(
+        "document_understanding_provider=offline_fixture requires "
+        "document_understanding_payload, document_understanding_fixture_path, or "
+        "material.metadata['document_understanding_payload']/"
+        "['document_understanding_fixture_path']"
     )
 
 
@@ -1209,6 +1307,10 @@ def _material_extraction_manifest(
             "extractor_version": extraction_result.extractor_version,
             "prompt_version": request.prompt_version,
             "document_understanding_mode": request.document_understanding_mode,
+            "document_understanding_provider": request.document_understanding_provider,
+            "document_understanding_prompt_version": (
+                request.document_understanding_prompt_version
+            ),
             "default_confidence": request.default_confidence,
             "strict_grounding": request.strict_grounding,
             "continue_on_chunk_error": request.continue_on_chunk_error,
@@ -1400,6 +1502,7 @@ __all__ = [
     "DEFAULT_SOURCE_KG_MATERIAL_DIR",
     "DEFAULT_MATERIAL_POSTGRES_CONFIG_PATH",
     "DocumentIEProvider",
+    "DocumentUnderstandingProvider",
     "DocumentUnderstandingMode",
     "FileKGMaterialStore",
     "MAX_MATERIAL_UPLOAD_BYTES",

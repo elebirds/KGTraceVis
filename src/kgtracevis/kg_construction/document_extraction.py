@@ -27,7 +27,17 @@ DEFAULT_DOCUMENT_CHUNK_OVERLAP_CHARS = 200
 DEFAULT_DOCUMENT_EXTRACTOR_NAME = "llm_document_ie"
 DEFAULT_DOCUMENT_EXTRACTOR_VERSION = "v1"
 DEFAULT_DOCUMENT_IE_PROMPT_VERSION = "document_ie_prompt_v1"
+DEFAULT_DOCUMENT_UNDERSTANDING_PROMPT_VERSION = "document_understanding_prompt_v1"
 DocumentUnderstandingMode = Literal["chunk", "long_context", "agentic"]
+AGENTIC_DOCUMENT_READER_STEPS = (
+    "outline",
+    "glossary",
+    "entity_inventory",
+    "relation_hints",
+    "cross_chunk_proposals",
+)
+DOCUMENT_READER_MAX_STEP_CHUNKS = 3
+DOCUMENT_READER_SUMMARY_MAX_CHARS = 140
 
 ALLOWED_DOCUMENT_IE_RELATIONS = frozenset(
     {
@@ -106,6 +116,75 @@ class SourceTextChunk:
 
 
 @dataclass(frozen=True)
+class DocumentReadingChunkSummary:
+    """Compact, deterministic summary for one parsed source chunk."""
+
+    chunk_id: str
+    chunk_index: int
+    char_start: int
+    char_end: int
+    summary: str
+    keywords: tuple[str, ...]
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return JSON-serializable audit metadata for this chunk summary."""
+        return {
+            "chunk_id": self.chunk_id,
+            "chunk_index": self.chunk_index,
+            "char_start": self.char_start,
+            "char_end": self.char_end,
+            "summary": self.summary,
+            "keywords": list(self.keywords),
+        }
+
+
+@dataclass(frozen=True)
+class DocumentReadingStepPlan:
+    """Selected chunk group for one deterministic reader step."""
+
+    step_name: str
+    selected_chunk_ids: tuple[str, ...]
+    retrieval_strategy: str
+    query_terms: tuple[str, ...] = ()
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return JSON-serializable audit metadata for this step plan."""
+        return {
+            "step_name": self.step_name,
+            "selected_chunk_ids": list(self.selected_chunk_ids),
+            "retrieval_strategy": self.retrieval_strategy,
+            "query_terms": list(self.query_terms),
+        }
+
+
+@dataclass(frozen=True)
+class DocumentReadingPlan:
+    """Reusable retrieval/index plan for advisory document reading."""
+
+    source_id: str
+    strategy: str
+    chunk_summaries: tuple[DocumentReadingChunkSummary, ...]
+    step_plans: tuple[DocumentReadingStepPlan, ...]
+
+    def step_for(self, step_name: str) -> DocumentReadingStepPlan:
+        """Return the configured step plan for a reader step."""
+        for step_plan in self.step_plans:
+            if step_plan.step_name == step_name:
+                return step_plan
+        raise ValueError(f"unknown document reader step: {step_name}")
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return JSON-serializable audit metadata for this reading plan."""
+        return {
+            "source_id": self.source_id,
+            "strategy": self.strategy,
+            "chunk_count": len(self.chunk_summaries),
+            "chunk_summaries": [summary.to_payload() for summary in self.chunk_summaries],
+            "step_plans": [step_plan.to_payload() for step_plan in self.step_plans],
+        }
+
+
+@dataclass(frozen=True)
 class DocumentIEChunkExtractionSummary:
     """Audit summary for candidate extraction over one source text chunk."""
 
@@ -154,6 +233,23 @@ class DocumentIEClient(Protocol):
         """Return extracted candidate entities and relations for one chunk."""
 
 
+class DocumentUnderstandingClient(Protocol):
+    """Protocol for advisory document-map clients used before chunk IE."""
+
+    def understand_document(
+        self,
+        document: ParsedSourceDocument,
+        chunks: Sequence[SourceTextChunk],
+        *,
+        mode: DocumentUnderstandingMode,
+        step_name: str,
+        prompt: str,
+        response_schema: Mapping[str, Any],
+        prior_steps: Sequence[Mapping[str, Any]] = (),
+    ) -> Mapping[str, Any] | str:
+        """Return an advisory document-map or step payload."""
+
+
 class OfflineDocumentIEFixtureClient:
     """Document IE client that replays source-grounded fixture payloads."""
 
@@ -198,6 +294,47 @@ class OfflineDocumentIEFixtureClient:
             if isinstance(item, Mapping):
                 return item
         return None
+
+
+class OfflineDocumentUnderstandingFixtureClient:
+    """Document-understanding client that replays deterministic map fixtures."""
+
+    def __init__(self, fixture: Mapping[str, Any]) -> None:
+        self.fixture = dict(fixture)
+        self.calls: list[dict[str, Any]] = []
+
+    def understand_document(
+        self,
+        document: ParsedSourceDocument,
+        chunks: Sequence[SourceTextChunk],
+        *,
+        mode: DocumentUnderstandingMode,
+        step_name: str,
+        prompt: str,
+        response_schema: Mapping[str, Any],
+        prior_steps: Sequence[Mapping[str, Any]] = (),
+    ) -> Mapping[str, Any] | str:
+        """Return a fixture document-map payload or a named step payload."""
+        del response_schema
+        self.calls.append(
+            {
+                "source_id": document.source_id,
+                "chunk_count": len(chunks),
+                "mode": mode,
+                "step_name": step_name,
+                "prompt": prompt,
+                "prior_step_count": len(prior_steps),
+            }
+        )
+        steps = self.fixture.get("steps")
+        if isinstance(steps, Mapping):
+            step_payload = steps.get(step_name)
+            if isinstance(step_payload, (Mapping, str)):
+                return step_payload
+        document_map = self.fixture.get("document_map")
+        if isinstance(document_map, (Mapping, str)):
+            return document_map
+        return self.fixture
 
 
 class ExtractedEntityPayload(BaseModel):
@@ -245,9 +382,37 @@ class ExtractedKGPayload(BaseModel):
     relations: list[ExtractedRelationPayload] = Field(default_factory=list)
 
 
+class DocumentUnderstandingMapPayload(BaseModel):
+    """Advisory document-map payload returned by a DU client."""
+
+    model_config = ConfigDict(extra="allow")
+
+    artifact_type: str | None = None
+    mode: DocumentUnderstandingMode | None = None
+    source_id: str | None = None
+    source_type: str | None = None
+    scenario: str | None = None
+    parser: str | None = None
+    sections: list[dict[str, Any]] = Field(default_factory=list)
+    glossary: list[dict[str, Any]] = Field(default_factory=list)
+    entity_inventory: list[dict[str, Any]] = Field(default_factory=list)
+    relation_hints: list[dict[str, Any]] = Field(default_factory=list)
+    ontology_suggestions: list[dict[str, Any]] = Field(default_factory=list)
+    cross_chunk_proposals: list[dict[str, Any]] = Field(default_factory=list)
+    unresolved_questions: list[dict[str, Any]] = Field(default_factory=list)
+    review_hints: list[str] = Field(default_factory=list)
+    agent_steps: list[dict[str, Any]] = Field(default_factory=list)
+    claim_boundary: str | None = None
+
+
 def extraction_response_schema() -> dict[str, Any]:
     """Return the JSON schema requested from OpenAI-compatible IE clients."""
     return ExtractedKGPayload.model_json_schema()
+
+
+def document_understanding_response_schema() -> dict[str, Any]:
+    """Return the JSON schema requested from document-understanding clients."""
+    return DocumentUnderstandingMapPayload.model_json_schema()
 
 
 def parse_source_material(
@@ -492,7 +657,7 @@ def build_document_ie_prompt(
     document_context: Mapping[str, Any] | None = None,
 ) -> str:
     """Build a source-constrained IE prompt for one text chunk."""
-    context = _document_context_prompt(document_context)
+    context = _document_context_prompt(document_context, chunk_id=chunk.chunk_id)
     return (
         f"Prompt version: {prompt_version}.\n"
         "Extract only candidate industrial KG entities and relations explicitly "
@@ -514,8 +679,10 @@ def build_document_understanding_map(
     chunks: Sequence[SourceTextChunk],
     *,
     mode: DocumentUnderstandingMode,
+    client: DocumentUnderstandingClient | None = None,
+    prompt_version: str = DEFAULT_DOCUMENT_UNDERSTANDING_PROMPT_VERSION,
 ) -> dict[str, Any]:
-    """Build a deterministic document-level map for review and prompt context.
+    """Build an advisory document-level map for review and prompt context.
 
     The map is not a fact extractor. It records terminology and review hints so
     downstream IE can use document context while still grounding every candidate
@@ -523,6 +690,396 @@ def build_document_understanding_map(
     """
     if mode == "chunk":
         raise ValueError("document understanding map is only produced for non-chunk modes")
+    if mode == "agentic":
+        return AgenticDocumentReader(
+            client=client,
+            prompt_version=prompt_version,
+        ).read(document, chunks)
+
+    fallback = _deterministic_document_understanding_map(document, chunks, mode=mode)
+    if client is None:
+        return {
+            **fallback,
+            "reader_type": "deterministic_fallback",
+            "document_understanding_prompt_version": prompt_version,
+        }
+    prompt = build_document_understanding_prompt(
+        document,
+        chunks,
+        mode=mode,
+        step_name="long_context_document_map",
+        prompt_version=prompt_version,
+    )
+    response = client.understand_document(
+        document,
+        chunks,
+        mode=mode,
+        step_name="long_context_document_map",
+        prompt=prompt,
+        response_schema=document_understanding_response_schema(),
+    )
+    return _normalize_document_understanding_map(
+        response,
+        document=document,
+        chunks=chunks,
+        mode=mode,
+        fallback=fallback,
+        reader_type="long_context_llm",
+        prompt_version=prompt_version,
+    )
+
+
+def build_document_reading_plan(
+    document: ParsedSourceDocument,
+    chunks: Sequence[SourceTextChunk],
+    *,
+    max_step_chunks: int = DOCUMENT_READER_MAX_STEP_CHUNKS,
+) -> DocumentReadingPlan:
+    """Build a deterministic chunk index and retrieval plan for agentic DU."""
+    if max_step_chunks <= 0:
+        raise ValueError("max_step_chunks must be positive")
+    chunk_tuple = tuple(chunks)
+    summaries = tuple(_chunk_reading_summary(chunk) for chunk in chunk_tuple)
+    step_plans = tuple(
+        _reading_step_plan(
+            step_name,
+            summaries=summaries,
+            max_step_chunks=max_step_chunks,
+        )
+        for step_name in AGENTIC_DOCUMENT_READER_STEPS
+    )
+    return DocumentReadingPlan(
+        source_id=document.source_id,
+        strategy="deterministic_chunk_summary_keyword_retrieval_v1",
+        chunk_summaries=summaries,
+        step_plans=step_plans,
+    )
+
+
+class AgenticDocumentReader:
+    """Multi-step advisory reader for document-understanding mode."""
+
+    def __init__(
+        self,
+        *,
+        client: DocumentUnderstandingClient | None = None,
+        prompt_version: str = DEFAULT_DOCUMENT_UNDERSTANDING_PROMPT_VERSION,
+    ) -> None:
+        self.client = client
+        self.prompt_version = prompt_version
+
+    def read(
+        self,
+        document: ParsedSourceDocument,
+        chunks: Sequence[SourceTextChunk],
+    ) -> dict[str, Any]:
+        """Run named planning steps and return one normalized document map."""
+        reading_plan = build_document_reading_plan(document, chunks)
+        fallback = _deterministic_document_understanding_map(document, chunks, mode="agentic")
+        if self.client is None:
+            return {
+                **fallback,
+                "reader_type": "agentic_deterministic_fallback",
+                "document_understanding_prompt_version": self.prompt_version,
+                "document_reading_plan": reading_plan.to_payload(),
+                "agent_steps": [
+                    {
+                        "step_name": step_name,
+                        "status": "deterministic_fallback",
+                        "output_keys": [],
+                        **reading_plan.step_for(step_name).to_payload(),
+                    }
+                    for step_name in AGENTIC_DOCUMENT_READER_STEPS
+                ],
+            }
+
+        step_outputs: list[dict[str, Any]] = []
+        agent_steps: list[dict[str, Any]] = []
+        merged_payload: dict[str, Any] = {}
+        for step_name in AGENTIC_DOCUMENT_READER_STEPS:
+            step_plan = reading_plan.step_for(step_name)
+            selected_chunks = _chunks_for_step(chunks, step_plan)
+            prompt = build_document_understanding_prompt(
+                document,
+                selected_chunks,
+                mode="agentic",
+                step_name=step_name,
+                prompt_version=self.prompt_version,
+                prior_steps=step_outputs,
+                reading_plan=reading_plan,
+                step_plan=step_plan,
+            )
+            response = self.client.understand_document(
+                document,
+                selected_chunks,
+                mode="agentic",
+                step_name=step_name,
+                prompt=prompt,
+                response_schema=document_understanding_response_schema(),
+                prior_steps=step_outputs,
+            )
+            step_payload = _coerce_document_understanding_payload(
+                response,
+                source_id=document.source_id,
+                step_name=step_name,
+            )
+            step_output = step_payload.model_dump(mode="json", exclude_none=True)
+            step_outputs.append({"step_name": step_name, **step_output})
+            output_keys = sorted(
+                key
+                for key, value in step_output.items()
+                if key
+                not in {
+                    "artifact_type",
+                    "mode",
+                    "source_id",
+                    "source_type",
+                    "scenario",
+                    "parser",
+                    "claim_boundary",
+                }
+                and value not in (None, [], {}, "")
+            )
+            agent_steps.append(
+                {
+                    "step_name": step_name,
+                    "status": "completed",
+                    "output_keys": output_keys,
+                    **step_plan.to_payload(),
+                    "response_sha1": sha1(
+                        json.dumps(step_output, sort_keys=True).encode("utf-8")
+                    ).hexdigest(),
+                }
+            )
+            _merge_document_understanding_step(merged_payload, step_output)
+
+        merged_payload["agent_steps"] = agent_steps
+        merged_payload["document_reading_plan"] = reading_plan.to_payload()
+        return _normalize_document_understanding_map(
+            merged_payload,
+            document=document,
+            chunks=chunks,
+            mode="agentic",
+            fallback=fallback,
+            reader_type="agentic_multi_step",
+            prompt_version=self.prompt_version,
+        )
+
+
+def build_document_understanding_prompt(
+    document: ParsedSourceDocument,
+    chunks: Sequence[SourceTextChunk],
+    *,
+    mode: DocumentUnderstandingMode,
+    step_name: str,
+    prompt_version: str = DEFAULT_DOCUMENT_UNDERSTANDING_PROMPT_VERSION,
+    prior_steps: Sequence[Mapping[str, Any]] = (),
+    reading_plan: DocumentReadingPlan | None = None,
+    step_plan: DocumentReadingStepPlan | None = None,
+) -> str:
+    """Build the advisory prompt for long-context and agentic DU clients."""
+    chunk_blocks = "\n\n".join(
+        (
+            f"chunk_id: {chunk.chunk_id}\n"
+            f"chunk_index: {chunk.index}\n"
+            f"char_span: {chunk.start_char}-{chunk.end_char}\n"
+            f"text:\n{chunk.text}"
+        )
+        for chunk in chunks
+    )
+    retrieval_context = ""
+    if reading_plan is not None and step_plan is not None:
+        retrieval_context = (
+            "Document reading plan JSON:\n"
+            + json.dumps(
+                {
+                    "strategy": reading_plan.strategy,
+                    "step": step_plan.to_payload(),
+                    "chunk_index": [
+                        {
+                            "chunk_id": summary.chunk_id,
+                            "chunk_index": summary.chunk_index,
+                            "char_start": summary.char_start,
+                            "char_end": summary.char_end,
+                        }
+                        for summary in reading_plan.chunk_summaries
+                    ],
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+    prior_summary = ""
+    if prior_steps:
+        prior_summary = (
+            "\nPrior completed steps JSON:\n"
+            + json.dumps(list(prior_steps), sort_keys=True)
+            + "\n"
+        )
+    return (
+        f"Prompt version: {prompt_version}.\n"
+        f"Document understanding mode: {mode}.\n"
+        f"Reader step: {step_name}.\n"
+        "Produce advisory document-map JSON only. This output may guide review "
+        "and chunk prompts, but it must not assert reviewed KG facts. If you "
+        "suggest cross-chunk relations, include at least two supporting_spans "
+        "with chunk_id and copied text/evidence. Use allowed document IE "
+        f"relations only: {', '.join(sorted(ALLOWED_DOCUMENT_IE_RELATIONS))}.\n"
+        "Keep all evidence snippets traceable to chunk text.\n"
+        f"{prior_summary}\n"
+        f"source_id: {document.source_id}\n"
+        f"source_type: {document.source_type}\n"
+        f"scenario: {document.scenario}\n"
+        f"parser: {document.parser}\n\n"
+        f"{retrieval_context}"
+        f"Selected document chunks:\n{chunk_blocks}"
+    )
+
+
+def _chunk_reading_summary(chunk: SourceTextChunk) -> DocumentReadingChunkSummary:
+    normalized = " ".join(chunk.text.split())
+    sentence = re.split(r"(?<=[.!?])\s+", normalized, maxsplit=1)[0].strip()
+    summary = (sentence or normalized)[:DOCUMENT_READER_SUMMARY_MAX_CHARS]
+    return DocumentReadingChunkSummary(
+        chunk_id=chunk.chunk_id,
+        chunk_index=chunk.index,
+        char_start=chunk.start_char,
+        char_end=chunk.end_char,
+        summary=summary,
+        keywords=_chunk_keywords(normalized),
+    )
+
+
+def _chunk_keywords(text: str, *, limit: int = 8) -> tuple[str, ...]:
+    candidates = re.findall(r"\b[A-Za-z][A-Za-z0-9_-]{2,}\b", text)
+    stopwords = {
+        "and",
+        "are",
+        "for",
+        "from",
+        "into",
+        "the",
+        "this",
+        "that",
+        "with",
+    }
+    keywords: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        normalized = candidate.lower()
+        if normalized in stopwords or normalized in seen:
+            continue
+        if candidate[:1].isupper() or len(candidate) >= 7:
+            seen.add(normalized)
+            keywords.append(candidate[:40])
+        if len(keywords) >= limit:
+            break
+    return tuple(keywords)
+
+
+def _reading_step_plan(
+    step_name: str,
+    *,
+    summaries: Sequence[DocumentReadingChunkSummary],
+    max_step_chunks: int,
+) -> DocumentReadingStepPlan:
+    if not summaries:
+        return DocumentReadingStepPlan(
+            step_name=step_name,
+            selected_chunk_ids=(),
+            retrieval_strategy="empty_document",
+        )
+    if step_name == "outline":
+        selected = _spread_chunk_ids(summaries, limit=max_step_chunks)
+        return DocumentReadingStepPlan(
+            step_name=step_name,
+            selected_chunk_ids=selected,
+            retrieval_strategy="section_spread_first_middle_last",
+            query_terms=("section", "overview", "heading"),
+        )
+    query_terms = _step_query_terms(step_name)
+    selected = _keyword_selected_chunk_ids(
+        summaries,
+        query_terms=query_terms,
+        limit=max_step_chunks,
+    )
+    return DocumentReadingStepPlan(
+        step_name=step_name,
+        selected_chunk_ids=selected,
+        retrieval_strategy="keyword_summary_top_k",
+        query_terms=query_terms,
+    )
+
+
+def _step_query_terms(step_name: str) -> tuple[str, ...]:
+    if step_name == "glossary":
+        return ("abbreviation", "term", "definition", "alias", "called")
+    if step_name == "entity_inventory":
+        return ("equipment", "fault", "variable", "process", "defect", "event")
+    if step_name == "relation_hints":
+        return ("cause", "causes", "indicates", "affects", "associated", "mechanism")
+    if step_name == "cross_chunk_proposals":
+        return ("cause", "root", "mechanism", "downstream", "upstream", "because")
+    return ()
+
+
+def _keyword_selected_chunk_ids(
+    summaries: Sequence[DocumentReadingChunkSummary],
+    *,
+    query_terms: Sequence[str],
+    limit: int,
+) -> tuple[str, ...]:
+    scored: list[tuple[int, int, str]] = []
+    normalized_terms = tuple(term.lower() for term in query_terms)
+    for summary in summaries:
+        haystack = " ".join((summary.summary, *summary.keywords)).lower()
+        score = sum(1 for term in normalized_terms if term in haystack)
+        if score:
+            scored.append((-score, summary.chunk_index, summary.chunk_id))
+    if not scored:
+        return _spread_chunk_ids(summaries, limit=limit)
+    return tuple(chunk_id for _, _, chunk_id in sorted(scored)[:limit])
+
+
+def _spread_chunk_ids(
+    summaries: Sequence[DocumentReadingChunkSummary],
+    *,
+    limit: int,
+) -> tuple[str, ...]:
+    if len(summaries) <= limit:
+        return tuple(summary.chunk_id for summary in summaries)
+    candidate_indexes = [0, len(summaries) - 1]
+    if limit >= 3:
+        candidate_indexes.insert(1, len(summaries) // 2)
+    selected: list[str] = []
+    for index in candidate_indexes:
+        chunk_id = summaries[index].chunk_id
+        if chunk_id not in selected:
+            selected.append(chunk_id)
+        if len(selected) >= limit:
+            break
+    return tuple(selected)
+
+
+def _chunks_for_step(
+    chunks: Sequence[SourceTextChunk],
+    step_plan: DocumentReadingStepPlan,
+) -> tuple[SourceTextChunk, ...]:
+    by_id = {chunk.chunk_id: chunk for chunk in chunks}
+    selected = tuple(
+        by_id[chunk_id]
+        for chunk_id in step_plan.selected_chunk_ids
+        if chunk_id in by_id
+    )
+    return selected or tuple(chunks[:1])
+
+
+def _deterministic_document_understanding_map(
+    document: ParsedSourceDocument,
+    chunks: Sequence[SourceTextChunk],
+    *,
+    mode: DocumentUnderstandingMode,
+) -> dict[str, Any]:
     text = document.text
     chunk_tuple = tuple(chunks)
     inventory = _document_entity_inventory(text, chunk_tuple)
@@ -617,6 +1174,181 @@ def build_chunk_prompt_context_records(
     return rows
 
 
+def _normalize_document_understanding_map(
+    response: Mapping[str, Any] | str,
+    *,
+    document: ParsedSourceDocument,
+    chunks: Sequence[SourceTextChunk],
+    mode: DocumentUnderstandingMode,
+    fallback: Mapping[str, Any],
+    reader_type: str,
+    prompt_version: str,
+) -> dict[str, Any]:
+    payload = _coerce_document_understanding_payload(
+        response,
+        source_id=document.source_id,
+        step_name=reader_type,
+    )
+    raw = payload.model_dump(mode="json", exclude_none=True)
+    normalized = dict(fallback)
+    for key in (
+        "sections",
+        "glossary",
+        "entity_inventory",
+        "relation_hints",
+        "ontology_suggestions",
+        "cross_chunk_proposals",
+        "unresolved_questions",
+        "review_hints",
+        "agent_steps",
+        "document_reading_plan",
+    ):
+        if key == "document_reading_plan":
+            if isinstance(raw.get(key), Mapping):
+                normalized[key] = dict(raw[key])
+        elif key in raw:
+            normalized[key] = _json_list(raw.get(key))
+    normalized.update(
+        {
+            "artifact_type": "document_understanding_map_v1",
+            "mode": mode,
+            "source_id": document.source_id,
+            "source_type": document.source_type,
+            "scenario": document.scenario,
+            "parser": document.parser,
+            "text_sha1": sha1(document.text.encode("utf-8")).hexdigest(),
+            "chunk_count": len(chunks),
+            "reader_type": reader_type,
+            "document_understanding_prompt_version": prompt_version,
+            "claim_boundary": (
+                str(raw.get("claim_boundary") or fallback.get("claim_boundary") or "").strip()
+                or (
+                    "Document understanding output is planning, terminology, and review "
+                    "context only; it is not DraftKG, reviewed KG, or published KG."
+                )
+            ),
+        }
+    )
+    normalized["cross_chunk_proposals"] = _dedupe_cross_chunk_proposals(
+        [
+            *_json_list(normalized.get("cross_chunk_proposals")),
+            *_cross_chunk_proposals_from_relation_hints(
+                _json_list(normalized.get("relation_hints"))
+            ),
+        ]
+    )
+    return normalized
+
+
+def _coerce_document_understanding_payload(
+    response: Mapping[str, Any] | str,
+    *,
+    source_id: str,
+    step_name: str,
+) -> DocumentUnderstandingMapPayload:
+    try:
+        if isinstance(response, str):
+            payload = json.loads(response)
+        elif isinstance(response, Mapping):
+            payload = dict(response)
+        else:
+            raise TypeError(type(response).__name__)
+        if not isinstance(payload, Mapping):
+            raise TypeError(type(payload).__name__)
+        return DocumentUnderstandingMapPayload.model_validate(payload)
+    except (TypeError, json.JSONDecodeError, ValidationError) as exc:
+        raise ValueError(
+            "invalid document understanding payload "
+            f"(source_id={source_id!r}, step_name={step_name!r}): "
+            "expected a JSON object matching document_understanding_map_v1"
+        ) from exc
+
+
+def _merge_document_understanding_step(
+    merged_payload: dict[str, Any],
+    step_output: Mapping[str, Any],
+) -> None:
+    for key in (
+        "sections",
+        "glossary",
+        "entity_inventory",
+        "relation_hints",
+        "ontology_suggestions",
+        "cross_chunk_proposals",
+        "unresolved_questions",
+        "review_hints",
+    ):
+        if key not in step_output:
+            continue
+        values = _json_list(step_output.get(key))
+        if key == "review_hints":
+            existing_hints = [
+                str(item)
+                for item in merged_payload.get(key, [])
+                if isinstance(item, (str, int, float))
+            ]
+            for value in values:
+                text = str(value)
+                if text and text not in existing_hints:
+                    existing_hints.append(text)
+            merged_payload[key] = existing_hints
+        else:
+            merged_payload.setdefault(key, [])
+            if isinstance(merged_payload[key], list):
+                merged_payload[key].extend(values)
+
+
+def _json_list(value: object) -> list[Any]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    return list(value)
+
+
+def _cross_chunk_proposals_from_relation_hints(
+    relation_hints: Sequence[Any],
+) -> list[dict[str, Any]]:
+    proposals: list[dict[str, Any]] = []
+    for hint in relation_hints:
+        if not isinstance(hint, Mapping):
+            continue
+        head = _first_text(hint.get("head"), hint.get("subject"), hint.get("source_node"))
+        tail = _first_text(hint.get("tail"), hint.get("object"), hint.get("target_node"))
+        relation = _first_text(hint.get("relation"), hint.get("predicate"))
+        spans = hint.get("supporting_spans", hint.get("spans"))
+        if not head or not tail or not relation or not isinstance(spans, list):
+            continue
+        proposals.append(
+            {
+                "head": head,
+                "relation": relation,
+                "tail": tail,
+                "confidence": hint.get("confidence", 0.45),
+                "relation_family": _first_text(hint.get("relation_family")) or relation,
+                "supporting_spans": spans,
+                "why_hint_only": (
+                    _first_text(hint.get("why_hint_only"), hint.get("reason"))
+                    or "derived from document-level relation hint"
+                ),
+            }
+        )
+    return proposals
+
+
+def _dedupe_cross_chunk_proposals(proposals: Sequence[Any]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for proposal in proposals:
+        if not isinstance(proposal, Mapping):
+            continue
+        payload = {str(key): value for key, value in proposal.items()}
+        key = json.dumps(payload, sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(payload)
+    return deduped
+
+
 class OpenAICompatibleKGExtractionClient:
     """OpenAI-compatible chat-completions client for document IE."""
 
@@ -698,24 +1430,141 @@ class OpenAICompatibleKGExtractionClient:
         return {"type": "json_object"}
 
 
-def _document_context_prompt(document_context: Mapping[str, Any] | None) -> str:
+class OpenAICompatibleDocumentUnderstandingClient:
+    """OpenAI-compatible chat-completions client for document understanding."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+        temperature: float = 0.0,
+        use_json_schema: bool = True,
+        client: Any | None = None,
+    ) -> None:
+        self.api_key = api_key if api_key is not None else os.environ.get("OPENAI_API_KEY")
+        self.base_url = base_url if base_url is not None else os.environ.get("OPENAI_BASE_URL")
+        self.model = model if model is not None else os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
+        self.temperature = temperature
+        self.use_json_schema = use_json_schema
+        self._client = client
+
+    def understand_document(
+        self,
+        document: ParsedSourceDocument,
+        chunks: Sequence[SourceTextChunk],
+        *,
+        mode: DocumentUnderstandingMode,
+        step_name: str,
+        prompt: str,
+        response_schema: Mapping[str, Any],
+        prior_steps: Sequence[Mapping[str, Any]] = (),
+    ) -> Mapping[str, Any] | str:
+        """Call an OpenAI-compatible model and return advisory DU JSON."""
+        del chunks, mode, prior_steps
+        client = self._resolved_client()
+        completion = client.chat.completions.create(
+            model=self.model,
+            temperature=self.temperature,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You produce advisory document-understanding maps for "
+                        "source-grounded KG construction. Return JSON only."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            response_format=self._response_format(response_schema),
+        )
+        content = completion.choices[0].message.content
+        if not content:
+            raise ValueError(
+                "OpenAI-compatible document understanding returned empty content "
+                f"for {document.source_id}:{step_name}"
+            )
+        return json.loads(content)
+
+    def _resolved_client(self) -> Any:
+        if self._client is not None:
+            return self._client
+        if not self.api_key:
+            raise ValueError(
+                "OPENAI_API_KEY is required for OpenAI-compatible document understanding"
+            )
+        try:
+            from openai import OpenAI
+        except ImportError as exc:  # pragma: no cover - depends on optional extra
+            raise ImportError(
+                "OpenAI-compatible document understanding requires the optional "
+                "`openai` dependency. Install the project with the `llm` extra."
+            ) from exc
+        kwargs: dict[str, str] = {"api_key": self.api_key}
+        if self.base_url:
+            kwargs["base_url"] = self.base_url
+        self._client = OpenAI(**kwargs)
+        return self._client
+
+    def _response_format(self, response_schema: Mapping[str, Any]) -> dict[str, Any]:
+        if self.use_json_schema:
+            return {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "kgtracevis_document_understanding",
+                    "schema": dict(response_schema),
+                    "strict": False,
+                },
+            }
+        return {"type": "json_object"}
+
+
+def _document_context_prompt(
+    document_context: Mapping[str, Any] | None,
+    *,
+    chunk_id: str | None = None,
+) -> str:
     if not document_context:
         return ""
+    inventory_value = document_context.get("entity_inventory", [])
+    glossary_value = document_context.get("glossary", [])
+    hints_value = document_context.get("relation_hints", [])
+    if chunk_id:
+        inventory_items = _context_items_for_chunk(inventory_value, chunk_id, limit=12)
+        glossary_items = _context_items_for_chunk(glossary_value, chunk_id, limit=8)
+        hint_items = _context_items_for_chunk(hints_value, chunk_id, limit=8)
+    else:
+        inventory_items = [
+            item for item in inventory_value if isinstance(item, Mapping)
+        ][:12] if isinstance(inventory_value, Sequence) and not isinstance(
+            inventory_value, (str, bytes)
+        ) else []
+        glossary_items = [
+            item for item in glossary_value if isinstance(item, Mapping)
+        ][:8] if isinstance(glossary_value, Sequence) and not isinstance(
+            glossary_value, (str, bytes)
+        ) else []
+        hint_items = [
+            item for item in hints_value if isinstance(item, Mapping)
+        ][:8] if isinstance(hints_value, Sequence) and not isinstance(
+            hints_value, (str, bytes)
+        ) else []
     terms = [
         str(item.get("term"))
-        for item in document_context.get("entity_inventory", [])
+        for item in inventory_items
         if isinstance(item, Mapping) and item.get("term")
-    ][:12]
+    ]
     glossary = [
         f"{item.get('term')}={item.get('expansion')}"
-        for item in document_context.get("glossary", [])
+        for item in glossary_items
         if isinstance(item, Mapping) and item.get("term") and item.get("expansion")
-    ][:8]
+    ]
     hints = [
         str(item.get("relation_family"))
-        for item in document_context.get("relation_hints", [])
+        for item in hint_items
         if isinstance(item, Mapping) and item.get("relation_family")
-    ][:8]
+    ]
     parts: list[str] = []
     if terms:
         parts.append(f"candidate terminology: {', '.join(terms)}")
@@ -743,7 +1592,6 @@ def _context_items_for_chunk(
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return []
     scoped: list[Mapping[str, Any]] = []
-    global_items: list[Mapping[str, Any]] = []
     for item in value:
         if not isinstance(item, Mapping):
             continue
@@ -751,9 +1599,7 @@ def _context_items_for_chunk(
         if isinstance(item_chunk_ids, Sequence) and not isinstance(item_chunk_ids, (str, bytes)):
             if chunk_id in {str(candidate) for candidate in item_chunk_ids}:
                 scoped.append(item)
-        else:
-            global_items.append(item)
-    return [*scoped, *global_items][:limit]
+    return scoped[:limit]
 
 
 def _document_sections(

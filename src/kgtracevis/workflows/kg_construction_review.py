@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -15,6 +16,7 @@ from kgtracevis.kg_construction.artifact_diff import (
     build_kg_construction_diff,
     write_kg_construction_diff,
 )
+from kgtracevis.kg_construction.document_extraction import ALLOWED_DOCUMENT_IE_RELATIONS
 from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS
 from kgtracevis.kg_construction.models import (
     KGConstructionReviewDecision,
@@ -30,6 +32,27 @@ from kgtracevis.kg_construction.publish import (
 )
 
 ReviewAction = Literal["accept", "reject"]
+
+REVIEWED_CROSS_CHUNK_RCA_RELATION_WHITELIST = frozenset(
+    {
+        "AFFECTS",
+        "CAUSES",
+        "HAS_PLAUSIBLE_CAUSE",
+        "INDICATES",
+        "SUGGESTS_ROOT_CAUSE",
+    }
+)
+REVIEWED_CROSS_CHUNK_RCA_FAMILY_WHITELIST = frozenset(
+    {
+        "AFFECTS",
+        "CAUSES",
+        "FAULT_SOURCE",
+        "OBSERVATION",
+    }
+)
+REVIEWED_CROSS_CHUNK_RCA_SCORE_CAP = 0.7
+REVIEWED_CROSS_CHUNK_PROPAGATION_PRIORITY_CAP = 0.75
+REVIEWED_CROSS_CHUNK_SOURCE_TRUST_CAP = 0.8
 
 
 @dataclass(frozen=True)
@@ -205,16 +228,32 @@ def review_kg_construction_item_artifact(
         artifact_paths["review_queue"],
         object_name="construction review queue",
     )
+    is_cross_chunk_accept = (
+        config.item_type.strip() == "cross_chunk_relation_candidate"
+        and config.action == "accept"
+    )
     updated_item = _review_queue_item(
         queue_items,
         target_key=config.target_key.strip(),
         item_type=config.item_type.strip(),
         action=config.action,
-        proposed_payload=config.proposed_payload or {},
+        proposed_payload={} if is_cross_chunk_accept else config.proposed_payload or {},
     )
     manifest = _load_json_object(artifact_paths["manifest"], object_name="construction manifest")
     summary = _load_json_object(artifact_paths["summary"], object_name="construction summary")
     run_id = _run_id_from_manifest(manifest)
+    if is_cross_chunk_accept:
+        edge_rows = _read_edge_rows(artifact_paths["edges"])
+        staged_edge = _stage_cross_chunk_relation_candidate_edge(
+            artifact_paths=artifact_paths,
+            edge_rows=edge_rows,
+            reviewed_item=updated_item,
+            run_id=run_id,
+        )
+        _write_edge_rows(artifact_paths["edges"], edge_rows)
+        updated_item.setdefault("candidate_payload", {})["staged_edge"] = staged_edge
+        _refresh_review_summary(summary, edge_rows)
+        _refresh_manifest_review_summary(manifest, summary)
     decision = review_decision_for_item(
         target_type=config.item_type.strip(),
         target_id=config.target_key.strip(),
@@ -237,6 +276,11 @@ def review_kg_construction_item_artifact(
     _write_json_list(artifact_paths["review_queue"], queue_items)
     _write_json_object(artifact_paths["summary"], summary)
     _write_json_object(artifact_paths["manifest"], manifest)
+    if is_cross_chunk_accept:
+        _refresh_publish_snapshot_artifacts(
+            output_dir=config.output_dir,
+            run_id=run_id,
+        )
     diff_path = _refresh_review_diff_artifact(
         output_dir=config.output_dir,
         run_id=run_id,
@@ -318,6 +362,230 @@ def _edge_key_from_row(row: dict[str, str]) -> str:
             )
         )
     )
+
+
+def _stage_cross_chunk_relation_candidate_edge(
+    *,
+    artifact_paths: Mapping[str, Path],
+    edge_rows: list[dict[str, str]],
+    reviewed_item: dict[str, Any],
+    run_id: str,
+) -> dict[str, str]:
+    candidate = reviewed_item.get("candidate_payload")
+    if not isinstance(candidate, dict):
+        raise ValueError("cross-chunk review item is missing candidate_payload")
+    if str(candidate.get("validation_status") or "") != "review_required":
+        raise ValueError("only review-required cross-chunk proposals can be accepted")
+    head = str(candidate.get("head") or "").strip()
+    relation = str(candidate.get("relation") or "").strip().upper()
+    tail = str(candidate.get("tail") or "").strip()
+    scenario = str(reviewed_item.get("scenario") or candidate.get("scenario") or "shared").strip()
+    if relation not in ALLOWED_DOCUMENT_IE_RELATIONS:
+        raise ValueError(
+            f"cross-chunk accepted edge relation is not allowed for document IE: {relation}"
+        )
+    spans = candidate.get("supporting_spans")
+    if not isinstance(spans, list) or len(spans) < 2:
+        raise ValueError(
+            "cross-chunk accepted edge requires at least two supporting spans"
+        )
+    target_key = _safe_edge_key(f"{head}|{relation}|{tail}|{scenario}")
+    if any(_edge_key_from_row(row) == target_key for row in edge_rows):
+        raise ValueError(f"cross-chunk accepted edge already exists: {target_key}")
+    node_ids = _read_node_ids(artifact_paths["nodes"])
+    missing = sorted({head, tail}.difference(node_ids))
+    if missing:
+        raise ValueError(
+            "cross-chunk accepted edge endpoints must already exist in nodes.csv: "
+            + ", ".join(missing)
+        )
+    confidence = max(0.0, min(_float_value(candidate.get("confidence")), 1.0))
+    evidence = _cross_chunk_evidence(candidate, reviewed_item)
+    if not evidence:
+        raise ValueError("cross-chunk accepted edge requires supporting evidence")
+    weight = 1.0 - confidence
+    row = {key: "" for key in EDGE_COLUMNS}
+    row.update(
+        {
+            "head": head,
+            "relation": relation,
+            "tail": tail,
+            "scenario": scenario,
+            "source": f"cross_chunk_proposal:{candidate.get('source_id') or 'document'}",
+            "evidence": evidence,
+            "confidence": f"{confidence:.6g}",
+            "weight": f"{weight:.6g}",
+            "review_status": "reviewed",
+            "feedback_count": "1",
+            "accepted_count": "1",
+            "rejected_count": "0",
+            "relation_family": str(candidate.get("relation_family") or relation),
+            "propagation_enabled": "false",
+            "propagation_direction": "forward",
+            "propagation_priority": "0",
+            "attenuation": "1",
+            "edge_weight": f"{weight:.6g}",
+            "root_candidate": "false",
+            "observable": "false",
+            "confidence_policy": "human_reviewed_cross_chunk_proposal",
+            "source_trust": "0",
+            "rca_score": "0",
+            "rca_score_confidence": "0",
+            "rca_score_priority": "0",
+            "rca_score_attenuation": "0",
+            "rca_score_source_trust": "0",
+            "external_edge_id": str(candidate.get("proposal_id") or target_key),
+            "kg_build_id": run_id,
+        }
+    )
+    policy_updates, policy_audit = _reviewed_cross_chunk_rca_policy(
+        candidate,
+        relation=relation,
+        relation_family=row["relation_family"],
+        confidence=confidence,
+    )
+    row.update(policy_updates)
+    candidate["review_acceptance_policy_result"] = policy_audit
+    edge_rows.append(row)
+    return dict(row)
+
+
+def _reviewed_cross_chunk_rca_policy(
+    candidate: Mapping[str, Any],
+    *,
+    relation: str,
+    relation_family: str,
+    confidence: float,
+) -> tuple[dict[str, str], dict[str, Any]]:
+    policy = candidate.get("review_acceptance_policy")
+    policy_name = "review_acceptance_policy"
+    if not isinstance(policy, Mapping):
+        policy = candidate.get("rca_policy")
+        policy_name = "rca_policy"
+    if not isinstance(policy, Mapping):
+        return {}, {"status": "default", "reason": "no explicit RCA staging policy"}
+
+    normalized_relation = relation.strip().upper()
+    normalized_family = relation_family.strip().upper()
+    allowed = (
+        normalized_relation in REVIEWED_CROSS_CHUNK_RCA_RELATION_WHITELIST
+        and normalized_family in REVIEWED_CROSS_CHUNK_RCA_FAMILY_WHITELIST
+    )
+    if not allowed:
+        return (
+            {},
+            {
+                "status": "ignored",
+                "policy_field": policy_name,
+                "reason": "relation or relation family is not eligible for RCA staging",
+                "relation": normalized_relation,
+                "relation_family": normalized_family,
+            },
+        )
+
+    updates: dict[str, str] = {}
+    applied_fields: list[str] = []
+    propagation_requested = _optional_bool(policy.get("propagation_enabled"))
+    if propagation_requested is True:
+        updates["propagation_enabled"] = "true"
+        applied_fields.append("propagation_enabled")
+        direction = str(policy.get("propagation_direction") or "").strip().lower()
+        if direction in {"forward", "reverse", "bidirectional"}:
+            updates["propagation_direction"] = direction
+            applied_fields.append("propagation_direction")
+        priority = _bounded_policy_float(
+            policy.get("propagation_priority"),
+            default=REVIEWED_CROSS_CHUNK_PROPAGATION_PRIORITY_CAP,
+            upper=REVIEWED_CROSS_CHUNK_PROPAGATION_PRIORITY_CAP,
+        )
+        updates["propagation_priority"] = f"{priority:.6g}"
+        applied_fields.append("propagation_priority")
+
+    if "attenuation" in policy:
+        attenuation = _bounded_policy_float(policy.get("attenuation"), default=1.0, upper=1.0)
+        updates["attenuation"] = f"{attenuation:.6g}"
+        applied_fields.append("attenuation")
+    if "source_trust" in policy:
+        source_trust = _bounded_policy_float(
+            policy.get("source_trust"),
+            default=0.0,
+            upper=REVIEWED_CROSS_CHUNK_SOURCE_TRUST_CAP,
+        )
+        updates["source_trust"] = f"{source_trust:.6g}"
+        updates["rca_score_source_trust"] = f"{source_trust:.6g}"
+        applied_fields.extend(["source_trust", "rca_score_source_trust"])
+    if "rca_score" in policy:
+        score = _bounded_policy_float(
+            policy.get("rca_score"),
+            default=0.0,
+            upper=REVIEWED_CROSS_CHUNK_RCA_SCORE_CAP,
+        )
+        score_confidence = _bounded_policy_float(
+            policy.get("rca_score_confidence"),
+            default=min(confidence, score),
+            upper=REVIEWED_CROSS_CHUNK_RCA_SCORE_CAP,
+        )
+        updates["rca_score"] = f"{score:.6g}"
+        updates["rca_score_confidence"] = f"{score_confidence:.6g}"
+        applied_fields.extend(["rca_score", "rca_score_confidence"])
+
+    if not applied_fields:
+        return (
+            {},
+            {
+                "status": "ignored",
+                "policy_field": policy_name,
+                "reason": "policy did not request supported RCA staging fields",
+            },
+        )
+    updates["confidence_policy"] = "human_reviewed_cross_chunk_proposal_with_rca_policy"
+    return (
+        updates,
+        {
+            "status": "applied",
+            "policy_field": policy_name,
+            "applied_fields": applied_fields,
+            "caps": {
+                "rca_score": REVIEWED_CROSS_CHUNK_RCA_SCORE_CAP,
+                "propagation_priority": REVIEWED_CROSS_CHUNK_PROPAGATION_PRIORITY_CAP,
+                "source_trust": REVIEWED_CROSS_CHUNK_SOURCE_TRUST_CAP,
+            },
+        },
+    )
+
+
+def _read_node_ids(path: Path) -> set[str]:
+    if not path.is_file():
+        raise ValueError(f"construction build nodes not found: {path}")
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if "id" not in (reader.fieldnames or []):
+            raise ValueError(f"node CSV missing id column: {path}")
+        return {str(row.get("id") or "").strip() for row in reader if row.get("id")}
+
+
+def _cross_chunk_evidence(
+    candidate: Mapping[str, Any],
+    reviewed_item: Mapping[str, Any],
+) -> str:
+    spans = candidate.get("supporting_spans")
+    parts: list[str] = []
+    if isinstance(spans, list):
+        for span in spans:
+            if not isinstance(span, Mapping):
+                continue
+            text = str(span.get("text") or span.get("evidence") or "").strip()
+            if text:
+                parts.append(text)
+    if not parts:
+        item_evidence = str(reviewed_item.get("evidence") or "").strip()
+        if item_evidence:
+            parts.append(item_evidence)
+    if not parts:
+        why = str(candidate.get("why_hint_only") or "").strip()
+        if why:
+            parts.append(why)
+    return "; ".join(dict.fromkeys(parts))
 
 
 def _safe_edge_key(value: str) -> str:
@@ -561,3 +829,24 @@ def _float_value(value: object) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _optional_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in {0, 1}:
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes"}:
+            return True
+        if normalized in {"0", "false", "no"}:
+            return False
+    return None
+
+
+def _bounded_policy_float(value: object, *, default: float, upper: float) -> float:
+    if value is None:
+        return default
+    parsed = _float_value(value)
+    return max(0.0, min(parsed, upper))
