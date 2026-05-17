@@ -7,6 +7,7 @@ import json
 import uuid
 from collections.abc import Generator
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
@@ -19,6 +20,7 @@ from kgtracevis.service import runs as service_runs
 from kgtracevis.service.api import app
 from kgtracevis.service.handlers import (
     FeedbackRequest,
+    ReviewLedgerListRequest,
     WhatIfRequest,
     get_case_detail,
     list_cases,
@@ -58,14 +60,73 @@ class InMemoryRunStore:
         return str(artifact_path)
 
     def record_feedback(self, request: FeedbackRequest) -> dict[str, object]:
+        target_id = request.target_id or request.case_id or request.run_id or request.target_type
+        metadata = dict(request.metadata or {})
         record = {
             "feedback_id": str(uuid.uuid4()),
+            "created_at": "2026-05-17T00:00:00+00:00",
             **request.model_dump(mode="json"),
             "action": request.review_action(),
             "note": request.review_note(),
+            "target_id": target_id,
+            "target_key": f"{request.target_type}:{target_id}",
+            "source": request.source or "test",
+            "metadata": metadata,
         }
         self.feedback.append(record)
         return {"status": "recorded", "record": record}
+
+    def list_feedback(
+        self,
+        request: ReviewLedgerListRequest | dict[str, object],
+    ) -> dict[str, object]:
+        if isinstance(request, dict):
+            run_id = request.get("run_id")
+            case_id = request.get("case_id")
+            target_type = request.get("target_type")
+            target_id = request.get("target_id")
+            offset = int(cast(int | str, request.get("offset", 0)))
+            limit = int(cast(int | str, request.get("limit", 50)))
+        else:
+            run_id = request.run_id
+            case_id = request.case_id
+            target_type = request.target_type
+            target_id = request.target_id
+            offset = request.offset
+            limit = request.limit
+
+        filtered = [
+            {
+                "feedback_id": str(record["feedback_id"]),
+                "created_at": str(record["created_at"]),
+                "run_id": record.get("run_id"),
+                "case_id": record.get("case_id"),
+                "target_type": record.get("target_type"),
+                "target_id": record.get("target_id"),
+                "target_key": record.get("target_key"),
+                "action": record.get("action"),
+                "note": record.get("note"),
+                "reviewer": record.get("reviewer"),
+                "source": record.get("source") or "test",
+                "metadata": record.get("metadata") or None,
+            }
+            for record in self.feedback
+            if (run_id is None or record.get("run_id") == run_id)
+            and (case_id is None or record.get("case_id") == case_id)
+            and (target_type is None or record.get("target_type") == target_type)
+            and (target_id is None or record.get("target_id") == target_id)
+        ]
+        page = filtered[offset : offset + limit]
+        return {
+            "records": page,
+            "total_count": len(filtered),
+            "returned_count": len(page),
+            "offset": offset,
+            "limit": limit,
+            "claim_boundary": (
+                "candidate/plausible explanation only; not a verified root-cause label"
+            ),
+        }
 
 
 @pytest.fixture(autouse=True)
@@ -733,6 +794,29 @@ def test_review_feedback_contract_accepts_dashboard_actions() -> None:
     assert saved["action"] == "needs_review"
     assert saved["note"] == "expert wants source checked"
     assert saved["source"] == "rootlens-dashboard"
+
+
+def test_feedback_list_route_returns_review_ledger() -> None:
+    """Dashboard clients should be able to read review ledger history."""
+    client = TestClient(app)
+    post_response = client.post(
+        "/api/feedback",
+        json={
+            "case_id": "mvtec_0001",
+            "target_type": "root_cause_candidate",
+            "target_id": "rca_mvtec_0001_mechanicalcontact",
+            "action": "accept",
+            "source": "rootlens-dashboard",
+        },
+    )
+
+    response = client.get("/api/feedback?target_type=root_cause_candidate")
+
+    assert post_response.status_code == 200
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_count"] >= 1
+    assert payload["records"][0]["target_type"] == "root_cause_candidate"
 
 
 def test_feedback_record_defaults_to_postgres_store(monkeypatch) -> None:

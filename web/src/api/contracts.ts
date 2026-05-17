@@ -326,27 +326,7 @@ export interface KGMaterialRegisterUrlResponse {
 }
 
 export interface KGMaterialExtractionRequest {
-  provider?: "openai" | "offline_fixture";
-  max_chars?: number;
-  overlap_chars?: number;
-  source_format?: Extract<KGConstructionSourceFormat, "jsonl">;
-  prompt_version?: string;
-  document_understanding_mode?: "chunk" | "long_context" | "agentic";
-  document_understanding_provider?: "none" | "openai" | "offline_fixture";
-  document_understanding_prompt_version?: string;
-  hypothesis_mode?: "none" | "brainstorm";
-  hypothesis_provider?: "none" | "openai" | "offline_fixture";
-  hypothesis_influence?: "review_only" | "prompt_context" | "profile_suggestions";
-  hypothesis_prompt_version?: string;
-  default_confidence?: number;
-  strict_grounding?: boolean;
-  continue_on_chunk_error?: boolean;
-  document_ie_fixture_path?: string | null;
-  document_ie_payload?: Record<string, unknown> | null;
-  document_understanding_fixture_path?: string | null;
-  document_understanding_payload?: Record<string, unknown> | null;
-  hypothesis_fixture_path?: string | null;
-  hypothesis_payload?: Record<string, unknown> | null;
+  provider?: "none";
   overwrite?: boolean;
 }
 
@@ -364,10 +344,77 @@ export interface KGMaterialExtractionResponse {
   brainstorm_review_items_path?: string | null;
   chunk_count: number;
   error_count: number;
-  provider: "openai" | "offline_fixture";
+  provider: string;
   extractor_name: string;
   extractor_version: string;
   prompt_version: string;
+  claim_boundary: string;
+}
+
+export interface KGMaterialChunkRecord {
+  chunk_id: string;
+  material_id: string;
+  chunk_index: number;
+  source_locator?: string | null;
+  text_content: string;
+  char_start?: number | null;
+  char_end?: number | null;
+  metadata: Record<string, unknown>;
+  created_at?: string | null;
+}
+
+export interface KGMaterialChunkListResponse {
+  status: string;
+  material: KGMaterialRecord;
+  count: number;
+  chunks: KGMaterialChunkRecord[];
+  claim_boundary: string;
+}
+
+export interface KGMaterialExtractionRunRecord {
+  extraction_run_id: string;
+  material_id: string;
+  status: string;
+  provider?: string | null;
+  source_format?: string | null;
+  structured_records_path?: string | null;
+  source_id?: string | null;
+  extractor_name?: string | null;
+  extractor_version?: string | null;
+  record_count?: number | null;
+  error_message?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  recorded_at?: string | null;
+  extraction?: KGMaterialExtractionState | null;
+  parameters: Record<string, unknown>;
+  result_summary: Record<string, unknown>;
+}
+
+export interface KGMaterialExtractionRunListResponse {
+  status: string;
+  material: KGMaterialRecord;
+  count: number;
+  runs: KGMaterialExtractionRunRecord[];
+  claim_boundary: string;
+}
+
+export interface KGMaterialExtractionArtifactRecord {
+  artifact_id: string;
+  material_id: string;
+  extraction_run_id?: string | null;
+  artifact_type: string;
+  uri?: string | null;
+  media_type?: string | null;
+  payload: Record<string, unknown>;
+  created_at?: string | null;
+}
+
+export interface KGMaterialExtractionArtifactListResponse {
+  status: string;
+  material: KGMaterialRecord;
+  count: number;
+  artifacts: KGMaterialExtractionArtifactRecord[];
   claim_boundary: string;
 }
 
@@ -415,7 +462,7 @@ export interface ReviewRequest {
 export type KGDraftAction = "keep" | "revise" | "reject" | "promote_later";
 
 export interface KGDraftRequest {
-  target_type: "edge";
+  target_type: "edge" | "kg_edge";
   target_id: string;
   target_key?: string;
   draft_action: KGDraftAction;
@@ -426,6 +473,56 @@ export interface KGDraftRequest {
   reviewer?: string;
   source: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface KGDraftRecord {
+  draft_id: string;
+  recorded_at: string;
+  target_type: "edge";
+  target_id: string;
+  target_key?: string | null;
+  draft_action: KGDraftAction;
+  proposed_relation?: string | null;
+  proposed_evidence?: string | null;
+  proposed_confidence?: number | null;
+  note?: string | null;
+  reviewer?: string | null;
+  source: string;
+  metadata?: Record<string, unknown>;
+  review_decision: Record<string, unknown>;
+}
+
+export interface KGDraftListResponse {
+  records: KGDraftRecord[];
+  total_count: number;
+  returned_count: number;
+  offset: number;
+  limit: number;
+  claim_boundary: string;
+}
+
+export interface ReviewLedgerRecord {
+  feedback_id: string;
+  created_at: string;
+  run_id?: string | null;
+  case_id?: string | null;
+  target_type: ReviewTargetType;
+  target_id: string;
+  target_key?: string | null;
+  action: ReviewAction;
+  note?: string | null;
+  reviewer?: string | null;
+  source: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface ReviewLedgerListResponse {
+  records: ReviewLedgerRecord[];
+  total_count: number;
+  returned_count: number;
+  offset: number;
+  limit: number;
+  claim_boundary: string;
 }
 
 export interface KGSourceDraftRequest {

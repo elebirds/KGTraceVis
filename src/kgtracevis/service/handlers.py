@@ -113,6 +113,51 @@ class FeedbackRequest(BaseModel):
         return self.note if self.note is not None else self.comment
 
 
+class ReviewLedgerListRequest(BaseModel):
+    """Read-side filters for the append-only review ledger."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str | None = None
+    case_id: str | None = None
+    target_type: FeedbackTargetType | None = None
+    target_id: str | None = None
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=50, ge=1, le=500)
+
+
+class ReviewLedgerRecord(BaseModel):
+    """One append-only review ledger record returned to dashboard clients."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    feedback_id: str
+    created_at: str
+    run_id: str | None = None
+    case_id: str | None = None
+    target_type: FeedbackTargetType
+    target_id: str
+    target_key: str | None = None
+    action: FeedbackAction
+    note: str | None = None
+    reviewer: str | None = None
+    source: str
+    metadata: dict[str, Any] | None = None
+
+
+class ReviewLedgerListResponse(BaseModel):
+    """Paginated review ledger response for dashboard clients."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    records: list[ReviewLedgerRecord] = Field(default_factory=list)
+    total_count: int
+    returned_count: int
+    offset: int
+    limit: int
+    claim_boundary: str
+
+
 def list_cases(
     case_dirs: Sequence[str | Path] = DEFAULT_EVIDENCE_DIRS,
 ) -> list[CaseSummary]:
@@ -190,6 +235,17 @@ def record_feedback(
     if store is None:
         raise ValueError("Postgres feedback store is not configured")
     return store.record_feedback(request)
+
+
+def list_feedback(
+    request: ReviewLedgerListRequest | None = None,
+) -> ReviewLedgerListResponse:
+    """Return append-only review ledger records for dashboard clients."""
+    store = _default_feedback_store()
+    if store is None:
+        raise ValueError("Postgres feedback store is not configured")
+    active_request = request or ReviewLedgerListRequest()
+    return ReviewLedgerListResponse.model_validate(store.list_feedback(active_request))
 
 
 def _analysis_envelope(

@@ -329,6 +329,76 @@ class PostgresRunStore:
         }
         return {"status": "recorded", "record": record}
 
+    def list_feedback(self, request: Any) -> dict[str, Any]:
+        """Return append-only feedback records for dashboard clients."""
+        run_uuid = parse_run_uuid(request.run_id) if request.run_id else None
+        target_type = (
+            feedback_target_type(request.target_type) if request.target_type else None
+        )
+        offset = int(getattr(request, "offset", 0))
+        limit = int(getattr(request, "limit", 50))
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT f.feedback_id::text, f.created_at, f.run_id::text,
+                       c.case_id, f.target_type::text, f.target_id,
+                       f.feedback::text, f.comment, f.reviewer, f.corrected_value
+                FROM feedback_records f
+                LEFT JOIN evidence_cases c ON c.id = f.case_pk
+                WHERE (%s::uuid IS NULL OR f.run_id = %s::uuid)
+                  AND (%s::text IS NULL OR c.case_id = %s::text)
+                  AND (%s::text IS NULL OR f.target_type::text = %s::text)
+                  AND (%s::text IS NULL OR f.target_id = %s::text)
+                ORDER BY f.created_at DESC, f.feedback_id ASC
+                OFFSET %s
+                LIMIT %s
+                """,
+                (
+                    run_uuid,
+                    run_uuid,
+                    request.case_id,
+                    request.case_id,
+                    target_type,
+                    target_type,
+                    request.target_id,
+                    request.target_id,
+                    offset,
+                    limit,
+                ),
+            ).fetchall()
+            count_row = connection.execute(
+                """
+                SELECT count(*) AS total_count
+                FROM feedback_records f
+                LEFT JOIN evidence_cases c ON c.id = f.case_pk
+                WHERE (%s::uuid IS NULL OR f.run_id = %s::uuid)
+                  AND (%s::text IS NULL OR c.case_id = %s::text)
+                  AND (%s::text IS NULL OR f.target_type::text = %s::text)
+                  AND (%s::text IS NULL OR f.target_id = %s::text)
+                """,
+                (
+                    run_uuid,
+                    run_uuid,
+                    request.case_id,
+                    request.case_id,
+                    target_type,
+                    target_type,
+                    request.target_id,
+                    request.target_id,
+                ),
+            ).fetchone()
+        records = [_feedback_record_from_row(row) for row in rows]
+        return {
+            "records": records,
+            "total_count": int(count_row["total_count"] if count_row else len(records)),
+            "returned_count": len(records),
+            "offset": offset,
+            "limit": limit,
+            "claim_boundary": (
+                "candidate/plausible explanation only; not a verified root-cause label"
+            ),
+        }
+
     def _connection(self) -> Any:
         if self.connection_factory is not None:
             return self.connection_factory()
@@ -527,6 +597,45 @@ def _insert_paths(
                 Jsonb(dict(path)),
             ),
         )
+
+
+def _feedback_record_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    target_type = str(row["target_type"])
+    target_id = str(row["target_id"])
+    return {
+        "feedback_id": str(row["feedback_id"]),
+        "created_at": _iso_or_none(row.get("created_at")),
+        "run_id": str(row["run_id"]) if row.get("run_id") else None,
+        "case_id": row.get("case_id"),
+        "target_type": target_type,
+        "target_id": target_id,
+        "target_key": f"{target_type}:{target_id}",
+        "action": _feedback_action_from_value(str(row["feedback"])),
+        "note": row.get("comment"),
+        "reviewer": row.get("reviewer"),
+        "source": "postgres_feedback_records",
+        "metadata": (
+            {"corrected_value": row.get("corrected_value")}
+            if row.get("corrected_value") is not None
+            else None
+        ),
+    }
+
+
+def _feedback_action_from_value(value: str) -> str:
+    if value == "accept":
+        return "accept"
+    if value == "reject":
+        return "reject"
+    return "needs_review"
+
+
+def _iso_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return str(value.isoformat())
+    return str(value)
 
 
 def _insert_artifacts(

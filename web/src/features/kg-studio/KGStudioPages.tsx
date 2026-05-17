@@ -353,20 +353,6 @@ function KGSources({
   const [materialBusy, setMaterialBusy] = useState(false);
   const [materialStatus, setMaterialStatus] = useState<string | null>(null);
   const [materialError, setMaterialError] = useState<string | null>(null);
-  const [materialExtractionProvider, setMaterialExtractionProvider] =
-    useState<"openai" | "offline_fixture">("openai");
-  const [documentUnderstandingMode, setDocumentUnderstandingMode] =
-    useState<"chunk" | "long_context" | "agentic">("chunk");
-  const [documentUnderstandingProvider, setDocumentUnderstandingProvider] =
-    useState<"none" | "openai" | "offline_fixture">("none");
-  const [hypothesisMode, setHypothesisMode] = useState<"none" | "brainstorm">("none");
-  const [hypothesisProvider, setHypothesisProvider] =
-    useState<"none" | "openai" | "offline_fixture">("none");
-  const [hypothesisInfluence, setHypothesisInfluence] =
-    useState<"review_only" | "prompt_context" | "profile_suggestions">("review_only");
-  const [documentIEFixturePath, setDocumentIEFixturePath] = useState("");
-  const [documentUnderstandingFixturePath, setDocumentUnderstandingFixturePath] = useState("");
-  const [hypothesisFixturePath, setHypothesisFixturePath] = useState("");
   const [extractOverwrite, setExtractOverwrite] = useState(false);
   const [materialBuildOverwrite, setMaterialBuildOverwrite] = useState(false);
   const [materialOutputName, setMaterialOutputName] = useState("material_library");
@@ -520,37 +506,14 @@ function KGSources({
       let lastStructuredPath = "";
       for (const materialId of selectedMaterialIds) {
         const response = await api.extractKGMaterial(materialId, {
-          provider: materialExtractionProvider,
-          overwrite: extractOverwrite,
-          source_format: "jsonl",
-          document_understanding_mode: documentUnderstandingMode,
-          document_understanding_provider:
-            documentUnderstandingMode === "chunk" ? "none" : documentUnderstandingProvider,
-          hypothesis_mode: hypothesisMode,
-          hypothesis_provider: hypothesisMode === "none" ? "none" : hypothesisProvider,
-          hypothesis_influence: hypothesisInfluence,
-          document_ie_fixture_path:
-            materialExtractionProvider === "offline_fixture" && documentIEFixturePath.trim()
-              ? documentIEFixturePath.trim()
-              : undefined,
-          document_understanding_fixture_path:
-            documentUnderstandingMode !== "chunk" &&
-            documentUnderstandingProvider === "offline_fixture" &&
-            documentUnderstandingFixturePath.trim()
-              ? documentUnderstandingFixturePath.trim()
-              : undefined,
-          hypothesis_fixture_path:
-            hypothesisMode === "brainstorm" &&
-            hypothesisProvider === "offline_fixture" &&
-            hypothesisFixturePath.trim()
-              ? hypothesisFixturePath.trim()
-              : undefined
+          provider: "none",
+          overwrite: extractOverwrite
         });
         recordCount += response.record_count;
         lastStructuredPath = response.structured_records_path;
       }
       setMaterialStatus(
-        `Extraction complete via ${materialExtractionProvider}: ${recordCount} candidate record(s) written. Latest structured_records: ${lastStructuredPath}`
+        `Extraction complete: ${recordCount} compiler-ready source(s). Latest path: ${lastStructuredPath}`
       );
       await loadMaterials(selectedMaterialIds[0]);
     } catch (error) {
@@ -705,141 +668,6 @@ function KGSources({
                   <span>Output name</span>
                   <Input value={materialOutputName} onChange={setMaterialOutputName} />
                 </label>
-                <label className="form-field">
-                  <span>Extraction provider</span>
-                  <Select
-                    value={materialExtractionProvider}
-                    onChange={(value) =>
-                      setMaterialExtractionProvider(value as "openai" | "offline_fixture")
-                    }
-                    options={[
-                      { label: "OpenAI IE", value: "openai" },
-                      { label: "Offline fixture", value: "offline_fixture" }
-                    ]}
-                  />
-                </label>
-                <label className="form-field">
-                  <span>Understanding mode</span>
-                  <Select
-                    value={documentUnderstandingMode}
-                    onChange={(value) => {
-                      const nextMode = value as "chunk" | "long_context" | "agentic";
-                      setDocumentUnderstandingMode(nextMode);
-                      if (nextMode === "chunk") {
-                        setDocumentUnderstandingProvider("none");
-                      }
-                    }}
-                    options={[
-                      { label: "Chunk only", value: "chunk" },
-                      { label: "Long context map", value: "long_context" },
-                      { label: "Agentic map", value: "agentic" }
-                    ]}
-                  />
-                </label>
-                {documentUnderstandingMode !== "chunk" && (
-                  <label className="form-field">
-                    <span>Understanding provider</span>
-                    <Select
-                      value={documentUnderstandingProvider}
-                      onChange={(value) =>
-                        setDocumentUnderstandingProvider(
-                          value as "none" | "openai" | "offline_fixture"
-                        )
-                      }
-                      options={[
-                        { label: "Deterministic fallback", value: "none" },
-                        { label: "OpenAI document reader", value: "openai" },
-                        { label: "Offline map fixture", value: "offline_fixture" }
-                      ]}
-                    />
-                  </label>
-                )}
-                {documentUnderstandingMode !== "chunk" &&
-                  documentUnderstandingProvider === "offline_fixture" && (
-                    <label className="form-field">
-                      <span>Map fixture path</span>
-                      <Input
-                        value={documentUnderstandingFixturePath}
-                        onChange={setDocumentUnderstandingFixturePath}
-                        placeholder="optional if material metadata includes fixture"
-                      />
-                    </label>
-                  )}
-                <label className="form-field">
-                  <span>Hypothesis mode</span>
-                  <Select
-                    value={hypothesisMode}
-                    onChange={(value) => {
-                      const nextMode = value as "none" | "brainstorm";
-                      setHypothesisMode(nextMode);
-                      if (nextMode === "none") {
-                        setHypothesisProvider("none");
-                        setHypothesisInfluence("review_only");
-                      }
-                    }}
-                    options={[
-                      { label: "None", value: "none" },
-                      { label: "Brainstorm", value: "brainstorm" }
-                    ]}
-                  />
-                </label>
-                {hypothesisMode === "brainstorm" && (
-                  <>
-                    <label className="form-field">
-                      <span>Hypothesis provider</span>
-                      <Select
-                        value={hypothesisProvider}
-                        onChange={(value) =>
-                          setHypothesisProvider(
-                            value as "none" | "openai" | "offline_fixture"
-                          )
-                        }
-                        options={[
-                          { label: "Deterministic fallback", value: "none" },
-                          { label: "OpenAI", value: "openai" },
-                          { label: "Offline fixture", value: "offline_fixture" }
-                        ]}
-                      />
-                    </label>
-                    <label className="form-field">
-                      <span>Hypothesis influence</span>
-                      <Select
-                        value={hypothesisInfluence}
-                        onChange={(value) =>
-                          setHypothesisInfluence(
-                            value as "review_only" | "prompt_context" | "profile_suggestions"
-                          )
-                        }
-                        options={[
-                          { label: "Review only", value: "review_only" },
-                          { label: "Prompt context", value: "prompt_context" },
-                          { label: "Profile suggestions", value: "profile_suggestions" }
-                        ]}
-                      />
-                    </label>
-                  </>
-                )}
-                {hypothesisMode === "brainstorm" &&
-                  hypothesisProvider === "offline_fixture" && (
-                    <label className="form-field">
-                      <span>Hypothesis fixture path</span>
-                      <Input
-                        value={hypothesisFixturePath}
-                        onChange={setHypothesisFixturePath}
-                        placeholder="optional if material metadata includes fixture"
-                      />
-                    </label>
-                  )}
-                {materialExtractionProvider === "offline_fixture" && (
-                  <label className="form-field">
-                    <span>Fixture path</span>
-                    <Input
-                      value={documentIEFixturePath}
-                      onChange={setDocumentIEFixturePath}
-                      placeholder="optional if material metadata includes fixture"
-                    />
-                  </label>
-                )}
                 <label className="inline-switch build-overwrite">
                   <Switch size="small" checked={extractOverwrite} onChange={setExtractOverwrite} />
                   <span>overwrite structured records</span>

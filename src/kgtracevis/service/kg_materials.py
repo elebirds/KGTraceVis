@@ -281,6 +281,106 @@ class KGMaterialExtractionRunResponse(BaseModel):
     )
 
 
+class KGMaterialChunkRecord(BaseModel):
+    """One parsed source chunk for review and extraction traceability."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chunk_id: str
+    material_id: str
+    chunk_index: int
+    source_locator: str | None = None
+    text_content: str
+    char_start: int | None = None
+    char_end: int | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: str | None = None
+
+
+class KGMaterialChunkListResponse(BaseModel):
+    """Read-side response for one material's parsed chunks."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["ok"] = "ok"
+    material: KGMaterialRecord
+    count: int
+    chunks: list[KGMaterialChunkRecord] = Field(default_factory=list)
+    claim_boundary: str = (
+        "source chunks are parsed provenance context for candidate extraction; "
+        "they are not verified industrial facts"
+    )
+
+
+class KGMaterialExtractionRunRecord(BaseModel):
+    """One persisted extraction execution record."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    extraction_run_id: str
+    material_id: str
+    status: str
+    provider: str | None = None
+    source_format: str | None = None
+    structured_records_path: str | None = None
+    source_id: str | None = None
+    extractor_name: str | None = None
+    extractor_version: str | None = None
+    record_count: int | None = None
+    error_message: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    recorded_at: str | None = None
+    extraction: KGMaterialExtractionState | None = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    result_summary: dict[str, Any] = Field(default_factory=dict)
+
+
+class KGMaterialExtractionRunListResponse(BaseModel):
+    """Read-side response for one material's extraction runs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["ok"] = "ok"
+    material: KGMaterialRecord
+    count: int
+    runs: list[KGMaterialExtractionRunRecord] = Field(default_factory=list)
+    claim_boundary: str = (
+        "extraction runs describe candidate-generation provenance and runtime state; "
+        "they do not verify industrial facts or publish KG rows"
+    )
+
+
+class KGMaterialExtractionArtifactRecord(BaseModel):
+    """One persisted extraction artifact reference."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: str
+    material_id: str
+    extraction_run_id: str | None = None
+    artifact_type: str
+    uri: str | None = None
+    media_type: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: str | None = None
+
+
+class KGMaterialExtractionArtifactListResponse(BaseModel):
+    """Read-side response for one material's extraction artifacts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["ok"] = "ok"
+    material: KGMaterialRecord
+    count: int
+    artifacts: list[KGMaterialExtractionArtifactRecord] = Field(default_factory=list)
+    claim_boundary: str = (
+        "extraction artifacts are candidate-generation byproducts for review; "
+        "they are not published KG state or verified facts"
+    )
+
+
 class KGMaterialStore(Protocol):
     """Persistence boundary for material-library runtime state."""
 
@@ -323,6 +423,15 @@ class KGMaterialStore(Protocol):
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Persist one extraction artifact reference."""
+
+    def list_source_chunks(self, material_id: str) -> list[dict[str, Any]]:
+        """Return stored source chunks for one material."""
+
+    def list_extraction_runs(self, material_id: str) -> list[dict[str, Any]]:
+        """Return stored extraction runs for one material."""
+
+    def list_extraction_artifacts(self, material_id: str) -> list[dict[str, Any]]:
+        """Return stored extraction artifacts for one material."""
 
 
 class FileKGMaterialStore:
@@ -372,6 +481,15 @@ class FileKGMaterialStore:
         _write_jsonl(record_dir / "source_chunks.jsonl", chunks)
         return chunks
 
+    def list_source_chunks(self, material_id: str) -> list[dict[str, Any]]:
+        """Return stored source chunks for one material in source order."""
+        material_id = _safe_path_component(material_id, field_name="material_id")
+        return _read_jsonl_records(
+            _material_dir(material_id, material_root=self.root) / "source_chunks.jsonl",
+            sort_key="chunk_index",
+            reverse=False,
+        )
+
     def record_extraction_run(
         self,
         material_id: str,
@@ -390,6 +508,13 @@ class FileKGMaterialStore:
             "material_id": material_id,
             "status": extraction.status,
             "provider": provider,
+            "source_format": extraction.source_format,
+            "structured_records_path": extraction.structured_records_path,
+            "source_id": extraction.source_id,
+            "extractor_name": extraction.extractor_name,
+            "extractor_version": extraction.extractor_version,
+            "record_count": extraction.record_count,
+            "error_message": extraction.error_message,
             "extraction": extraction.model_dump(mode="json"),
             "parameters": parameters or {},
             "result_summary": result_summary or {},
@@ -400,6 +525,14 @@ class FileKGMaterialStore:
             payload,
         )
         return payload
+
+    def list_extraction_runs(self, material_id: str) -> list[dict[str, Any]]:
+        """Return stored extraction run metadata for one material."""
+        material_id = _safe_path_component(material_id, field_name="material_id")
+        return _read_jsonl_records(
+            _material_dir(material_id, material_root=self.root) / "extraction_runs.jsonl",
+            sort_key="recorded_at",
+        )
 
     def save_extraction_artifact(
         self,
@@ -429,6 +562,15 @@ class FileKGMaterialStore:
             artifact,
         )
         return artifact
+
+    def list_extraction_artifacts(self, material_id: str) -> list[dict[str, Any]]:
+        """Return stored extraction artifact references for one material."""
+        material_id = _safe_path_component(material_id, field_name="material_id")
+        return _read_jsonl_records(
+            _material_dir(material_id, material_root=self.root)
+            / "extraction_artifacts.jsonl",
+            sort_key="created_at",
+        )
 
 
 _MATERIAL_STORE_OVERRIDE: KGMaterialStore | None = None
@@ -569,6 +711,58 @@ def get_kg_material(
     """Return one persisted material-library record."""
     material = material_store(material_root=material_root).get_material_record(material_id)
     return KGMaterialDetailResponse(material=material)
+
+
+def list_kg_material_chunks(
+    material_id: str,
+    *,
+    material_root: Path | None = None,
+) -> KGMaterialChunkListResponse:
+    """Return stored source chunks for one material."""
+    material = get_kg_material(material_id, material_root=material_root).material
+    chunks = material_store(material_root=material_root).list_source_chunks(material.material_id)
+    return KGMaterialChunkListResponse(
+        material=material,
+        count=len(chunks),
+        chunks=[KGMaterialChunkRecord.model_validate(chunk) for chunk in chunks],
+    )
+
+
+def list_kg_material_extraction_runs(
+    material_id: str,
+    *,
+    material_root: Path | None = None,
+) -> KGMaterialExtractionRunListResponse:
+    """Return extraction run history for one material."""
+    material = get_kg_material(material_id, material_root=material_root).material
+    runs = material_store(material_root=material_root).list_extraction_runs(
+        material.material_id
+    )
+    return KGMaterialExtractionRunListResponse(
+        material=material,
+        count=len(runs),
+        runs=[KGMaterialExtractionRunRecord.model_validate(run) for run in runs],
+    )
+
+
+def list_kg_material_extraction_artifacts(
+    material_id: str,
+    *,
+    material_root: Path | None = None,
+) -> KGMaterialExtractionArtifactListResponse:
+    """Return extraction artifacts for one material."""
+    material = get_kg_material(material_id, material_root=material_root).material
+    artifacts = material_store(material_root=material_root).list_extraction_artifacts(
+        material.material_id
+    )
+    return KGMaterialExtractionArtifactListResponse(
+        material=material,
+        count=len(artifacts),
+        artifacts=[
+            KGMaterialExtractionArtifactRecord.model_validate(artifact)
+            for artifact in artifacts
+        ],
+    )
 
 
 def extract_kg_material_to_structured_records(
@@ -795,6 +989,27 @@ def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         handle.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
+def _read_jsonl_records(
+    path: Path,
+    *,
+    sort_key: str | None = None,
+    reverse: bool = True,
+) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    records: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise ValueError(f"JSONL record must be an object: {path}")
+        records.append(dict(payload))
+    if sort_key is not None:
+        records.sort(key=lambda item: item.get(sort_key) or 0, reverse=reverse)
+    return records
+
+
 def _safe_path_component(value: str, *, field_name: str) -> str:
     text = value.strip()
     if not text:
@@ -831,8 +1046,14 @@ __all__ = [
     "DEFAULT_SOURCE_KG_MATERIAL_DIR",
     "FileKGMaterialStore",
     "KGMaterialBuildSourcesResponse",
+    "KGMaterialChunkListResponse",
+    "KGMaterialChunkRecord",
     "KGMaterialDetailResponse",
     "KGMaterialDirectBuildRequest",
+    "KGMaterialExtractionArtifactListResponse",
+    "KGMaterialExtractionArtifactRecord",
+    "KGMaterialExtractionRunListResponse",
+    "KGMaterialExtractionRunRecord",
     "KGMaterialExtractionRunRequest",
     "KGMaterialExtractionRunResponse",
     "KGMaterialExtractionState",
@@ -849,6 +1070,9 @@ __all__ = [
     "extract_kg_material_to_structured_records",
     "fetch_remote_material",
     "get_kg_material",
+    "list_kg_material_chunks",
+    "list_kg_material_extraction_artifacts",
+    "list_kg_material_extraction_runs",
     "list_kg_materials",
     "material_store",
     "prepare_kg_material_construction_build",

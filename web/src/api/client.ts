@@ -8,11 +8,15 @@ import type {
   KGConstructionReviewQueueResponse,
   KGConstructionReviewRequest,
   KGConstructionReviewResponse,
+  KGDraftListResponse,
   KGDraftRequest,
   KGMaterialBuildSourcesRequest,
   KGMaterialBuildSourcesResponse,
+  KGMaterialChunkListResponse,
+  KGMaterialExtractionArtifactListResponse,
   KGMaterialExtractionRequest,
   KGMaterialExtractionResponse,
+  KGMaterialExtractionRunListResponse,
   KGMaterialListResponse,
   KGMaterialRegisterUrlRequest,
   KGMaterialRegisterUrlResponse,
@@ -21,6 +25,7 @@ import type {
   KGSourceDraftRequest,
   KGSourceDraftResponse,
   KGStudioPayload,
+  ReviewLedgerListResponse,
   ReviewRequest,
   RunDetail,
   RunSummary,
@@ -42,6 +47,18 @@ export const api = {
   bootstrap: () => requestJson<DashboardBootstrap>("/api/dashboard/bootstrap"),
   kgStudio: () => requestJson<KGStudioPayload>("/api/kg/studio"),
   listKGMaterials: () => requestJson<KGMaterialListResponse>("/api/kg/materials"),
+  getKGMaterialChunks: (materialId: string) =>
+    requestJson<KGMaterialChunkListResponse>(
+      `/api/kg/materials/${encodeURIComponent(materialId)}/chunks`
+    ),
+  getKGMaterialExtractions: (materialId: string) =>
+    requestJson<KGMaterialExtractionRunListResponse>(
+      `/api/kg/materials/${encodeURIComponent(materialId)}/extractions`
+    ),
+  getKGMaterialArtifacts: (materialId: string) =>
+    requestJson<KGMaterialExtractionArtifactListResponse>(
+      `/api/kg/materials/${encodeURIComponent(materialId)}/artifacts`
+    ),
   uploadKGMaterial: (request: KGMaterialUploadRequest) => {
     const form = new FormData();
     form.append("file", request.file);
@@ -98,6 +115,8 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request)
     }),
+  listReviews: () => requestJson<ReviewLedgerListResponse>("/api/feedback"),
+  listKGDrafts: () => requestJson<KGDraftListResponse>("/api/kg/drafts"),
   submitKGDraft: (request: KGDraftRequest) =>
     requestJson<{ status: string; record: Record<string, unknown> }>("/api/kg/drafts", {
       method: "POST",

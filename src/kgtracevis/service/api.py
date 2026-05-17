@@ -19,10 +19,13 @@ from kgtracevis.service.dashboard import dashboard_bootstrap
 from kgtracevis.service.handlers import (
     AnalyzeRequest,
     FeedbackRequest,
+    FeedbackTargetType,
+    ReviewLedgerListRequest,
     WhatIfRequest,
     analyze_request,
     get_case_detail,
     list_cases,
+    list_feedback,
     record_feedback,
     what_if_request,
 )
@@ -48,7 +51,12 @@ from kgtracevis.service.kg_construction import (
     validate_kg_construction_build,
     validate_kg_construction_overlay,
 )
-from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
+from kgtracevis.service.kg_drafts import (
+    KGDraftListRequest,
+    KGDraftRequest,
+    list_kg_drafts,
+    record_kg_draft,
+)
 from kgtracevis.service.kg_material_build import run_kg_material_build
 from kgtracevis.service.kg_materials import (
     KGMaterialDirectBuildRequest,
@@ -58,6 +66,9 @@ from kgtracevis.service.kg_materials import (
     MaterialType,
     extract_kg_material_to_structured_records,
     get_kg_material,
+    list_kg_material_chunks,
+    list_kg_material_extraction_artifacts,
+    list_kg_material_extraction_runs,
     list_kg_materials,
     prepare_kg_material_construction_build,
     register_kg_material,
@@ -192,6 +203,28 @@ def create_app() -> FastAPI:
     def kg_studio() -> dict[str, object]:
         return kg_studio_payload().model_dump(mode="json")
 
+    @app.get("/api/kg/drafts")
+    def kg_draft_history(
+        target_type: Literal["edge", "kg_edge"] | None = None,
+        target_id: str | None = None,
+        target_key: str | None = None,
+        reviewer: str | None = None,
+        source: str | None = None,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    ) -> dict[str, object]:
+        return list_kg_drafts(
+            KGDraftListRequest(
+                target_type=target_type,
+                target_id=target_id,
+                target_key=target_key,
+                reviewer=reviewer,
+                source=source,
+                offset=offset,
+                limit=limit,
+            )
+        ).model_dump(mode="json")
+
     @app.post("/api/kg/drafts")
     def kg_draft(request: KGDraftRequest) -> dict[str, object]:
         return record_kg_draft(request)
@@ -264,6 +297,36 @@ def create_app() -> FastAPI:
         try:
             material = get_kg_material(material_id).material
             return {"status": "ok", "material": _material_api_record(material)}
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/kg/materials/{material_id}/chunks")
+    def kg_material_chunks(material_id: str) -> dict[str, object]:
+        try:
+            response = list_kg_material_chunks(material_id)
+            payload = response.model_dump(mode="json")
+            payload["material"] = _material_api_record(response.material)
+            return payload
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/kg/materials/{material_id}/extractions")
+    def kg_material_extractions(material_id: str) -> dict[str, object]:
+        try:
+            response = list_kg_material_extraction_runs(material_id)
+            payload = response.model_dump(mode="json")
+            payload["material"] = _material_api_record(response.material)
+            return payload
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/kg/materials/{material_id}/artifacts")
+    def kg_material_artifacts(material_id: str) -> dict[str, object]:
+        try:
+            response = list_kg_material_extraction_artifacts(material_id)
+            payload = response.model_dump(mode="json")
+            payload["material"] = _material_api_record(response.material)
+            return payload
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -617,6 +680,29 @@ def create_app() -> FastAPI:
     def what_if(request: WhatIfRequest) -> dict[str, object]:
         try:
             return what_if_request(request)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/feedback")
+    def feedback_list(
+        run_id: str | None = None,
+        case_id: str | None = None,
+        target_type: FeedbackTargetType | None = None,
+        target_id: str | None = None,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    ) -> dict[str, object]:
+        try:
+            return list_feedback(
+                ReviewLedgerListRequest(
+                    run_id=run_id,
+                    case_id=case_id,
+                    target_type=target_type,
+                    target_id=target_id,
+                    offset=offset,
+                    limit=limit,
+                )
+            ).model_dump(mode="json")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
