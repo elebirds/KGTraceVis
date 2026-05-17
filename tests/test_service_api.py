@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from kgtracevis.producers.backends import AMAZON_PATCHCORE_BACKEND, ANOMALIB_ENGINE_BACKEND
 from kgtracevis.service import api as service_api
 from kgtracevis.service import dashboard as service_dashboard
+from kgtracevis.service import kg_construction as service_kg_construction
 from kgtracevis.service import runs as service_runs
 from kgtracevis.service.api import app
 from kgtracevis.service.handlers import (
@@ -903,6 +904,143 @@ def test_fastapi_routes_are_wired() -> None:
     assert analysis.json()["analysis"]["case_id"] == "mvtec_0001"
 
 
+def test_evidence_upload_persists_summary_pipeline_reasoning_metadata(tmp_path: Path, monkeypatch) -> None:
+    """Single-evidence uploads should expose stable summary/case reasoning metadata."""
+    monkeypatch.setattr(service_runs, "DEFAULT_RUNS_DIR", tmp_path / "rootlens_sessions")
+
+    detail = service_runs.create_run_from_upload(
+        "mvtec_0001.json",
+        Path("data/examples/ds_mvtec_example.json").read_bytes(),
+        mode="evidence",
+        top_k=2,
+    )
+
+    assert detail.summary is not None
+    assert detail.summary["pipeline"]["reasoning_profile_id"] == "generic_graph_path_default"
+    assert detail.summary["pipeline"]["reasoner_adapter"] == "generic_graph_path"
+    assert detail.summary["pipeline"]["selection_mode"] == "default"
+    assert detail.reasoning_metadata["reasoning_profile_id"] == "generic_graph_path_default"
+    assert detail.cases[0]["reasoning_metadata"]["reasoner_adapter"] == "generic_graph_path"
+
+
+def test_records_upload_route_keeps_explicit_reasoning_profile_in_run_detail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit profile selection should survive upload response and persisted run reads."""
+    monkeypatch.setattr(service_runs, "DEFAULT_RUNS_DIR", tmp_path / "rootlens_sessions")
+
+    client = TestClient(app)
+    with Path("data/examples/records/mvtec_records.jsonl").open("rb") as handle:
+        response = client.post(
+            "/api/runs/upload",
+            files={"file": ("mvtec_records.jsonl", handle, "application/jsonl")},
+            data={
+                "mode": "records",
+                "dataset": "mvtec",
+                "reasoning_profile_id": "generic_graph_path_default",
+                "top_k": "2",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"]["pipeline"]["reasoning_profile_id"] == "generic_graph_path_default"
+    assert payload["summary"]["pipeline"]["selection_mode"] == "explicit"
+    assert payload["cases"][0]["reasoning_metadata"]["selection_mode"] == "explicit"
+
+    run_id = payload["run"]["run_id"]
+    detail_response = client.get(f"/api/runs/{run_id}")
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload["summary"]["pipeline"]["reasoning_profile_id"] == (
+        "generic_graph_path_default"
+    )
+    assert detail_payload["summary"]["pipeline"]["selection_mode"] == "explicit"
+    assert detail_payload["cases"][0]["reasoning_metadata"]["reasoning_profile_id"] == (
+        "generic_graph_path_default"
+    )
+
+
+def test_kg_construction_validate_route_returns_qa_report(tmp_path: Path, monkeypatch) -> None:
+    """Construction validate route should expose the RootLens qa_report field."""
+    run_id = _write_fake_construction_build(tmp_path, qa_status="passed")
+    monkeypatch.setattr(service_kg_construction, "DEFAULT_SOURCE_KG_BUILD_DIR", tmp_path)
+
+    client = TestClient(app)
+    response = client.post(f"/api/kg/construction/builds/{run_id}/validate")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["qa_report"]["status"] == "passed"
+    assert payload["report"]["status"] == "passed"
+
+
+def test_kg_construction_publish_route_accepts_confirm_publish_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Publish route should accept RootLens request aliases and return path fields."""
+    run_id = _write_fake_construction_build(tmp_path, qa_status="ready")
+    monkeypatch.setattr(service_kg_construction, "DEFAULT_SOURCE_KG_BUILD_DIR", tmp_path)
+
+    client = TestClient(app)
+    response = client.post(
+        f"/api/kg/construction/builds/{run_id}/publish",
+        json={
+            "dry_run": False,
+            "include_defaults": False,
+            "confirm_publish": True,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["import_summary"]["dry_run"] is False
+    assert payload["include_defaults"] is False
+    assert payload["node_paths"] == [str(tmp_path / run_id / "nodes.csv")]
+    assert payload["edge_paths"] == [str(tmp_path / run_id / "edges.csv")]
+
+
+def test_kg_construction_review_route_updates_review_queue_and_qa_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Construction edge review should update counters and remain visible after refresh."""
+    run_id = _write_fake_construction_build(tmp_path, qa_status="pending")
+    monkeypatch.setattr(service_kg_construction, "DEFAULT_SOURCE_KG_BUILD_DIR", tmp_path)
+
+    client = TestClient(app)
+    queue_response = client.get(f"/api/kg/construction/builds/{run_id}/review-queue")
+    assert queue_response.status_code == 200
+    target_key = queue_response.json()["edges"][0]["target_key"]
+
+    review_response = client.post(
+        f"/api/kg/construction/builds/{run_id}/review",
+        json={
+            "action": "accept",
+            "target_key": target_key,
+            "reviewer": "rootlens-frontend",
+        },
+    )
+
+    assert review_response.status_code == 200
+    review_payload = review_response.json()
+    assert review_payload["decision"]["target_key"] == target_key
+    assert review_payload["edge"]["review_status"] == "reviewed"
+    assert review_payload["edge"]["accepted_count"] == 1
+
+    refreshed_queue = client.get(f"/api/kg/construction/builds/{run_id}/review-queue")
+    assert refreshed_queue.status_code == 200
+    edge = refreshed_queue.json()["edges"][0]
+    assert edge["target_key"] == target_key
+    assert edge["review_status"] == "reviewed"
+    assert edge["feedback_count"] == 1
+    assert edge["accepted_count"] == 1
+
+    validation_response = client.post(f"/api/kg/construction/builds/{run_id}/validate")
+    assert validation_response.status_code == 200
+    assert validation_response.json()["qa_report"]["last_review"]["target_key"] == target_key
+
+
 def _manual_source_csv() -> str:
     return "\n".join(
         [
@@ -1090,3 +1228,53 @@ def _tep_record_jsonl_bytes() -> bytes:
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
+
+
+def _write_fake_construction_build(
+    build_root: Path,
+    *,
+    run_id: str = "fake-construction-build",
+    qa_status: str = "passed",
+) -> str:
+    output_dir = build_root / run_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "nodes.csv").write_text(
+        "id,name,label,scenario,aliases,description\n"
+        "ScratchDefect,Scratch defect,AnomalyType,mvtec,scratch,Test node\n",
+        encoding="utf-8",
+    )
+    (output_dir / "edges.csv").write_text(
+        "head,relation,tail,scenario,source,evidence,confidence,weight,"
+        "review_status,feedback_count,accepted_count,rejected_count\n"
+        "ScratchDefect,HAS_PLAUSIBLE_CAUSE,MechanicalContact,mvtec,test,evidence,"
+        "0.8,0.2,auto,0,0,0\n",
+        encoding="utf-8",
+    )
+    (output_dir / "qa_report.json").write_text(
+        json.dumps({"status": qa_status}, indent=2),
+        encoding="utf-8",
+    )
+    (output_dir / "validation_report.json").write_text(
+        json.dumps({"status": qa_status, "validated": True}, indent=2),
+        encoding="utf-8",
+    )
+    (output_dir / "source_kg_build_summary.json").write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "status": "built",
+                "created_at": "2026-05-17T00:00:00+00:00",
+                "source_count": 1,
+                "source_ids": ["fixture_source"],
+                "node_count": 1,
+                "edge_count": 1,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (output_dir / "source_kg_build_manifest.json").write_text(
+        json.dumps({"run_id": run_id, "status": "built"}, indent=2),
+        encoding="utf-8",
+    )
+    return run_id

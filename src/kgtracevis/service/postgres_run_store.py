@@ -197,6 +197,12 @@ class PostgresRunStore:
 
                 from psycopg.types.json import Jsonb
 
+                summary_payload = dict_value(detail.summary)
+                run_reasoning_metadata = dict_value(
+                    detail.reasoning_metadata
+                    or summary_payload.get("pipeline")
+                    or dict_value(detail.analysis).get("reasoning_metadata")
+                )
                 parameters = {
                     "workflow_steps": [
                         step.model_dump(mode="json") for step in detail.workflow_steps
@@ -206,6 +212,15 @@ class PostgresRunStore:
                         str(entry["case_id"]): entry.get("ranked_root_causes", [])
                         for entry in entries
                     },
+                    "reasoning_metadata_by_case": {
+                        str(entry["case_id"]): entry.get("reasoning_metadata", {})
+                        for entry in entries
+                        if dict_value(entry.get("reasoning_metadata"))
+                    },
+                    "run_reasoning_metadata": run_reasoning_metadata,
+                    "analysis_reasoning_metadata": dict_value(
+                        dict_value(detail.analysis).get("reasoning_metadata")
+                    ),
                 }
                 connection.execute(
                     """

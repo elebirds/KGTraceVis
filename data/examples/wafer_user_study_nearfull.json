@@ -1,0 +1,129 @@
+{
+  "case_id": "wafer_user_study_nearfull_001",
+  "dataset": "wafer",
+  "source": "image",
+  "object": "wafer",
+  "anomaly_type": "nearfull",
+  "location": "wafer_surface",
+  "morphology": "dense_particles",
+  "severity": 0.72,
+  "confidence": 0.88,
+  "timestamp": null,
+  "raw_evidence": {
+    "description": "WM811K-style nearfull wafer user-study fixture. The payload captures observed anomaly evidence only and is intended for RCA comparison against a manual baseline.",
+    "log_events": [
+      "example_alarm"
+    ],
+    "variable_contributions": {},
+    "extra": {
+      "wm811k": {
+        "source_dataset": "wm811k",
+        "original_pattern": "Near-full",
+        "annotation_type": "user_study_fixture",
+        "wafer_id": "WAFER-US-001",
+        "wafer_map": [
+          [2, 2, 2, 2, 2],
+          [2, 2, 2, 2, 2],
+          [2, 2, 0, 2, 2],
+          [2, 2, 2, 2, 2],
+          [2, 2, 2, 2, 2]
+        ]
+      },
+      "descriptor_stats": {
+        "derived_location": "wafer_surface",
+        "derived_morphology": "dense_particles",
+        "derived_severity": 0.72,
+        "pattern": "nearfull"
+      },
+      "analysis_boundary": "candidate/plausible explanation only; not a verified root-cause label"
+    }
+  },
+  "observations": [
+    {
+      "obs_id": "obs_wafer_user_study_nearfull_001_object_wafer",
+      "facet": "object",
+      "name": "wafer",
+      "confidence": 0.88,
+      "source_ref": "adapter:wm811k",
+      "raw_ref": "object"
+    },
+    {
+      "obs_id": "obs_wafer_user_study_nearfull_001_anomaly_type_nearfull",
+      "facet": "anomaly_type",
+      "name": "nearfull",
+      "confidence": 0.88,
+      "source_ref": "dataset_label",
+      "raw_ref": "raw_evidence.extra.wm811k.original_pattern"
+    },
+    {
+      "obs_id": "obs_wafer_user_study_nearfull_001_spatial_pattern_nearfull",
+      "facet": "spatial_pattern",
+      "name": "nearfull",
+      "confidence": 0.88,
+      "source_ref": "dataset_label",
+      "raw_ref": "raw_evidence.extra.wm811k.original_pattern"
+    },
+    {
+      "obs_id": "obs_wafer_user_study_nearfull_001_location_wafer_surface",
+      "facet": "location",
+      "name": "wafer_surface",
+      "confidence": 0.88,
+      "source_ref": "wafer_map_descriptor",
+      "raw_ref": "raw_evidence.extra.descriptor_stats"
+    },
+    {
+      "obs_id": "obs_wafer_user_study_nearfull_001_morphology_dense_particles",
+      "facet": "morphology",
+      "name": "dense_particles",
+      "confidence": 0.88,
+      "source_ref": "wafer_map_descriptor",
+      "raw_ref": "raw_evidence.extra.descriptor_stats"
+    },
+    {
+      "obs_id": "obs_wafer_user_study_nearfull_001_severity",
+      "facet": "severity",
+      "name": "severity",
+      "value": 0.72,
+      "value_type": "float",
+      "confidence": 0.88,
+      "source_ref": "wafer_map_descriptor",
+      "raw_ref": "raw_evidence.extra.descriptor_stats.derived_severity"
+    },
+    {
+      "obs_id": "obs_wafer_user_study_nearfull_001_confidence",
+      "facet": "confidence",
+      "name": "adapter_confidence",
+      "value": 0.88,
+      "value_type": "float",
+      "confidence": 0.88,
+      "source_ref": "classifier_output",
+      "raw_ref": "confidence"
+    },
+    {
+      "obs_id": "obs_wafer_user_study_nearfull_001_log_event_example_alarm",
+      "facet": "log_event",
+      "name": "example_alarm",
+      "confidence": 0.65,
+      "source_ref": "user_study_fixture",
+      "raw_ref": "raw_evidence.log_events[0]"
+    }
+  ],
+  "adapter": {
+    "name": "wm811k",
+    "produces_root_cause": false,
+    "metadata": {
+      "source_dataset": "wm811k",
+      "schema_dataset": "wafer",
+      "annotation_type": "user_study_fixture"
+    }
+  },
+  "normalized_evidence": {},
+  "kg_analysis": {
+    "linked_entities": [],
+    "consistency_score": null,
+    "inconsistent_fields": [],
+    "correction_candidates": [],
+    "top_k_paths": []
+  },
+  "human_feedback": null
+}

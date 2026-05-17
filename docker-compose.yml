@@ -71,6 +71,9 @@ services:
       NEO4J_PASSWORD: password
       NEO4J_DATABASE: neo4j
       KGTRACE_POSTGRES_DSN: postgresql://kgtracevis:kgtracevis@postgres:5432/kgtracevis
+    volumes:
+      - ./runs:/app/runs
+      - ./artifacts:/app/artifacts
     depends_on:
       kg-import:
         condition: service_completed_successfully

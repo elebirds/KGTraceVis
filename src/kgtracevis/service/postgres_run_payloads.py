@@ -42,8 +42,17 @@ def detail_payload(
     first_evidence: dict[str, Any] | None = None
     first_analysis: dict[str, Any] | None = None
     first_summary: dict[str, Any] | None = None
+    summary_payload = dict_value(run_row.get("summary"))
     parameters = dict_value(run_row.get("parameters"))
     root_causes_by_case = dict_value(parameters.get("ranked_root_causes_by_case"))
+    reasoning_metadata_by_case = dict_value(parameters.get("reasoning_metadata_by_case"))
+    run_reasoning_metadata = _reasoning_metadata_value(
+        parameters.get("run_reasoning_metadata")
+    )
+    analysis_reasoning_metadata = _reasoning_metadata_value(
+        parameters.get("analysis_reasoning_metadata")
+    )
+    summary_pipeline = _reasoning_metadata_value(summary_payload.get("pipeline"))
 
     for row in case_rows:
         case_pk = str(row["case_pk"])
@@ -59,6 +68,9 @@ def detail_payload(
             ranked_root_causes = _ranked_root_causes_from_paths(case_id, paths)
         consistency = consistency_by_case.get(case_pk, {})
         source_edges = unique_source_edges(paths)
+        case_reasoning_metadata = _reasoning_metadata_value(
+            reasoning_metadata_by_case.get(case_id)
+        ) or dict(summary_pipeline) or dict(analysis_reasoning_metadata)
         analysis = {
             "case_id": case_id,
             "linked_entities": links,
@@ -67,6 +79,7 @@ def detail_payload(
             "correction_candidates": corrections,
             "top_k_paths": paths,
             "ranked_root_causes": ranked_root_causes,
+            "reasoning_metadata": case_reasoning_metadata,
             "human_feedback": evidence.get("human_feedback"),
         }
         cases.append(
@@ -81,6 +94,7 @@ def detail_payload(
                 "correction_candidates": corrections,
                 "top_k_paths": paths,
                 "ranked_root_causes": ranked_root_causes,
+                "reasoning_metadata": case_reasoning_metadata,
                 "source_edge_provenance": source_edges,
                 "path_graph": path_graph_from_paths(paths),
                 "review_targets": review_targets(
@@ -112,6 +126,7 @@ def detail_payload(
             "correction_candidates": first_analysis["correction_candidates"],
             "top_k_paths": first_analysis["top_k_paths"],
             "ranked_root_causes": first_analysis["ranked_root_causes"],
+            "reasoning_metadata": first_analysis.get("reasoning_metadata") or {},
         }
 
     aggregate_root_causes = [
@@ -125,6 +140,20 @@ def detail_payload(
             aggregate_paths,
         )
 
+    summary = dict(summary_payload) if summary_payload else None
+    if summary is None and run_reasoning_metadata:
+        summary = {"pipeline": dict(run_reasoning_metadata)}
+    elif summary is not None and "pipeline" not in summary and run_reasoning_metadata:
+        summary["pipeline"] = dict(run_reasoning_metadata)
+
+    analysis_payload = dict(first_analysis) if first_analysis is not None else None
+    if analysis_payload is not None and not analysis_payload.get("reasoning_metadata"):
+        analysis_payload["reasoning_metadata"] = (
+            dict(run_reasoning_metadata)
+            or dict(summary_pipeline)
+            or dict(analysis_reasoning_metadata)
+        )
+
     return {
         "run": run_summary_payload(run_row),
         "workflow_steps": list_value(parameters.get("workflow_steps")),
@@ -132,13 +161,16 @@ def detail_payload(
         "evidence": first_evidence,
         "evidence_summary": first_summary,
         "evidence_with_analysis": evidence_with_analysis,
-        "analysis": first_analysis,
-        "summary": dict_value(run_row.get("summary")) or None,
+        "analysis": analysis_payload,
+        "summary": summary,
         "cases": cases,
         "linked_entities": aggregate_links,
         "correction_candidates": aggregate_corrections,
         "top_k_paths": aggregate_paths,
         "ranked_root_causes": aggregate_root_causes,
+        "reasoning_metadata": dict(run_reasoning_metadata)
+        or dict(summary_pipeline)
+        or dict(analysis_reasoning_metadata),
         "path_graph": path_graph_from_paths(aggregate_paths),
         "source_edge_provenance": source_edges,
         "review_targets": review_targets(
@@ -209,6 +241,9 @@ def case_entries(detail: Any) -> list[dict[str, Any]]:
                     "correction_candidates": list_of_dicts(case.get("correction_candidates")),
                     "top_k_paths": list_of_dicts(case.get("top_k_paths")),
                     "ranked_root_causes": list_of_dicts(case.get("ranked_root_causes")),
+                    "reasoning_metadata": _reasoning_metadata_value(
+                        case.get("reasoning_metadata")
+                    ),
                 }
             )
     if not entries and detail.evidence:
@@ -228,6 +263,9 @@ def case_entries(detail: Any) -> list[dict[str, Any]]:
                 "correction_candidates": list_of_dicts(analysis.get("correction_candidates")),
                 "top_k_paths": list_of_dicts(analysis.get("top_k_paths")),
                 "ranked_root_causes": list_of_dicts(analysis.get("ranked_root_causes")),
+                "reasoning_metadata": _reasoning_metadata_value(
+                    analysis.get("reasoning_metadata")
+                ),
             }
         )
     return entries
@@ -336,6 +374,11 @@ class FeedbackRecordAdapter:
     def model_dump(self, *, mode: str = "json") -> dict[str, Any]:
         """Return the original JSON-compatible record."""
         return dict(self._record)
+
+
+def _reasoning_metadata_value(value: Any) -> dict[str, Any]:
+    """Return a JSON-friendly reasoning metadata payload."""
+    return dict_value(value)
 
 
 def feedback_target_type(value: str) -> str:

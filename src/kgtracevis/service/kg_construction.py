@@ -26,7 +26,8 @@ from kgtracevis.source_kg_compiler import (
     run_source_kg_compiler_workflow,
 )
 
-DEFAULT_SOURCE_KG_BUILD_DIR = Path("runs/source_kg_builds")
+DEFAULT_SOURCE_KG_BUILD_DIR = Path("runs/source_kg_build")
+LEGACY_SOURCE_KG_BUILD_DIR = Path("runs/source_kg_builds")
 MAX_PROGRESS_EVENTS_IN_RESPONSE = 200
 
 ConstructionSourceType = Literal[
@@ -102,7 +103,20 @@ class KGConstructionPublishRequest(BaseModel):
 
     dry_run: bool = True
     confirm: bool = False
+    confirm_publish: bool | None = None
     include_defaults: bool = True
+    config_path: str | None = None
+    uri: str | None = None
+    user: str | None = None
+    password: str | None = None
+    database: str | None = None
+
+    @model_validator(mode="after")
+    def validate_publish_shape(self) -> KGConstructionPublishRequest:
+        """Accept legacy and RootLens publish flags without ambiguity."""
+        if self.confirm_publish is not None:
+            self.confirm = self.confirm_publish
+        return self
 
 
 class KGConstructionOverlayValidationRequest(BaseModel):
@@ -117,16 +131,32 @@ class KGConstructionOverlayValidationRequest(BaseModel):
 
 
 class KGConstructionEdgeReviewRequest(BaseModel):
-    """Retained request DTO; compiler output review is read-only for now."""
+    """Request to review one generated construction edge."""
 
     model_config = ConfigDict(extra="forbid")
 
     action: Literal["accept", "reject"]
     item_type: str = "edge"
-    target_key: str
+    target_key: str | None = None
+    head: str | None = None
+    relation: str | None = None
+    tail: str | None = None
+    scenario: str | None = None
     reviewer: str | None = None
     note: str | None = None
+    proposed_payload: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_review_shape(self) -> KGConstructionEdgeReviewRequest:
+        """Require a target key or enough edge coordinates to infer one."""
+        if self.target_key:
+            return self
+        if self.head and self.relation and self.tail:
+            return self
+        raise ValueError(
+            "construction edge review requires target_key or head/relation/tail"
+        )
 
 
 class KGConstructionReviewQueueRequest(BaseModel):
@@ -245,6 +275,7 @@ class KGConstructionBuildValidationResponse(BaseModel):
 
     build: KGConstructionBuildRecord
     report: dict[str, Any]
+    qa_report: dict[str, Any] = Field(default_factory=dict)
     claim_boundary: str = CLAIM_BOUNDARY
 
 
@@ -277,6 +308,9 @@ class KGConstructionPublishResponse(BaseModel):
 
     build: KGConstructionBuildRecord
     import_summary: KGConstructionImportSummary
+    include_defaults: bool = True
+    node_paths: list[str] = Field(default_factory=list)
+    edge_paths: list[str] = Field(default_factory=list)
     claim_boundary: str = CLAIM_BOUNDARY
 
 
@@ -540,6 +574,16 @@ def save_kg_construction_source_upload(
     return payload
 
 
+def _build_roots(build_root: Path | None = None) -> list[Path]:
+    if build_root is not None:
+        return [build_root]
+    roots: list[Path] = []
+    for candidate in (DEFAULT_SOURCE_KG_BUILD_DIR, LEGACY_SOURCE_KG_BUILD_DIR):
+        if candidate not in roots:
+            roots.append(candidate)
+    return roots
+
+
 def list_kg_construction_source_uploads(
     *,
     source_root: Path | None = None,
@@ -558,13 +602,25 @@ def list_kg_construction_builds(
     build_root: Path | None = None,
 ) -> KGConstructionBuildListResponse:
     """List source compiler builds."""
-    root = build_root or DEFAULT_SOURCE_KG_BUILD_DIR
-    builds = [
-        _build_record_from_dir(path.parent)
-        for path in sorted(root.glob("*/source_kg_build_manifest.json"))
-    ] if root.exists() else []
+    roots = _build_roots(build_root)
+    build_dirs: list[Path] = []
+    discovered: set[Path] = set()
+    for root in roots:
+        if not root.exists():
+            continue
+        for pattern in ("*/source_kg_build_manifest.json", "*/kg_construction_manifest.json"):
+            for matched in sorted(root.glob(pattern)):
+                build_dir = matched.parent
+                if build_dir in discovered:
+                    continue
+                discovered.add(build_dir)
+                build_dirs.append(build_dir)
+    builds = [_build_record_from_dir(path) for path in build_dirs]
     builds.sort(key=lambda build: build.created_at or "", reverse=True)
-    return KGConstructionBuildListResponse(build_root=root.as_posix(), builds=builds)
+    return KGConstructionBuildListResponse(
+        build_root=(build_root or DEFAULT_SOURCE_KG_BUILD_DIR).as_posix(),
+        builds=builds,
+    )
 
 
 def get_kg_construction_build(
@@ -615,10 +671,15 @@ def validate_kg_construction_build(
 ) -> KGConstructionBuildValidationResponse:
     """Return the compiler validation report for one build."""
     build = _find_build(run_id, build_root=build_root)
-    report_path = Path(build.output_dir) / "validation_report.json"
+    output_dir = Path(build.output_dir)
+    qa_report_path = output_dir / "qa_report.json"
+    validation_report_path = output_dir / "validation_report.json"
+    qa_report = _read_json(qa_report_path) if qa_report_path.is_file() else {}
+    report = _read_json(validation_report_path) if validation_report_path.is_file() else dict(qa_report)
     return KGConstructionBuildValidationResponse(
         build=build,
-        report=_read_json(report_path) if report_path.is_file() else {},
+        report=report,
+        qa_report=qa_report or dict(report),
     )
 
 
@@ -660,10 +721,13 @@ def publish_kg_construction_build(
         build=build,
         import_summary=KGConstructionImportSummary(
             status="not_supported_source_compiler_build",
-            dry_run=True,
+            dry_run=request.dry_run,
             node_count=build.node_count,
             edge_count=build.edge_count,
         ),
+        include_defaults=request.include_defaults,
+        node_paths=[build.nodes_path],
+        edge_paths=[build.edges_path],
     )
 
 
@@ -673,12 +737,46 @@ def review_kg_construction_edge(
     *,
     build_root: Path | None = None,
 ) -> KGConstructionEdgeReviewResponse:
-    """Reject mutation of generated compiler edges through the legacy endpoint."""
+    """Review one generated compiler edge by updating its review counters."""
     build = _find_build(run_id, build_root=build_root)
-    raise ValueError(
-        "source KG compiler builds are read-only here; regenerate sources or use "
-        f"material/compiler review workflows later. target_key={request.target_key}; "
-        f"build={build.run_id}"
+    edges_path = Path(build.edges_path)
+    rows = _edge_rows(edges_path)
+    target_key = _resolve_review_target_key(rows, request)
+    updated_rows: list[dict[str, str]] = []
+    updated_edge: dict[str, Any] | None = None
+
+    for index, row in enumerate(rows):
+        row_payload = dict(row)
+        if _review_target_key_for_row(index, row_payload) != target_key:
+            updated_rows.append(row_payload)
+            continue
+        updated_edge = _updated_review_row(row_payload, action=request.action)
+        updated_rows.append({key: str(value) for key, value in updated_edge.items()})
+
+    if updated_edge is None:
+        raise ValueError(f"unknown construction review target_key: {target_key}")
+
+    _write_edge_rows(edges_path, updated_rows)
+    _record_build_review(
+        build=build,
+        target_key=target_key,
+        request=request,
+        edge=updated_edge,
+    )
+    refreshed_build = _find_build(run_id, build_root=build_root)
+    return KGConstructionEdgeReviewResponse(
+        build=refreshed_build,
+        decision={
+            "action": request.action,
+            "reviewer": request.reviewer,
+            "note": request.note,
+            "target_key": target_key,
+        },
+        edge=updated_edge,
+        item=updated_edge,
+        summary=_read_json(Path(refreshed_build.summary_path)),
+        manifest_path=refreshed_build.manifest_path,
+        edges_path=refreshed_build.edges_path,
     )
 
 
@@ -779,28 +877,66 @@ def _build_summary(
 
 
 def _build_record_from_dir(output_dir: Path) -> KGConstructionBuildRecord:
-    summary_path = output_dir / "source_kg_build_summary.json"
-    manifest_path = output_dir / "source_kg_build_manifest.json"
-    summary = _read_json(summary_path)
+    summary_path = _first_existing_path(
+        output_dir / "source_kg_build_summary.json",
+        output_dir / "kg_construction_summary.json",
+    )
+    manifest_path = _first_existing_path(
+        output_dir / "source_kg_build_manifest.json",
+        output_dir / "kg_construction_manifest.json",
+    )
+    summary = _read_json(summary_path) if summary_path is not None else {}
+    manifest = _read_json(manifest_path) if manifest_path is not None else {}
     edges = _edge_rows(output_dir / "edges.csv")
     scenarios = Counter(row.get("scenario", "unknown") for row in edges)
     statuses = Counter(row.get("review_status", "unknown") for row in edges)
+    source_ids = list(summary.get("source_ids") or [])
+    if not source_ids:
+        source_ids = [
+            str(item.get("source_id"))
+            for item in list(manifest.get("sources") or [])
+            if isinstance(item, dict) and item.get("source_id") is not None
+        ]
+    run_id = (
+        summary.get("run_id")
+        or (manifest.get("run") or {}).get("run_id")
+        or output_dir.name
+    )
+    created_at = summary.get("created_at") or (manifest.get("summary") or {}).get("created_at")
+    source_count = int(summary.get("source_count") or len(source_ids))
+    node_count = int(
+        summary.get("node_count")
+        or (manifest.get("summary") or {}).get("node_count")
+        or 0
+    )
+    edge_count = int(
+        summary.get("edge_count")
+        or (manifest.get("summary") or {}).get("edge_count")
+        or len(edges)
+    )
     return KGConstructionBuildRecord(
-        run_id=str(summary["run_id"]),
+        run_id=str(run_id),
         status=str(summary.get("status") or "built"),
-        created_at=summary.get("created_at"),
+        created_at=created_at,
         output_dir=output_dir.as_posix(),
         nodes_path=(output_dir / "nodes.csv").as_posix(),
         edges_path=(output_dir / "edges.csv").as_posix(),
-        summary_path=summary_path.as_posix(),
-        manifest_path=manifest_path.as_posix(),
-        source_ids=list(summary.get("source_ids") or []),
-        source_count=int(summary.get("source_count") or 0),
-        node_count=int(summary.get("node_count") or 0),
-        edge_count=int(summary.get("edge_count") or len(edges)),
+        summary_path=(summary_path or output_dir / "source_kg_build_summary.json").as_posix(),
+        manifest_path=(manifest_path or output_dir / "source_kg_build_manifest.json").as_posix(),
+        source_ids=source_ids,
+        source_count=source_count,
+        node_count=node_count,
+        edge_count=edge_count,
         scenarios=dict(scenarios),
         review_status_counts=dict(statuses),
     )
+
+
+def _first_existing_path(*paths: Path) -> Path | None:
+    for path in paths:
+        if path.is_file():
+            return path
+    return None
 
 
 def _find_build(run_id: str, *, build_root: Path | None = None) -> KGConstructionBuildRecord:
@@ -822,7 +958,7 @@ def _edge_rows(path: Path) -> list[dict[str, str]]:
 
 
 def _queue_edge_from_row(index: int, row: dict[str, str]) -> KGConstructionReviewQueueEdge:
-    target_key = f"{row.get('head')}|{row.get('relation')}|{row.get('tail')}|{index}"
+    target_key = _review_target_key_for_row(index, row)
     return KGConstructionReviewQueueEdge(
         target_key=target_key,
         head=row.get("head", ""),
@@ -839,6 +975,94 @@ def _queue_edge_from_row(index: int, row: dict[str, str]) -> KGConstructionRevie
         rejected_count=int(row.get("rejected_count") or 0),
         candidate_payload=row,
     )
+
+
+def _review_target_key_for_row(index: int, row: Mapping[str, Any]) -> str:
+    return f"{row.get('head')}|{row.get('relation')}|{row.get('tail')}|{index}"
+
+
+def _resolve_review_target_key(
+    rows: list[dict[str, str]],
+    request: KGConstructionEdgeReviewRequest,
+) -> str:
+    if request.target_key:
+        return request.target_key
+
+    head = request.head or ""
+    relation = request.relation or ""
+    tail = request.tail or ""
+    scenario = request.scenario
+    for index, row in enumerate(rows):
+        if row.get("head") != head or row.get("relation") != relation or row.get("tail") != tail:
+            continue
+        if scenario is not None and row.get("scenario") != scenario:
+            continue
+        return _review_target_key_for_row(index, row)
+    label = "|".join([head, relation, tail, scenario or "*"])
+    raise ValueError(f"unknown construction edge target_key: {label}")
+
+
+def _updated_review_row(
+    row: Mapping[str, Any],
+    *,
+    action: Literal["accept", "reject"],
+) -> dict[str, Any]:
+    feedback_count = int(row.get("feedback_count") or 0) + 1
+    accepted_count = int(row.get("accepted_count") or 0) + (1 if action == "accept" else 0)
+    rejected_count = int(row.get("rejected_count") or 0) + (1 if action == "reject" else 0)
+    return {
+        **dict(row),
+        "review_status": "reviewed" if action == "accept" else "rejected",
+        "feedback_count": feedback_count,
+        "accepted_count": accepted_count,
+        "rejected_count": rejected_count,
+    }
+
+
+def _write_edge_rows(path: Path, rows: list[dict[str, str]]) -> None:
+    fieldnames = [
+        "head",
+        "relation",
+        "tail",
+        "scenario",
+        "source",
+        "evidence",
+        "confidence",
+        "weight",
+        "review_status",
+        "feedback_count",
+        "accepted_count",
+        "rejected_count",
+    ]
+    for row in rows:
+        for key in row:
+            if key not in fieldnames:
+                fieldnames.append(key)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: row.get(key, "") for key in fieldnames})
+
+
+def _record_build_review(
+    *,
+    build: KGConstructionBuildRecord,
+    target_key: str,
+    request: KGConstructionEdgeReviewRequest,
+    edge: Mapping[str, Any],
+) -> None:
+    output_dir = Path(build.output_dir)
+    qa_report_path = output_dir / "qa_report.json"
+    qa_report = _read_json(qa_report_path) if qa_report_path.is_file() else {}
+    qa_report["last_review"] = {
+        "target_key": target_key,
+        "action": request.action,
+        "reviewer": request.reviewer,
+        "note": request.note,
+        "edge": dict(edge),
+    }
+    _write_json(qa_report_path, qa_report)
 
 
 def _filter_edges(

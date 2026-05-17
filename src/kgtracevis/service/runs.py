@@ -7,6 +7,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any, cast
 
 from kgtracevis.adapters import evidence_from_mvtec_record
@@ -220,6 +221,42 @@ def parse_dataset_override(value: str | None) -> DatasetName | None:
     return cast(DatasetName, normalized)
 
 
+def _run_reasoning_metadata_payload(value: Any) -> dict[str, Any]:
+    """Return a JSON-friendly reasoning metadata mapping."""
+    if not isinstance(value, Mapping):
+        return {}
+    return {str(key): item for key, item in value.items()}
+
+
+def _pipeline_summary_from_reasoning_metadata(
+    reasoning_metadata: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Return the summary.pipeline block expected by RootLens clients."""
+    metadata = _run_reasoning_metadata_payload(reasoning_metadata)
+    profile_id = metadata.get("reasoning_profile_id")
+    adapter = metadata.get("reasoner_adapter") or metadata.get("reasoner")
+    selection_mode = metadata.get("selection_mode")
+    requested_profile_id = metadata.get("requested_reasoning_profile_id")
+    requested_adapter = metadata.get("requested_reasoner_adapter")
+    return {
+        "reasoning_profile_id": profile_id,
+        "reasoner_adapter": adapter,
+        "selection_mode": selection_mode,
+        "reasoning_profile_ids": [profile_id] if profile_id else [],
+        "reasoner_adapters": [adapter] if adapter else [],
+        "selection_modes": [selection_mode] if selection_mode else [],
+        "requested_reasoning_profile_id": requested_profile_id,
+        "requested_reasoner_adapter": requested_adapter,
+        "requested_reasoning_profile_ids": [requested_profile_id]
+        if requested_profile_id
+        else [],
+        "requested_reasoner_adapters": [requested_adapter] if requested_adapter else [],
+        "fallback_applied": metadata.get("fallback_applied"),
+        "fallback_reason": metadata.get("fallback_reason"),
+        "tep_rca_reasoner": adapter,
+    }
+
+
 def _run_store() -> Any:
     """Backward-compatible private run-store accessor."""
     return run_store()
@@ -248,6 +285,7 @@ def _run_evidence_upload(
         evidence_count=1,
         label=f"{evidence.dataset.upper()} · {evidence.case_id}",
     )
+    reasoning_metadata = _run_reasoning_metadata_payload(analysis.reasoning_metadata)
     detail = RunDetail(
         run=run,
         workflow_steps=[
@@ -295,6 +333,9 @@ def _run_evidence_upload(
         **dashboard_fields_from_analysis(evidence, analysis),
         evidence_with_analysis=evidence_with_analysis(evidence, analysis),
         analysis=analysis.model_dump(mode="json"),
+        summary={
+            "pipeline": _pipeline_summary_from_reasoning_metadata(reasoning_metadata),
+        },
         artifacts={
             "input_path": str(input_path),
         },
@@ -360,6 +401,7 @@ def _run_records_upload(
         evidence_count=len(output.evidence_paths),
         label=f"{source_filename} · {summary.get('case_count', 0)} cases",
     )
+    reasoning_metadata = _run_reasoning_metadata_payload(summary.get("pipeline"))
     detail = RunDetail(
         run=run,
         workflow_steps=[
@@ -402,6 +444,7 @@ def _run_records_upload(
         )),
         summary=summary,
         cases=case_rows,
+        reasoning_metadata=reasoning_metadata,
         **dashboard_fields_from_cases(case_rows),
         artifacts={
             "input_path": str(input_path),
@@ -495,6 +538,7 @@ def _run_mvtec_image_upload(
         model_preset=selection.preset,
         model_backend=selection.backend,
     )
+    reasoning_metadata = _run_reasoning_metadata_payload(analysis.reasoning_metadata)
     detail = RunDetail(
         run=run,
         workflow_steps=workflow_steps_for_image_case(
