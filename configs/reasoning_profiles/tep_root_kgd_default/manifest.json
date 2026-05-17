@@ -1,0 +1,25 @@
+{
+  "reasoning_profile_id": "tep_root_kgd_default",
+  "dataset_scope": [
+    "tep"
+  ],
+  "reasoner_adapter": "tep_root_kgd",
+  "version": "1.0.0",
+  "required_evidence_fields": [
+    "raw_evidence.variable_contributions",
+    "raw_evidence.extra.graph_contributions",
+    "raw_evidence.extra.root_kgd_dynamic_features"
+  ],
+  "runtime_overlay": {
+    "nodes": "../../../data/kg/tep_root_kgd/nodes.jsonl",
+    "edges": "../../../data/kg/tep_root_kgd/edges.jsonl"
+  },
+  "reasoning_assets": {
+    "variable_mapping": "../../../data/kg/tep_root_kgd/tep_variable_mapping.jsonl",
+    "anchor_discriminators": "../../../data/kg/tep_root_kgd/anchor_discriminators.json",
+    "relation_family_params": "../../../data/kg/tep_root_kgd/relation_family_params.json",
+    "rca_edge_weights": "../../../data/kg/tep_root_kgd/rca_edge_weights.jsonl",
+    "anchor_memory_profiles": "../../../data/kg/tep_root_kgd/anchor_memory_profiles.json"
+  },
+  "claim_boundary": "Profile config externalizes checked-in prior assets and policy; adapter code still defines TEP Root-KGD runtime reasoning behavior."
+}

@@ -1,6 +1,6 @@
 param(
     [string]$TorchCudaIndex = "https://download.pytorch.org/whl/cu128",
-    [int]$ApiPort = 8000,
+    [int]$ApiPort = 8001,
     [switch]$SkipSetup,
     [switch]$SkipCudaTorch
 )

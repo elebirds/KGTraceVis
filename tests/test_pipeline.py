@@ -68,6 +68,9 @@ def test_pipeline_result_serializes_feedback_compatible_contract() -> None:
     assert payload["correction_candidates"] == []
     assert payload["top_k_paths"]
     assert payload["ranked_root_causes"]
+    assert payload["reasoning_metadata"]["reasoner_adapter"] == "generic_graph_path"
+    assert payload["reasoning_metadata"]["reasoning_profile_id"] == "generic_graph_path_default"
+    assert payload["reasoning_metadata"]["selection_mode"] == "direct"
     assert payload["human_feedback"] == feedback
     kg_analysis = KGAnalysis.model_validate(
         {

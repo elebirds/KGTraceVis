@@ -10,10 +10,13 @@ from typing import Any, cast
 from kgtracevis.service.postgres import PostgresConfig, resolve_postgres_config
 from kgtracevis.service.postgres_run_payloads import (
     FeedbackRecordAdapter,
+    api_feedback_target_type,
+    api_feedback_value,
     case_entries,
     detail_payload,
     dict_value,
     feedback_context,
+    feedback_target_key,
     feedback_target_type,
     feedback_value,
     float_value,
@@ -92,8 +95,9 @@ class PostgresRunStore:
             ).fetchall()
             linked_rows = connection.execute(
                 """
-                SELECT case_pk, link_id, field, mention, selected_entity_id,
-                       selected_entity_scenario, score, match_type, ambiguous, candidates
+                SELECT case_pk, link_id, field, mention, obs_id, facet,
+                       selected_entity_id, selected_entity_name, selected_entity_scenario,
+                       score, match_type, ambiguous, ambiguity_margin, candidates
                 FROM linked_entities
                 WHERE run_id = %s
                 ORDER BY field ASC, link_id ASC
@@ -289,6 +293,8 @@ class PostgresRunStore:
         feedback = feedback_value(request.review_action())
         note = request.review_note()
         target_id = request.target_id or request.case_id or request.run_id or request.target_type
+        metadata = dict(request.metadata) if isinstance(request.metadata, dict) else {}
+        source = optional_text(getattr(request, "source", None)) or "unknown"
 
         with self._connection() as connection:
             context = feedback_context(connection, run_uuid, request.case_id)
@@ -298,8 +304,8 @@ class PostgresRunStore:
                 """
                 INSERT INTO feedback_records
                     (dataset, run_id, case_pk, target_type, target_id, feedback,
-                     corrected_value, comment, reviewer)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     corrected_value, comment, reviewer, source, metadata)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING feedback_id, created_at
                 """,
                 (
@@ -309,11 +315,11 @@ class PostgresRunStore:
                     target_type,
                     target_id,
                     feedback,
-                    Jsonb(request.metadata.get("corrected_value"))
-                    if isinstance(request.metadata, dict)
-                    else None,
+                    Jsonb(metadata.get("corrected_value")) if metadata else None,
                     note,
                     request.reviewer,
+                    source,
+                    Jsonb(metadata),
                 ),
             ).fetchone()
             connection.commit()
@@ -326,8 +332,99 @@ class PostgresRunStore:
             "note": note,
             "target_type": request.target_type,
             "target_id": target_id,
+            "target_key": feedback_target_key(request.target_type, target_id, metadata),
+            "source": source,
+            "metadata": metadata,
         }
         return {"status": "recorded", "record": record}
+
+    def list_feedback(self, request: Any) -> dict[str, Any]:
+        """Return append-only feedback records using dashboard-friendly fields."""
+        run_id = request.get("run_id") if isinstance(request, Mapping) else request.run_id
+        case_id = request.get("case_id") if isinstance(request, Mapping) else request.case_id
+        target_type = (
+            request.get("target_type") if isinstance(request, Mapping) else request.target_type
+        )
+        target_id = request.get("target_id") if isinstance(request, Mapping) else request.target_id
+        offset = request.get("offset", 0) if isinstance(request, Mapping) else request.offset
+        limit = request.get("limit", 50) if isinstance(request, Mapping) else request.limit
+
+        run_uuid = parse_run_uuid(run_id) if run_id else None
+        target_type_filter = feedback_target_type(target_type) if target_type else None
+        normalized_case_id = optional_text(case_id)
+        normalized_target_id = optional_text(target_id)
+        normalized_offset = int(offset)
+        normalized_limit = int(limit)
+
+        conditions: list[str] = []
+        params: list[Any] = []
+        if run_uuid is not None:
+            conditions.append("fr.run_id = %s")
+            params.append(run_uuid)
+        if normalized_case_id is not None:
+            conditions.append("ec.case_id = %s")
+            params.append(normalized_case_id)
+        if target_type_filter is not None:
+            conditions.append("fr.target_type = %s")
+            params.append(target_type_filter)
+        if normalized_target_id is not None:
+            conditions.append("fr.target_id = %s")
+            params.append(normalized_target_id)
+
+        sql = """
+                SELECT fr.feedback_id, fr.created_at, fr.run_id, ec.case_id,
+                       fr.target_type, fr.target_id, fr.feedback, fr.comment,
+                       fr.reviewer, fr.source, fr.metadata
+                FROM feedback_records fr
+                LEFT JOIN evidence_cases ec ON ec.id = fr.case_pk
+                """
+        if conditions:
+            sql += "\n                WHERE " + "\n                  AND ".join(conditions)
+        sql += "\n                ORDER BY fr.created_at DESC\n                "
+        with self._connection() as connection:
+            rows = connection.execute(sql, tuple(params)).fetchall()
+
+        records = []
+        for row in rows:
+            metadata = dict_value(row.get("metadata"))
+            stored_target_type = str(row.get("target_type") or "case")
+            api_target_type = api_feedback_target_type(stored_target_type)
+            stored_target_id = str(row.get("target_id") or "")
+            created_at = row.get("created_at")
+            records.append(
+                {
+                    "feedback_id": str(row.get("feedback_id")),
+                    "created_at": created_at.isoformat()
+                    if hasattr(created_at, "isoformat")
+                    else str(created_at),
+                    "run_id": str(row.get("run_id")) if row.get("run_id") is not None else None,
+                    "case_id": optional_text(row.get("case_id")),
+                    "target_type": api_target_type,
+                    "target_id": stored_target_id,
+                    "target_key": feedback_target_key(
+                        stored_target_type,
+                        stored_target_id,
+                        metadata,
+                    ),
+                    "action": api_feedback_value(str(row.get("feedback") or "uncertain")),
+                    "note": optional_text(row.get("comment")),
+                    "reviewer": optional_text(row.get("reviewer")),
+                    "source": optional_text(row.get("source")) or "unknown",
+                    "metadata": metadata or None,
+                }
+            )
+
+        paged_records = records[normalized_offset : normalized_offset + normalized_limit]
+        return {
+            "records": paged_records,
+            "total_count": len(records),
+            "returned_count": len(paged_records),
+            "offset": normalized_offset,
+            "limit": normalized_limit,
+            "claim_boundary": (
+                "candidate/plausible explanation only; not a verified root-cause label"
+            ),
+        }
 
     def _connection(self) -> Any:
         if self.connection_factory is not None:
@@ -403,9 +500,10 @@ def _insert_linked_entities(
         connection.execute(
             """
             INSERT INTO linked_entities
-                (run_id, case_pk, link_id, field, mention, selected_entity_id,
-                 selected_entity_scenario, score, match_type, ambiguous, candidates)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (run_id, case_pk, link_id, field, mention, obs_id, facet,
+                 selected_entity_id, selected_entity_name, selected_entity_scenario,
+                 score, match_type, ambiguous, ambiguity_margin, candidates)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (run_id, case_pk, link_id) DO NOTHING
             """,
             (
@@ -414,11 +512,15 @@ def _insert_linked_entities(
                 link_id,
                 str(link.get("field") or "unknown"),
                 str(link.get("mention") or link.get("value") or ""),
+                optional_text(link.get("obs_id")),
+                optional_text(link.get("facet")),
                 link.get("selected_entity_id"),
+                optional_text(link.get("selected_entity_name")),
                 link.get("selected_entity_scenario"),
                 float_value(link.get("score")),
                 str(link.get("match_type") or "unknown"),
                 bool(link.get("ambiguous", False)),
+                nullable_float(link.get("ambiguity_margin")),
                 Jsonb(list_value(link.get("candidates"))),
             ),
         )

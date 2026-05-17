@@ -19,10 +19,13 @@ from kgtracevis.service.dashboard import dashboard_bootstrap
 from kgtracevis.service.handlers import (
     AnalyzeRequest,
     FeedbackRequest,
+    FeedbackTargetType,
+    ReviewLedgerListRequest,
     WhatIfRequest,
     analyze_request,
     get_case_detail,
     list_cases,
+    list_feedback,
     record_feedback,
     what_if_request,
 )
@@ -31,9 +34,11 @@ from kgtracevis.service.kg_construction import (
     ConstructionSourceType,
     KGConstructionBuildRequest,
     KGConstructionEdgeReviewRequest,
+    KGConstructionOverlayValidationRequest,
     KGConstructionPublishRequest,
     KGConstructionReviewQueueRequest,
     get_kg_construction_build,
+    get_kg_construction_build_artifact_path,
     get_kg_construction_review_queue,
     list_kg_construction_builds,
     list_kg_construction_source_uploads,
@@ -42,15 +47,26 @@ from kgtracevis.service.kg_construction import (
     run_kg_construction_build,
     save_kg_construction_source_upload,
     validate_kg_construction_build,
+    validate_kg_construction_overlay,
 )
-from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
+from kgtracevis.service.kg_drafts import (
+    KGDraftListRequest,
+    KGDraftRequest,
+    list_kg_drafts,
+    record_kg_draft,
+)
+from kgtracevis.service.kg_material_build import run_kg_material_build
 from kgtracevis.service.kg_materials import (
+    KGMaterialDirectBuildRequest,
     KGMaterialExtractionRunRequest,
     KGMaterialRegisterRequest,
     KGMaterialSelectedBuildRequest,
     MaterialType,
     extract_kg_material_to_structured_records,
     get_kg_material,
+    list_kg_material_chunks,
+    list_kg_material_extraction_artifacts,
+    list_kg_material_extraction_runs,
     list_kg_materials,
     prepare_kg_material_construction_build,
     register_kg_material,
@@ -175,6 +191,27 @@ def create_app() -> FastAPI:
     def kg_studio() -> dict[str, object]:
         return kg_studio_payload().model_dump(mode="json")
 
+    @app.get("/api/kg/drafts")
+    def kg_draft_history(
+        target_type: Literal["edge"] | None = None,
+        target_id: str | None = None,
+        target_key: str | None = None,
+        reviewer: str | None = None,
+        source: str | None = None,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    ) -> dict[str, object]:
+        request = KGDraftListRequest(
+            target_type=target_type,
+            target_id=target_id,
+            target_key=target_key,
+            reviewer=reviewer,
+            source=source,
+            offset=offset,
+            limit=limit,
+        )
+        return list_kg_drafts(request).model_dump(mode="json")
+
     @app.post("/api/kg/drafts")
     def kg_draft(request: KGDraftRequest) -> dict[str, object]:
         return record_kg_draft(request)
@@ -204,6 +241,36 @@ def create_app() -> FastAPI:
         try:
             material = get_kg_material(material_id).material
             return {"status": "ok", "material": _material_api_record(material)}
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/kg/materials/{material_id}/chunks")
+    def kg_material_chunks(material_id: str) -> dict[str, object]:
+        try:
+            response = list_kg_material_chunks(material_id)
+            payload = response.model_dump(mode="json")
+            payload["material"] = _material_api_record(response.material)
+            return payload
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/kg/materials/{material_id}/extractions")
+    def kg_material_extractions(material_id: str) -> dict[str, object]:
+        try:
+            response = list_kg_material_extraction_runs(material_id)
+            payload = response.model_dump(mode="json")
+            payload["material"] = _material_api_record(response.material)
+            return payload
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/kg/materials/{material_id}/artifacts")
+    def kg_material_artifacts(material_id: str) -> dict[str, object]:
+        try:
+            response = list_kg_material_extraction_artifacts(material_id)
+            payload = response.model_dump(mode="json")
+            payload["material"] = _material_api_record(response.material)
+            return payload
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -321,6 +388,16 @@ def create_app() -> FastAPI:
             status_code = 404 if "unknown material_id" in str(exc) else 400
             raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
+    @app.post("/api/kg/materials/build")
+    def kg_material_build(request: KGMaterialDirectBuildRequest) -> dict[str, object]:
+        try:
+            return run_kg_material_build(request).model_dump(mode="json")
+        except ImportError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ValueError as exc:
+            status_code = 404 if "unknown material_id" in str(exc) else 400
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
     @app.post("/api/kg/construction/build")
     def kg_construction_build(request: KGConstructionBuildRequest) -> dict[str, object]:
         try:
@@ -348,6 +425,34 @@ def create_app() -> FastAPI:
             return validate_kg_construction_build(run_id).model_dump(mode="json")
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/kg/construction/builds/{run_id}/validate-overlay")
+    def kg_construction_build_validate_overlay(
+        run_id: str,
+        request: Annotated[KGConstructionOverlayValidationRequest | None, Body()] = None,
+    ) -> dict[str, object]:
+        try:
+            overlay_request = request or KGConstructionOverlayValidationRequest()
+            return validate_kg_construction_overlay(run_id, overlay_request).model_dump(mode="json")
+        except ValueError as exc:
+            status_code = 404 if "unknown construction build run_id" in str(exc) else 400
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    @app.get("/api/kg/construction/builds/{run_id}/artifacts/{artifact_key}")
+    def kg_construction_build_artifact(run_id: str, artifact_key: str) -> FileResponse:
+        try:
+            return FileResponse(get_kg_construction_build_artifact_path(run_id, artifact_key))
+        except ValueError as exc:
+            detail = str(exc)
+            status_code = (
+                404
+                if "unknown construction build run_id" in detail
+                or "unknown construction artifact key" in detail
+                or "construction build artifact not found" in detail
+                or "construction build artifact is a directory" in detail
+                else 400
+            )
+            raise HTTPException(status_code=status_code, detail=detail) from exc
 
     @app.post("/api/kg/construction/builds/{run_id}/publish")
     def kg_construction_build_publish(
@@ -450,6 +555,7 @@ def create_app() -> FastAPI:
         object_name: Annotated[str | None, Form()] = None,
         defect_type: Annotated[str | None, Form()] = None,
         model_preset: Annotated[str | None, Form()] = None,
+        reasoning_profile_id: Annotated[str | None, Form()] = None,
         top_k: Annotated[int, Form()] = 5,
     ) -> dict[str, object]:
         try:
@@ -464,6 +570,9 @@ def create_app() -> FastAPI:
                 object_name=object_name,
                 defect_type=defect_type,
                 model_preset=model_preset,
+                reasoning_profile_id=(
+                    str(reasoning_profile_id).strip() if reasoning_profile_id else None
+                ),
                 top_k=top_k,
             ).model_dump(mode="json")
         except (FileNotFoundError, ValueError) as exc:
@@ -480,6 +589,29 @@ def create_app() -> FastAPI:
     def what_if(request: WhatIfRequest) -> dict[str, object]:
         try:
             return what_if_request(request)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/feedback")
+    def feedback_list(
+        run_id: str | None = None,
+        case_id: str | None = None,
+        target_type: FeedbackTargetType | None = None,
+        target_id: str | None = None,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    ) -> dict[str, object]:
+        try:
+            return list_feedback(
+                ReviewLedgerListRequest(
+                    run_id=run_id,
+                    case_id=case_id,
+                    target_type=target_type,
+                    target_id=target_id,
+                    offset=offset,
+                    limit=limit,
+                )
+            ).model_dump(mode="json")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

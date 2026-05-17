@@ -44,6 +44,8 @@ class FakeConnection:
         self.executions: list[tuple[str, Any]] = []
         self.material_row = _material_row()
         self.chunk_rows: list[dict[str, Any]] = []
+        self.extraction_run_rows: list[dict[str, Any]] = []
+        self.artifact_rows: list[dict[str, Any]] = []
 
     def __enter__(self) -> FakeConnection:
         return self
@@ -62,6 +64,10 @@ class FakeConnection:
             return FakeResult(rows=[self.material_row])
         if "FROM source_material_chunks" in sql:
             return FakeResult(rows=self.chunk_rows)
+        if "FROM material_extraction_runs" in sql:
+            return FakeResult(rows=self.extraction_run_rows)
+        if "FROM material_extraction_artifacts" in sql:
+            return FakeResult(rows=self.artifact_rows)
         if "RETURNING extraction_run_id::text" in sql:
             return FakeResult(
                 one={
@@ -221,6 +227,58 @@ def test_postgres_material_store_replaces_and_lists_source_chunks() -> None:
     sql_text = "\n".join(sql for sql, _params in connection.executions)
     assert "DELETE FROM source_material_chunks" in sql_text
     assert "INSERT INTO source_material_chunks" in sql_text
+
+
+def test_postgres_material_store_lists_extraction_runs_and_artifacts() -> None:
+    """Read-side material runtime state should expose extraction runs and artifacts."""
+    connection = FakeConnection()
+    connection.extraction_run_rows = [
+        {
+            "extraction_run_id": "11111111-1111-1111-1111-111111111111",
+            "material_id": "tep_manual_001",
+            "status": "extracted",
+            "provider": "openai",
+            "source_format": "jsonl",
+            "structured_records_path": "runs/source_kg_materials/tep/records.jsonl",
+            "source_id": "tep_manual_001",
+            "extractor_name": "openai_document_ie",
+            "extractor_version": "v1",
+            "record_count": 2,
+            "error_message": None,
+            "started_at": datetime(2026, 5, 15, tzinfo=timezone.utc),
+            "completed_at": datetime(2026, 5, 15, tzinfo=timezone.utc),
+            "parameters": {"max_chars": 1000},
+            "result_summary": {"record_count": 2},
+        }
+    ]
+    connection.artifact_rows = [
+        {
+            "artifact_id": "22222222-2222-2222-2222-222222222222",
+            "material_id": "tep_manual_001",
+            "extraction_run_id": "11111111-1111-1111-1111-111111111111",
+            "artifact_type": "structured_records",
+            "uri": "runs/source_kg_materials/tep/records.jsonl",
+            "media_type": "application/jsonl",
+            "payload": {"record_count": 2},
+            "created_at": datetime(2026, 5, 15, tzinfo=timezone.utc),
+        }
+    ]
+    store = PostgresMaterialStore(
+        PostgresConfig(dsn="postgresql://unit-test"),
+        connection_factory=lambda: connection,
+    )
+
+    runs = store.list_extraction_runs("tep_manual_001")
+    artifacts = store.list_extraction_artifacts("tep_manual_001")
+
+    assert runs[0]["status"] == "extracted"
+    assert runs[0]["started_at"] == "2026-05-15T00:00:00+00:00"
+    assert runs[0]["parameters"] == {"max_chars": 1000}
+    assert artifacts[0]["artifact_type"] == "structured_records"
+    assert artifacts[0]["payload"] == {"record_count": 2}
+    sql_text = "\n".join(sql for sql, _params in connection.executions)
+    assert "FROM material_extraction_runs" in sql_text
+    assert "FROM material_extraction_artifacts" in sql_text
 
 
 def test_postgres_material_store_records_extraction_run_and_artifact() -> None:

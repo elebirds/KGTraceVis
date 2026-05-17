@@ -50,6 +50,11 @@ def test_run_adapter_pipeline_writes_evidence_and_candidate_summary(tmp_path: Pa
     assert first_case["source_edge_provenance"]
     assert first_case["claim_boundary"].startswith("candidate/plausible explanation")
     assert first_case["generated_evidence"]["anomaly_type"] == "scratch"
+    assert first_case["generated_evidence_full"]["source"] == "image"
+    assert first_case["generated_evidence_full"]["observations"]
+    assert first_case["top_k_paths"][0]["support_obs_ids"]
+    assert first_case["ranked_root_causes"][0]["support_evidence_ids"]
+    assert first_case["reasoning_metadata"]["reasoning_profile_id"] == "generic_graph_path_default"
 
     rows = _read_table(output.table_path)
     assert len(rows) == 2
@@ -175,9 +180,51 @@ def test_run_adapter_pipeline_uses_tep_root_kgd_reasoner(
 
     case = output.summary["cases"][0]
     assert output.summary["pipeline"]["tep_rca_reasoner"] == "tep_root_kgd"
+    assert output.summary["pipeline"]["reasoning_profile_id"] == "tep_root_kgd_default"
+    assert output.summary["pipeline"]["selection_mode"] == "default"
     assert case["ranked_root_causes"]
     assert case["ranked_root_causes"][0]["candidate_id"] == "faultanchor:stream_1_a_feed_loss"
     assert case["ranked_root_causes"][0]["scoring_method"] == "tep_root_kgd"
+
+
+def test_run_adapter_pipeline_supports_explicit_generic_profile_for_tep(
+    tmp_path: Path,
+) -> None:
+    """TEP records should allow an explicit generic graph-path baseline profile."""
+    records_path = _write_tep_record(tmp_path)
+    nodes_path, edges_path = _write_empty_overlay_csv(tmp_path)
+
+    output = run_adapter_pipeline(
+        records_path,
+        tmp_path / "tep_generic_profile",
+        dataset="tep",
+        reasoning_profile_id="generic_graph_path_default",
+        kg_node_paths=[nodes_path],
+        kg_edge_paths=[edges_path],
+    )
+
+    case = output.summary["cases"][0]
+    assert output.summary["pipeline"]["reasoning_profile_id"] == "generic_graph_path_default"
+    assert output.summary["pipeline"]["reasoner_adapter"] == "generic_graph_path"
+    assert output.summary["pipeline"]["selection_mode"] == "explicit"
+    assert case["reasoning_metadata"]["reasoning_profile_id"] == "generic_graph_path_default"
+    assert case["reasoning_metadata"]["selection_mode"] == "explicit"
+    assert case["ranked_root_causes"]
+    assert case["ranked_root_causes"][0]["scoring_method"] == "relation_weighted_path"
+
+
+
+def test_run_adapter_pipeline_rejects_incompatible_explicit_profile(
+    tmp_path: Path,
+) -> None:
+    """Explicit profile selection should reject incompatible record datasets."""
+    with pytest.raises(ValueError, match="not compatible with dataset mvtec"):
+        run_adapter_pipeline(
+            "data/examples/records/mvtec_records.jsonl",
+            tmp_path / "mvtec_incompatible_profile",
+            dataset="mvtec",
+            reasoning_profile_id="tep_root_kgd_default",
+        )
 
 
 def test_run_adapter_pipeline_protects_existing_summary(tmp_path: Path) -> None:
@@ -264,7 +311,49 @@ def test_run_adapter_pipeline_cli_uses_tep_root_kgd_reasoner(
     payload = json.loads(result.stdout)
     summary = json.loads(Path(payload["summary_path"]).read_text(encoding="utf-8"))
     assert summary["pipeline"]["tep_rca_reasoner"] == "tep_root_kgd"
+    assert summary["pipeline"]["reasoning_profile_id"] == "tep_root_kgd_default"
+    assert summary["pipeline"]["selection_mode"] == "default"
     assert summary["cases"][0]["ranked_root_causes"][0]["scoring_method"] == "tep_root_kgd"
+
+
+def test_run_adapter_pipeline_cli_accepts_explicit_reasoning_profile(
+    tmp_path: Path,
+) -> None:
+    """The CLI should pass through an explicit reasoning profile selection."""
+    records_path = _write_tep_record(tmp_path)
+    nodes_path, edges_path = _write_empty_overlay_csv(tmp_path)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_adapter_pipeline.py",
+            "--input",
+            str(records_path),
+            "--dataset",
+            "tep",
+            "--reasoning-profile",
+            "generic_graph_path_default",
+            "--output-dir",
+            str(tmp_path / "cli_tep_generic"),
+            "--kg-node-path",
+            str(nodes_path),
+            "--kg-edge-path",
+            str(edges_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    summary = json.loads(Path(payload["summary_path"]).read_text(encoding="utf-8"))
+    assert summary["pipeline"]["reasoning_profile_id"] == "generic_graph_path_default"
+    assert summary["pipeline"]["reasoner_adapter"] == "generic_graph_path"
+    assert summary["pipeline"]["selection_mode"] == "explicit"
+    assert (
+        summary["cases"][0]["ranked_root_causes"][0]["scoring_method"]
+        == "relation_weighted_path"
+    )
 
 
 def _read_table(path: Path) -> list[dict[str, str]]:

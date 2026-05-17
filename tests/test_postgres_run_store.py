@@ -5,9 +5,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from kgtracevis.schema.validators import load_evidence_json
 from kgtracevis.service.postgres import PostgresConfig
 from kgtracevis.service.postgres_run_payloads import detail_payload
 from kgtracevis.service.postgres_run_store import PostgresRunStore
+from kgtracevis.service.run_enrichment import enrich_run_detail
+from kgtracevis.service.run_models import RunDetail
 
 
 class FakeResult:
@@ -150,9 +153,14 @@ def test_postgres_run_store_persists_run_detail_to_normalized_tables() -> None:
                         "link_id": "anomaly_type:scratch",
                         "field": "anomaly_type",
                         "mention": "scratch",
+                        "obs_id": "obs_mvtec_unit_anomaly_type_scratch",
+                        "facet": "anomaly_type",
                         "selected_entity_id": "ScratchDefect",
+                        "selected_entity_name": "Scratch defect",
+                        "selected_entity_scenario": "mvtec",
                         "score": 1.0,
                         "match_type": "exact_name",
+                        "ambiguity_margin": 0.25,
                     }
                 ],
                 "consistency_score": 0.75,
@@ -173,6 +181,7 @@ def test_postgres_run_store_persists_run_detail_to_normalized_tables() -> None:
                         "nodes": ["ScratchDefect", "MechanicalContact"],
                         "relations": ["HAS_PLAUSIBLE_CAUSE"],
                         "score": 0.9,
+                        "support_obs_ids": ["obs_mvtec_unit_anomaly_type_scratch"],
                         "source_edges": [
                             {
                                 "edge_id": (
@@ -190,6 +199,7 @@ def test_postgres_run_store_persists_run_detail_to_normalized_tables() -> None:
                         "candidate_id": "MechanicalContact",
                         "candidate_name": "Mechanical contact",
                         "score": 0.9,
+                        "support_evidence_ids": ["obs_mvtec_unit_anomaly_type_scratch"],
                         "scoring_method": "relation_weighted_path",
                     }
                 ],
@@ -207,6 +217,16 @@ def test_postgres_run_store_persists_run_detail_to_normalized_tables() -> None:
     assert "INSERT INTO correction_candidates" in sql_text
     assert "INSERT INTO ranked_paths" in sql_text
     assert "INSERT INTO artifacts" in sql_text
+
+    linked_params = next(
+        params
+        for sql, params in connection.cursor_obj.executions
+        if "INSERT INTO linked_entities" in sql
+    )
+    assert linked_params[5] == "obs_mvtec_unit_anomaly_type_scratch"
+    assert linked_params[6] == "anomaly_type"
+    assert linked_params[8] == "Scratch defect"
+    assert linked_params[13] == 0.25
 
     analysis_params = next(
         params
@@ -252,6 +272,8 @@ def test_postgres_run_store_records_feedback_with_contract_mapping() -> None:
     assert feedback_params[3] == "ranked_path"
     assert feedback_params[5] == "uncertain"
     assert feedback_params[7] == "source should be checked"
+    assert feedback_params[9] == "unknown"
+    assert _json_obj(feedback_params[10]) == {"dataset": "wafer"}
     assert connection.committed is True
 
 
@@ -354,6 +376,175 @@ def test_postgres_run_store_records_root_cause_feedback() -> None:
     )
     assert feedback_params[3] == "root_cause_candidate"
     assert feedback_params[4] == "rca_tep_0001_reactorcoolingfault"
+    assert feedback_params[9] == "unknown"
+
+
+def test_postgres_run_store_lists_feedback_with_api_contract_mapping() -> None:
+    """Ledger reads should map stored feedback rows back to RootLens-friendly fields."""
+
+    class FeedbackListConnection(FakeConnection):
+        def execute(self, sql: str, params: Any = None) -> FakeResult:
+            self.cursor_obj.executions.append((sql, params))
+            if "FROM feedback_records fr" in sql:
+                return FakeResult(
+                    rows=[
+                        {
+                            "feedback_id": "22222222-2222-2222-2222-222222222222",
+                            "created_at": datetime(2026, 5, 14, tzinfo=timezone.utc),
+                            "run_id": "33333333-3333-3333-3333-333333333333",
+                            "case_id": "mvtec_0001",
+                            "target_type": "root_cause_candidate",
+                            "target_id": "rca_tep_0001_reactorcoolingfault",
+                            "feedback": "uncertain",
+                            "comment": "expert wants source checked",
+                            "reviewer": "analyst",
+                            "source": "rootlens-dashboard",
+                            "metadata": {"target_key": "root_cause_candidate:rca_tep_0001_reactorcoolingfault"},
+                        },
+                        {
+                            "feedback_id": "11111111-1111-1111-1111-111111111111",
+                            "created_at": datetime(2026, 5, 13, tzinfo=timezone.utc),
+                            "run_id": "33333333-3333-3333-3333-333333333333",
+                            "case_id": "mvtec_0002",
+                            "target_type": "ranked_path",
+                            "target_id": "path_older",
+                            "feedback": "accept",
+                            "comment": "older feedback",
+                            "reviewer": None,
+                            "source": "unknown",
+                            "metadata": {},
+                        },
+                    ]
+                )
+            return super().execute(sql, params)
+
+    connection = FeedbackListConnection()
+    store = PostgresRunStore(
+        PostgresConfig(dsn="postgresql://unit-test"),
+        connection_factory=lambda: connection,
+    )
+
+    response = store.list_feedback(
+        {
+            "run_id": "33333333-3333-3333-3333-333333333333",
+            "case_id": "mvtec_0001",
+            "target_type": "root_cause_candidate",
+            "offset": 0,
+            "limit": 1,
+        }
+    )
+
+    assert response["total_count"] == 2
+    assert response["returned_count"] == 1
+    assert response["offset"] == 0
+    assert response["limit"] == 1
+    record = response["records"][0]
+    assert record["target_type"] == "root_cause_candidate"
+    assert record["action"] == "needs_review"
+    assert record["source"] == "rootlens-dashboard"
+    assert record["target_key"] == "root_cause_candidate:rca_tep_0001_reactorcoolingfault"
+    ledger_query_params = next(
+        params
+        for sql, params in connection.cursor_obj.executions
+        if "FROM feedback_records fr" in sql
+    )
+    assert str(ledger_query_params[0]) == "33333333-3333-3333-3333-333333333333"
+    assert ledger_query_params[1] == "mvtec_0001"
+    assert ledger_query_params[2] == "root_cause_candidate"
+
+
+def test_enrich_run_detail_resolves_full_generated_evidence_from_path(tmp_path: Path) -> None:
+    """Legacy compact case rows should be expanded from generated_evidence_path when possible."""
+    evidence = load_evidence_json("data/examples/ds_mvtec_example.json").model_dump(mode="json")
+    evidence_path = tmp_path / "case.json"
+    evidence_path.write_text(__import__("json").dumps(evidence), encoding="utf-8")
+
+    detail = RunDetail.model_validate(
+        {
+            "run": {
+                "run_id": "33333333-3333-3333-3333-333333333333",
+                "created_at": "2026-05-14T00:00:00+00:00",
+                "mode": "records",
+                "source_filename": "mvtec_records.jsonl",
+                "top_k": 2,
+                "run_dir": str(tmp_path),
+                "status": "completed",
+                "dataset": "mvtec",
+                "case_count": 1,
+                "evidence_count": 1,
+                "label": "MVTEC · compact row",
+            },
+            "claim_boundary": "candidate/plausible explanation only",
+            "cases": [
+                {
+                    "case_id": evidence["case_id"],
+                    "dataset": "mvtec",
+                    "source": "image",
+                    "generated_evidence": {
+                        "case_id": evidence["case_id"],
+                        "dataset": "mvtec",
+                        "anomaly_type": evidence["anomaly_type"],
+                        "observation_count": len(evidence["observations"]),
+                    },
+                    "generated_evidence_path": str(evidence_path),
+                    "linked_entities": [
+                        {
+                            "link_id": "anomaly_type:scratch",
+                            "field": "anomaly_type",
+                            "mention": "scratch",
+                            "selected_entity_id": "ScratchDefect",
+                            "candidates": [
+                                {
+                                    "entity_id": "ScratchDefect",
+                                    "name": "Scratch defect",
+                                    "score": 0.95,
+                                },
+                                {
+                                    "entity_id": "ScratchFault",
+                                    "name": "Scratch fault",
+                                    "score": 0.75,
+                                },
+                            ],
+                        }
+                    ],
+                    "top_k_paths": [
+                        {
+                            "path_id": "path_1",
+                            "nodes": ["ScratchDefect", "MechanicalContact"],
+                            "relations": ["HAS_PLAUSIBLE_CAUSE"],
+                            "source_entity_id": "ScratchDefect",
+                            "target_entity_id": "MechanicalContact",
+                            "score": 0.9,
+                            "supporting_evidence": ["free-text evidence"],
+                            "source_edges": [],
+                        }
+                    ],
+                    "ranked_root_causes": [
+                        {
+                            "ranking_id": "rca_mvtec_0001_mechanicalcontact",
+                            "rank": 1,
+                            "candidate_id": "MechanicalContact",
+                            "candidate_name": "Mechanical contact",
+                            "score": 0.9,
+                            "scoring_method": "relation_weighted_path",
+                        }
+                    ],
+                    "source_edge_provenance": [],
+                }
+            ],
+        }
+    )
+
+    enriched = enrich_run_detail(detail)
+    case = enriched.cases[0]
+
+    assert case["generated_evidence"]["observations"]
+    assert case["linked_entities"][0]["obs_id"] == "obs_mvtec_0001_anomaly_type_scratch"
+    assert case["linked_entities"][0]["selected_entity_name"] == "Scratch defect"
+    assert case["linked_entities"][0]["ambiguity_margin"] == 0.2
+    assert case["top_k_paths"][0]["support_obs_ids"] == ["obs_mvtec_0001_anomaly_type_scratch"]
+    assert case["ranked_root_causes"][0]["support_evidence_ids"] == ["obs_mvtec_0001_anomaly_type_scratch"]
+    assert case["path_graph"]["paths"][0]["supporting_evidence"] == ["obs_mvtec_0001_anomaly_type_scratch"]
 
 
 def test_postgres_run_store_records_feedback_against_matching_run_case() -> None:

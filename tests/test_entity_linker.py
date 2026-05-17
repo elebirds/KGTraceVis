@@ -23,6 +23,8 @@ def test_link_mvtec_example_entities() -> None:
     anomaly_link = next(link for link in links if link["field"] == "anomaly_type")
     assert anomaly_link["obs_id"] == "obs_mvtec_0001_anomaly_type_scratch"
     assert anomaly_link["facet"] == "anomaly_type"
+    assert anomaly_link["selected_entity_name"] == "Scratch defect"
+    assert anomaly_link["selected_entity_scenario"] == "mvtec"
 
 
 def test_linker_prefers_observation_when_legacy_field_conflicts() -> None:

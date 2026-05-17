@@ -24,9 +24,20 @@ from kgtracevis.kg_construction import KGConstructionSource
 from kgtracevis.kg_construction.export_kg_csv import EDGE_COLUMNS
 from kgtracevis.kg_construction.models import (
     KGConstructionReviewDecision,
+    build_kg_construction_run_id,
     review_decision_for_edge,
 )
 from kgtracevis.kg_construction.qa import run_kg_qa
+from kgtracevis.source_kg_compiler import (
+    DEFAULT_LLM_CONCURRENCY,
+    OpenAICompatibleSourceKGLLM,
+    SourceKGCompilerConfig,
+    run_source_kg_compiler_workflow,
+)
+from kgtracevis.workflows.kg_overlay_validation import (
+    KGOverlayValidationConfig,
+    run_kg_overlay_validation,
+)
 from kgtracevis.workflows.source_kg_construction import (
     DEFAULT_SOURCE_KG_BUILD_DIR,
     SourceKGConstructionWorkflowConfig,
@@ -38,14 +49,19 @@ MAX_SOURCE_UPLOAD_BYTES = 5_000_000
 ConstructionSourceType = Literal[
     "structured_records",
     "manual_table",
+    "document",
     "tep_semantic_lift",
     "tep_variable_mapping",
 ]
-ConstructionSourceFormat = Literal["csv", "json", "jsonl"]
+ConstructionSourceFormat = Literal["csv", "json", "jsonl", "text", "markdown"]
 SOURCE_UPLOAD_FORMATS: dict[str, ConstructionSourceFormat] = {
     ".csv": "csv",
     ".json": "json",
     ".jsonl": "jsonl",
+    ".txt": "text",
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".html": "text",
 }
 
 
@@ -67,11 +83,10 @@ class KGConstructionSourceInput(BaseModel):
     @model_validator(mode="after")
     def validate_supported_shape(self) -> KGConstructionSourceInput:
         """Constrain runtime construction to explicit safe source shapes."""
-        if self.source_type in {"structured_records", "manual_table"}:
+        if self.source_type in {"structured_records", "manual_table", "document"}:
             if not self.path and self.source_text is None:
-                raise ValueError(
-                    "structured_records/manual_table sources require path or source_text"
-                )
+                kind = self.source_type
+                raise ValueError(f"{kind} sources require path or source_text")
             if self.path and self.source_text is not None:
                 raise ValueError("pass either path or source_text, not both")
             return self
@@ -107,6 +122,15 @@ class KGConstructionBuildRequest(BaseModel):
     output_name: str = "runtime"
     overwrite: bool = False
     run_id: str | None = None
+    llm_concurrency: int = Field(default=DEFAULT_LLM_CONCURRENCY, ge=1)
+
+    @model_validator(mode="after")
+    def validate_build_shape(self) -> KGConstructionBuildRequest:
+        """Require at least one source and a safe output name."""
+        if not self.sources:
+            raise ValueError("sources must contain at least one source")
+        _safe_output_name(self.output_name)
+        return self
 
 
 class KGConstructionBuildResponse(BaseModel):
@@ -121,10 +145,43 @@ class KGConstructionBuildResponse(BaseModel):
     edges_path: str
     summary_path: str
     manifest_path: str
+    source_units_path: str | None = None
+    knowledge_cards_path: str | None = None
+    entities_path: str | None = None
+    validation_report_path: str | None = None
+    domain_profiles_path: str | None = None
+    domain_profile_report_path: str | None = None
+    domain_profiles_manifest_path: str | None = None
+    runtime_views_manifest_path: str | None = None
     summary: dict[str, object]
     claim_boundary: str = (
         "source-to-KG outputs are candidate/reviewable KG rows; they are not "
         "published to Neo4j automatically"
+    )
+
+
+class KGConstructionOverlayValidationRequest(BaseModel):
+    """Request to validate one candidate build as a runtime/import overlay."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    example_dir: str = "data/examples"
+    overlay_only_runtime: bool = False
+    overlay_only_import: bool = False
+    top_k: int = Field(default=5, ge=1)
+
+
+class KGConstructionOverlayValidationResponse(BaseModel):
+    """Overlay validation response for one construction build."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    build: KGConstructionBuildRecord
+    report: dict[str, Any]
+    report_path: str | None = None
+    claim_boundary: str = (
+        "overlay validation checks candidate KG consumption and dry-run import readiness; "
+        "it does not publish to Neo4j or verify industrial facts"
     )
 
 
@@ -156,6 +213,11 @@ class KGConstructionSourceUploadRequest(BaseModel):
                 f"filename extension implies source_format={expected_format}; "
                 f"received source_format={self.source_format}"
             )
+        if self.source_type in {"manual_table", "structured_records", "tep_variable_mapping"}:
+            if self.source_format not in {"csv", "json", "jsonl"}:
+                raise ValueError("source upload filename must end with one of: .csv, .json, .jsonl")
+        if self.source_type == "document" and self.source_format not in {"text", "markdown"}:
+            raise ValueError("document upload requires text or markdown source_format")
         return self
 
 
@@ -412,10 +474,13 @@ def run_kg_construction_build(
     output_root: Path | None = None,
 ) -> KGConstructionBuildResponse:
     """Run a construction build from a narrow API-safe request."""
-    sources = tuple(_source_from_input(source) for source in request.sources)
     output_dir = (output_root or DEFAULT_SOURCE_KG_BUILD_DIR) / _safe_output_name(
         request.output_name
     )
+    if _uses_source_kg_compiler(request):
+        return _run_kg_construction_compiler_build(request, output_dir=output_dir)
+
+    sources = tuple(_source_from_input(source) for source in request.sources)
     result = run_source_kg_construction_workflow(
         SourceKGConstructionWorkflowConfig(
             output_dir=output_dir,
@@ -554,6 +619,43 @@ def get_kg_construction_build(
     return KGConstructionBuildDetail(build=build, summary=summary, manifest=manifest)
 
 
+def get_kg_construction_build_artifact_path(
+    run_id: str,
+    artifact_key: str,
+    *,
+    build_root: Path | None = None,
+) -> Path:
+    """Resolve a stable artifact key for one construction build."""
+    build = _find_build_record(run_id, build_root=build_root)
+    output_dir = Path(build.output_dir)
+    artifacts = {
+        "nodes": Path(build.nodes_path),
+        "edges": Path(build.edges_path),
+        "summary": Path(build.summary_path),
+        "manifest": Path(build.manifest_path),
+        "review_queue": output_dir / "review_queue.json",
+        "review_decisions": output_dir / "review_decisions.json",
+        "kg_construction_diff": output_dir / "kg_construction_diff.json",
+        "kg_overlay_validation_report": output_dir / "kg_overlay_validation_report.json",
+        "source_units": output_dir / "source_units.jsonl",
+        "knowledge_cards": output_dir / "knowledge_cards.jsonl",
+        "entities": output_dir / "entities.jsonl",
+        "validation_report": output_dir / "validation_report.json",
+        "domain_profiles": output_dir / "domain_profiles.json",
+        "domain_profile_report": output_dir / "domain_profile_report.json",
+        "domain_profiles_manifest": output_dir / "domain_profiles" / "manifest.json",
+        "runtime_views_manifest": output_dir / "runtime_views" / "manifest.json",
+    }
+    if "/" in artifact_key or "\\" in artifact_key or artifact_key not in artifacts:
+        raise ValueError(f"unknown construction artifact key: {artifact_key}")
+    resolved = artifacts[artifact_key]
+    if not resolved.exists():
+        raise ValueError(f"construction build artifact not found: {artifact_key}")
+    if resolved.is_dir():
+        raise ValueError(f"construction build artifact is a directory: {artifact_key}")
+    return resolved
+
+
 def validate_kg_construction_build(
     run_id: str,
     *,
@@ -565,6 +667,31 @@ def validate_kg_construction_build(
     return KGConstructionBuildValidationResponse(
         build=build,
         qa_report=report.model_dump(),
+    )
+
+
+def validate_kg_construction_overlay(
+    run_id: str,
+    request: KGConstructionOverlayValidationRequest,
+    *,
+    build_root: Path | None = None,
+) -> KGConstructionOverlayValidationResponse:
+    """Validate one candidate construction build as a runtime/import overlay."""
+    build = _find_build_record(run_id, build_root=build_root)
+    output_dir = Path(build.output_dir)
+    result = run_kg_overlay_validation(
+        KGOverlayValidationConfig(
+            build_dir=output_dir,
+            example_dir=Path(request.example_dir),
+            include_defaults_for_runtime=not request.overlay_only_runtime,
+            include_defaults_for_import=not request.overlay_only_import,
+            top_k=request.top_k,
+        )
+    )
+    return KGConstructionOverlayValidationResponse(
+        build=build,
+        report=result.report,
+        report_path=(str(result.output_path) if result.output_path is not None else None),
     )
 
 
@@ -681,6 +808,206 @@ def get_kg_construction_review_queue(
         edges=page,
         summary=_review_queue_summary(filtered_rows),
     )
+
+
+def _uses_source_kg_compiler(request: KGConstructionBuildRequest) -> bool:
+    """Return whether a build request should route through source_kg_compiler."""
+    return any(
+        source.source_type == "document"
+        or source.source_format in {"text", "markdown"}
+        for source in request.sources
+    )
+
+
+def _run_kg_construction_compiler_build(
+    request: KGConstructionBuildRequest,
+    *,
+    output_dir: Path,
+) -> KGConstructionBuildResponse:
+    """Run the source_kg_compiler while preserving current build registry semantics."""
+    run_id = request.run_id or build_kg_construction_run_id()
+    source_paths = _compiler_source_paths_from_inputs(request.sources, output_dir)
+    default_scenario = request.sources[0].scenario if request.sources else "shared"
+    compiler_result = run_source_kg_compiler_workflow(
+        SourceKGCompilerConfig(
+            source_paths=tuple(source_paths),
+            output_dir=output_dir,
+            llm_client=OpenAICompatibleSourceKGLLM(),
+            default_scenario=default_scenario,
+            overwrite=request.overwrite,
+            llm_concurrency=request.llm_concurrency,
+        )
+    )
+    edge_rows = _read_csv_rows(compiler_result.artifact_paths.edges_csv)
+    summary_payload = _compiler_build_summary_payload(
+        run_id=run_id,
+        request=request,
+        output_dir=output_dir,
+        compiler_summary=compiler_result.summary,
+        edge_rows=edge_rows,
+    )
+    manifest_payload = _compiler_build_manifest_payload(
+        run_id=run_id,
+        request=request,
+        output_dir=output_dir,
+        compiler_result=compiler_result,
+        summary_payload=summary_payload,
+    )
+    summary_path = output_dir / "kg_construction_summary.json"
+    manifest_path = output_dir / "kg_construction_manifest.json"
+    _write_json_object(summary_path, summary_payload)
+    _write_json_object(manifest_path, manifest_payload)
+    return KGConstructionBuildResponse(
+        status="built",
+        run_id=run_id,
+        output_dir=str(output_dir),
+        nodes_path=str(compiler_result.artifact_paths.nodes_csv),
+        edges_path=str(compiler_result.artifact_paths.edges_csv),
+        summary_path=str(summary_path),
+        manifest_path=str(manifest_path),
+        source_units_path=str(compiler_result.artifact_paths.source_units),
+        knowledge_cards_path=str(compiler_result.artifact_paths.knowledge_cards),
+        entities_path=str(compiler_result.artifact_paths.entities),
+        validation_report_path=str(compiler_result.artifact_paths.validation_report),
+        domain_profiles_path=str(compiler_result.artifact_paths.domain_profiles),
+        domain_profile_report_path=str(compiler_result.artifact_paths.domain_profile_report),
+        domain_profiles_manifest_path=str(compiler_result.artifact_paths.domain_profiles_manifest),
+        runtime_views_manifest_path=str(compiler_result.artifact_paths.runtime_views_manifest),
+        summary=summary_payload,
+    )
+
+
+def _compiler_source_paths_from_inputs(
+    sources: list[KGConstructionSourceInput],
+    output_dir: Path,
+) -> list[Path]:
+    """Materialize inline compiler sources into files and return filesystem inputs."""
+    inline_dir = output_dir.parent / "_compiler_inputs" / output_dir.name
+    paths: list[Path] = []
+    for source in sources:
+        if source.path:
+            paths.append(Path(source.path))
+            continue
+        if source.semantic_nodes_path and source.semantic_edges_path:
+            paths.extend([Path(source.semantic_nodes_path), Path(source.semantic_edges_path)])
+            continue
+        inline_dir.mkdir(parents=True, exist_ok=True)
+        suffix = _compiler_source_suffix(source.source_format)
+        source_name = _safe_path_component(source.source_id, field_name="source_id")
+        inline_path = inline_dir / f"{source_name}.{suffix}"
+        inline_text = source.source_text or ""
+        if source.source_type == "document":
+            inline_path.write_text(inline_text, encoding="utf-8")
+        else:
+            inline_path.write_text(inline_text, encoding="utf-8")
+        paths.append(inline_path)
+    return paths
+
+
+def _compiler_source_suffix(source_format: ConstructionSourceFormat | None) -> str:
+    mapping = {
+        "csv": "csv",
+        "json": "json",
+        "jsonl": "jsonl",
+        "text": "txt",
+        "markdown": "md",
+    }
+    return mapping.get(source_format or "text", "txt")
+
+
+def _compiler_build_summary_payload(
+    *,
+    run_id: str,
+    request: KGConstructionBuildRequest,
+    output_dir: Path,
+    compiler_summary: dict[str, Any],
+    edge_rows: list[dict[str, str]],
+) -> dict[str, Any]:
+    counts = dict(compiler_summary.get("counts") or {})
+    review_counts = Counter(row.get("review_status", "") for row in edge_rows)
+    review_counts.pop("", None)
+    scenario_counts = Counter(row.get("scenario", "") for row in edge_rows)
+    scenario_counts.pop("", None)
+    return {
+        "artifact_type": "source_to_kg_construction_result_v1",
+        "run_id": run_id,
+        "source_count": len(request.sources),
+        "source_ids": [source.source_id for source in request.sources],
+        "draft_entity_count": int(counts.get("knowledge_cards") or 0),
+        "draft_relation_count": int(counts.get("edges") or 0),
+        "node_count": int(counts.get("entities") or 0),
+        "edge_count": int(counts.get("edges") or 0),
+        "node_labels": {},
+        "edge_relations": {},
+        "scenarios": dict(sorted(scenario_counts.items())),
+        "review_status_counts": dict(sorted(review_counts.items())),
+        "claim_boundary": (
+            "source-to-KG outputs are candidate/reviewable KG rows; they are not "
+            "published to Neo4j automatically"
+        ),
+        "output": {
+            "output_dir": str(output_dir),
+            "nodes": str(output_dir / "nodes.csv"),
+            "edges": str(output_dir / "edges.csv"),
+            "summary": str(output_dir / "kg_construction_summary.json"),
+            "manifest": str(output_dir / "kg_construction_manifest.json"),
+        },
+        "compiler_summary": compiler_summary,
+        "llm_concurrency": request.llm_concurrency,
+    }
+
+
+def _compiler_build_manifest_payload(
+    *,
+    run_id: str,
+    request: KGConstructionBuildRequest,
+    output_dir: Path,
+    compiler_result,
+    summary_payload: dict[str, Any],
+) -> dict[str, Any]:
+    created_at = datetime.now(UTC).isoformat()
+    return {
+        "artifact_type": "source_to_kg_construction_manifest_v1",
+        "run": {
+            "run_id": run_id,
+            "created_at": created_at,
+            "status": "built",
+            "source_ids": [source.source_id for source in request.sources],
+            "scenario_counts": dict(summary_payload.get("scenarios") or {}),
+            "metadata": {
+                "builder": "source_kg_compiler",
+                "llm_concurrency": request.llm_concurrency,
+            },
+        },
+        "summary": dict(summary_payload),
+        "sources": [source.model_dump(mode="json") for source in request.sources],
+        "artifacts": {
+            "output_dir": str(output_dir),
+            "nodes": str(compiler_result.artifact_paths.nodes_csv),
+            "edges": str(compiler_result.artifact_paths.edges_csv),
+            "summary": str(output_dir / "kg_construction_summary.json"),
+            "manifest": str(output_dir / "kg_construction_manifest.json"),
+            "source_units": str(compiler_result.artifact_paths.source_units),
+            "knowledge_cards": str(compiler_result.artifact_paths.knowledge_cards),
+            "entities": str(compiler_result.artifact_paths.entities),
+            "validation_report": str(compiler_result.artifact_paths.validation_report),
+            "domain_profiles": str(compiler_result.artifact_paths.domain_profiles),
+            "domain_profile_report": str(compiler_result.artifact_paths.domain_profile_report),
+            "domain_profiles_manifest": str(
+                compiler_result.artifact_paths.domain_profiles_manifest
+            ),
+            "runtime_views_manifest": str(compiler_result.artifact_paths.runtime_views_manifest),
+        },
+        "draft_rows": [],
+        "review_decisions": [],
+    }
+
+
+def _read_csv_rows(path: Path) -> list[dict[str, str]]:
+    if not path.is_file():
+        return []
+    with path.open(newline="", encoding="utf-8") as handle:
+        return [dict(row) for row in csv.DictReader(handle)]
 
 
 def _source_from_input(source: KGConstructionSourceInput) -> KGConstructionSource:
@@ -1033,6 +1360,8 @@ __all__ = [
     "KGConstructionEdgeReviewResponse",
     "KGConstructionImportSummary",
     "KGConstructionBuildListResponse",
+    "KGConstructionOverlayValidationRequest",
+    "KGConstructionOverlayValidationResponse",
     "KGConstructionPublishRequest",
     "KGConstructionPublishResponse",
     "KGConstructionReviewQueueEdge",
@@ -1046,6 +1375,7 @@ __all__ = [
     "KGConstructionSourceUploadRequest",
     "KGConstructionUploadedSource",
     "get_kg_construction_build",
+    "get_kg_construction_build_artifact_path",
     "get_kg_construction_review_queue",
     "list_kg_construction_source_uploads",
     "list_kg_construction_builds",
@@ -1053,5 +1383,12 @@ __all__ = [
     "review_kg_construction_edge",
     "run_kg_construction_build",
     "save_kg_construction_source_upload",
+    "safe_output_name",
     "validate_kg_construction_build",
+    "validate_kg_construction_overlay",
 ]
+
+
+def safe_output_name(value: str) -> str:
+    """Public alias for the construction output-name sanitizer."""
+    return _safe_output_name(value)

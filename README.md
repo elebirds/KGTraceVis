@@ -215,7 +215,7 @@ docker compose up --build
 The Docker Compose stack initializes the Postgres schema, imports the KG seed
 rows into Neo4j, then starts the API. It exposes Neo4j Browser at
 `http://localhost:7474`, Neo4j Bolt at `bolt://localhost:7687`, Postgres at
-`localhost:5432`, and the FastAPI backend at `http://localhost:8000`.
+`localhost:5432`, and the FastAPI backend at `http://localhost:8081`.
 Analysis loads a dataset-scoped KG snapshot from Neo4j at runtime.
 
 ## Common Commands
@@ -226,9 +226,13 @@ Validate example evidence:
 uv run python scripts/run_examples.py
 ```
 
-TEP Root-KGD RCA is the single supported TEP RCA mode in `KGTracePipeline`.
-Generic adapter/upload workflows do not expose provider mode switches.
-`scripts/run_examples.py` remains a lightweight evidence/KG smoke.
+KGTracePipeline resolves RCA through registered reasoning adapters and
+reasoning profiles. By default, `tep` uses the checked-in
+`tep_root_kgd_default` profile, while MVTec and wafer use
+`generic_graph_path_default`. Public workflows may explicitly select a
+compatible profile, but profiles only externalize assets/policy; they do not
+define new algorithms by config alone. `scripts/run_examples.py` remains a
+lightweight evidence/KG smoke.
 
 Build KG CSV files:
 
@@ -525,7 +529,12 @@ or:
 uv run python scripts/run_web_api.py
 ```
 
-This starts the FastAPI service on `http://127.0.0.1:8000`.
+This starts the FastAPI service on `http://127.0.0.1:8081` by default.
+Override the port when needed:
+
+```bash
+KGTRACE_API_PORT=8081 uv run python scripts/run_web_api.py
+```
 
 Start the KGTraceVis workbench client:
 

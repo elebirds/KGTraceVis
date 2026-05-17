@@ -110,7 +110,9 @@ publish step:
 ```http
 GET /api/kg/construction/builds
 GET /api/kg/construction/builds/{run_id}
+GET /api/kg/construction/builds/{run_id}/artifacts/{artifact_key}
 POST /api/kg/construction/builds/{run_id}/validate
+POST /api/kg/construction/builds/{run_id}/validate-overlay
 GET /api/kg/construction/builds/{run_id}/review-queue
 POST /api/kg/construction/builds/{run_id}/review
 POST /api/kg/construction/builds/{run_id}/publish
@@ -120,6 +122,17 @@ The registry is file-backed in v0. It scans `runs/source_kg_build/*` for
 `kg_construction_manifest.json`, returns artifact paths and summary counts, and
 runs structured KG CSV QA on the selected build. Validation is read-only and
 does not import to Neo4j.
+
+The artifact endpoint serves stable keys such as `nodes`, `edges`, `summary`,
+`manifest`, `source_units`, `knowledge_cards`, `entities`,
+`validation_report`, `domain_profiles`, and
+`kg_overlay_validation_report` without exposing raw filesystem traversal.
+
+`validate-overlay` runs the selected build through the reusable overlay
+validation workflow used by `scripts/validate_kg_overlay.py`. The report keeps
+`contract_validated`, `runtime_validated`, and `overlay_contributed` separate,
+so a build that loads/imports successfully is not mistaken for a build that
+actually contributes to runtime RCA paths.
 
 The review endpoint is the pre-publish control point for candidate edges. It
 updates only the selected construction build's `edges.csv` and manifest. A
@@ -197,10 +210,15 @@ construction inputs:
 
 ```http
 GET /api/kg/materials
+GET /api/kg/materials/{material_id}
+GET /api/kg/materials/{material_id}/chunks
+GET /api/kg/materials/{material_id}/extractions
+GET /api/kg/materials/{material_id}/artifacts
 POST /api/kg/materials/upload
 POST /api/kg/materials/register-url
 POST /api/kg/materials/{material_id}/extract
 POST /api/kg/materials/build-sources
+POST /api/kg/materials/build
 ```
 
 Uploads and URL registrations are stored under `runs/source_kg_materials/`.
@@ -212,7 +230,11 @@ chunks, calls an OpenAI-compatible IE client, writes
 `structured_records.jsonl`, and updates the material's extraction metadata.
 These records can then be converted into an ordinary
 `KGConstructionBuildRequest` through `POST /api/kg/materials/build-sources` and
-passed to the existing source-to-KG build endpoint.
+passed to the existing source-to-KG build endpoint. The material read-side
+routes keep the extraction provenance explicit: chunks expose parsed source text
+windows, extraction runs expose provider/chunking/runtime metadata, and
+artifacts expose generated `structured_records.jsonl` outputs or other candidate
+byproducts.
 
 The extractor is intentionally candidate-only. Each extracted relation keeps
 source evidence, confidence, and `review_status=auto` after it enters the KG
@@ -227,6 +249,13 @@ The reusable orchestration entry point for this material-driven path is
 It accepts selected material IDs, optionally extracts missing/selected materials
 with an injected IE client, prepares build-ready construction sources, and then
 calls the existing source-to-KG construction workflow.
+
+`POST /api/kg/materials/build` is the thin API wrapper for this direct path. By
+default it uses the already-registered extracted material records
+(`extraction_mode=never`); callers may opt into `missing` or `always` extraction
+when they explicitly want the backend to refresh structured records first.
+
+KG Studio draft adjustments are also append-only. `POST /api/kg/drafts` writes review-oriented edge adjustments, and `GET /api/kg/drafts` reads them back as Draft Lab history. By contrast, `POST /api/kg/source-draft` remains a stateless preview route: it returns candidate edges for inspection but does not persist a source-draft history table or mutate candidate CSV files.
 
 ### Storage Boundary
 

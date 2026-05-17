@@ -1,0 +1,45 @@
+{
+  "artifact_type": "coverage_first_kg_coverage_report_v0",
+  "artifact_scope": "generated_reproducibility_output",
+  "claim_boundary": "candidate/plausible explanation only; not a verified root-cause label",
+  "node_count": 36,
+  "edge_count": 76,
+  "node_counts_by_scenario": {
+    "wafer": 36
+  },
+  "edge_counts_by_scenario": {
+    "wafer": 76
+  },
+  "edge_counts_by_layer": {
+    "candidate_mechanism": 47,
+    "observed_evidence": 7,
+    "semantic_constraint": 22
+  },
+  "review_status_counts": {
+    "auto": 76
+  },
+  "wm811k_pattern_coverage": [
+    "center",
+    "donut",
+    "edge_loc",
+    "edge_ring",
+    "loc",
+    "random",
+    "scratch",
+    "nearfull"
+  ],
+  "before_after_case_count": 0,
+  "positive_path_delta_case_count": 0,
+  "changed_top_target_case_count": 0,
+  "validation_summary": {
+    "passed": true,
+    "node_count": 72,
+    "edge_count": 105,
+    "issue_count": 0,
+    "warning_count": 8,
+    "finding_codes": {
+      "isolated_node": 4,
+      "reviewed_low_confidence": 4
+    }
+  }
+}

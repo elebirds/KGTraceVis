@@ -1,0 +1,37 @@
+id,name,label,scenario,aliases,description
+AnnularRingSignature,Annular ring signature,SpatialSignature,wafer,annular ring|donut ring signature,Task-oriented WM811K spatial signature for candidate KG paths
+CenterClusterSignature,Center cluster signature,SpatialSignature,wafer,center cluster|central cluster signature,Task-oriented WM811K spatial signature for candidate KG paths
+CenterDefect,Center defect,AnomalyType,wafer,center|centre|center defect,WM811K public defect-pattern class covered by candidate KG generation
+ChamberContamination,Chamber contamination,RootCause,wafer,chamber contamination|chamber pollution|contaminated chamber,Low-confidence private-SOP investigation mechanism for contamination inside a chamber
+DonutDefect,Donut defect,AnomalyType,wafer,donut|donut defect,WM811K public defect-pattern class covered by candidate KG generation
+EdgeLocDefect,Edge loc defect,AnomalyType,wafer,edge_loc|edge-loc|edge loc|edge location,WM811K public defect-pattern class covered by candidate KG generation
+EdgeLocalizedSignature,Edge localized signature,SpatialSignature,wafer,edge localized|edge cluster signature,Task-oriented WM811K spatial signature for candidate KG paths
+EdgeProcessIssue,Edge process issue,RootCause,wafer,edge process issue|edge effect,Low-confidence edge-process investigation candidate
+EdgeRingDefect,Edge ring defect,AnomalyType,wafer,edge_ring|edge-ring|edge ring,WM811K public defect-pattern class covered by candidate KG generation
+EdgeRingSignature,Edge ring signature,SpatialSignature,wafer,edge ring|peripheral ring signature,Task-oriented WM811K spatial signature for candidate KG paths
+HandlingScratch,Handling scratch,RootCause,wafer,handling scratch|scratch,Low-confidence wafer handling scratch investigation candidate
+LinearScratchSignature,Linear scratch signature,SpatialSignature,wafer,linear scratch|scratch line signature,Task-oriented WM811K spatial signature for candidate KG paths
+LocDefect,Loc defect,AnomalyType,wafer,loc|local|localized|local defect,WM811K public defect-pattern class covered by candidate KG generation
+LocalClusterSignature,Local cluster signature,SpatialSignature,wafer,local cluster|localized cluster signature,Task-oriented WM811K spatial signature for candidate KG paths
+MegasonicRinseInsufficient,Megasonic rinse insufficient,RootCause,wafer,megasonic rinse insufficient|megasonic water not opened,Low-confidence private-SOP investigation mechanism for missing megasonic rinse
+NearFullDenseSignature,Near-full dense signature,SpatialSignature,wafer,near-full dense|dense full-wafer signature,Task-oriented WM811K spatial signature for candidate KG paths
+ParticleContamination,Particle contamination,RootCause,wafer,particle contamination|particle,Low-confidence wafer particle or residue investigation candidate
+ProcessInterruption,Process interruption,RootCause,wafer,process interruption|unexpected shutdown|process stop,Low-confidence private-SOP investigation mechanism for process stoppage or interruption
+ProcessNonuniformity,Process nonuniformity,RootCause,wafer,process nonuniformity|nonuniform process,Low-confidence wafer process nonuniformity investigation candidate
+RandomDefect,Random defect,AnomalyType,wafer,random|random defect,WM811K public defect-pattern class covered by candidate KG generation
+RandomScatteredSignature,Random scattered signature,SpatialSignature,wafer,random scattered|diffuse scattered signature,Task-oriented WM811K spatial signature for candidate KG paths
+RecipeStepSkip,Recipe step skip,RootCause,wafer,recipe step skip|manual step skip|skipped process step,Low-confidence private-SOP investigation mechanism for skipped recipe steps
+ResistStripInsufficient,Resist strip insufficient,RootCause,wafer,resist strip insufficient|photoresist stripping insufficient,Low-confidence private-SOP investigation mechanism for incomplete resist stripping
+RinseFlowInsufficient,Rinse flow insufficient,RootCause,wafer,rinse flow insufficient|pure water not opened|fixed water not opened,Low-confidence private-SOP investigation mechanism for insufficient rinse flow
+ToolingOrMaskPattern,Tooling or mask pattern,RootCause,wafer,tooling pattern|mask pattern,Low-confidence patterned process/tooling investigation candidate
+WaferCenterLocation,Wafer center,Location,wafer,center|wafer center,Wafer-map spatial zone for WM811K evidence
+WaferClusteredMorphology,Wafer clustered morphology,Morphology,wafer,clustered|central cluster|edge cluster|local cluster,Wafer-map morphology for WM811K evidence
+WaferEdgeLocation,Wafer edge,Location,wafer,edge|wafer edge,Wafer-map spatial zone for WM811K evidence
+WaferLinearMorphology,Wafer linear morphology,Morphology,wafer,linear|line|scratch,Wafer-map morphology for WM811K evidence
+WaferLocalLocation,Wafer local region,Location,wafer,local|localized|wafer local,Wafer-map spatial zone for WM811K evidence
+WaferRingMorphology,Wafer ring morphology,Morphology,wafer,ring|donut|annular|edge ring,Wafer-map morphology for WM811K evidence
+WaferScatteredMorphology,Wafer scattered morphology,Morphology,wafer,scattered|random|diffuse,Wafer-map morphology for WM811K evidence
+WaferScratchDefect,Scratch defect,AnomalyType,wafer,scratch|scratch defect|wafer scratch,WM811K public defect-pattern class covered by candidate KG generation
+WaferTransferMisalignment,Wafer transfer misalignment,RootCause,wafer,wafer transfer misalignment|wafer position offset|transfer path error,Low-confidence private-SOP investigation mechanism for transfer or placement offset
+WaterQualityExcursion,Water quality excursion,RootCause,wafer,water quality excursion|water resistivity excursion|water quality alarm,Low-confidence private-SOP investigation mechanism for water resistivity excursions
+WetCleanResidue,Wet clean residue,RootCause,wafer,wet clean residue|surface residue|cleaning residue,Low-confidence private-SOP investigation mechanism for post-clean surface residue

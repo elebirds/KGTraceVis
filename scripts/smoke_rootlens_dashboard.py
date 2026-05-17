@@ -9,7 +9,9 @@ from tempfile import TemporaryDirectory
 from fastapi.testclient import TestClient
 
 from kgtracevis.service import api as service_api
+from kgtracevis.service import handlers as service_handlers
 from kgtracevis.service import kg_drafts as service_kg_drafts
+from kgtracevis.service import kg_materials as service_kg_materials
 from kgtracevis.service import runs as service_runs
 
 DEFAULT_EXAMPLE = Path("data/examples/records/mvtec_records.jsonl")
@@ -57,6 +59,80 @@ def main() -> None:
         )
 
 
+class _SmokeIEClient:
+    def extract_candidates(self, chunk, *, prompt: str, response_schema: dict[str, object]) -> dict[str, object]:
+        del prompt, response_schema
+        return {
+            "entities": [
+                {
+                    "id": "PumpCavitation",
+                    "name": "Pump cavitation",
+                    "label": "FaultEvent",
+                    "evidence": "Pump cavitation",
+                },
+                {
+                    "id": "SealWear",
+                    "name": "Seal wear",
+                    "label": "RootCause",
+                    "evidence": "seal wear",
+                },
+            ],
+            "relations": [
+                {
+                    "head": "PumpCavitation",
+                    "relation": "SUGGESTS_ROOT_CAUSE",
+                    "tail": "SealWear",
+                    "evidence": chunk.text,
+                    "confidence": 0.55,
+                }
+            ],
+        }
+
+
+class _SmokeFeedbackStore:
+    def __init__(self) -> None:
+        self.records: list[dict[str, object]] = []
+
+    def record_feedback(self, request: service_handlers.FeedbackRequest) -> dict[str, object]:
+        target_id = request.target_id or request.case_id or request.run_id or request.target_type
+        metadata = dict(request.metadata or {})
+        record = {
+            "feedback_id": f"feedback-{len(self.records) + 1}",
+            "created_at": "2026-05-16T00:00:00+00:00",
+            "run_id": request.run_id,
+            "case_id": request.case_id,
+            "target_type": request.target_type,
+            "target_id": target_id,
+            "target_key": str(metadata.get("target_key") or f"{request.target_type}:{target_id}"),
+            "action": request.review_action(),
+            "note": request.review_note(),
+            "reviewer": request.reviewer,
+            "source": request.source or "rootlens-dashboard-smoke",
+            "metadata": metadata or None,
+        }
+        self.records.insert(0, record)
+        return {"status": "recorded", "record": record}
+
+    def list_feedback(self, request: service_handlers.ReviewLedgerListRequest) -> dict[str, object]:
+        filtered = [
+            record
+            for record in self.records
+            if (request.run_id is None or record.get("run_id") == request.run_id)
+            and (request.case_id is None or record.get("case_id") == request.case_id)
+            and (request.target_type is None or record.get("target_type") == request.target_type)
+            and (request.target_id is None or record.get("target_id") == request.target_id)
+        ]
+        paged = filtered[request.offset : request.offset + request.limit]
+        return {
+            "records": paged,
+            "total_count": len(filtered),
+            "returned_count": len(paged),
+            "offset": request.offset,
+            "limit": request.limit,
+            "claim_boundary": "candidate/plausible explanation only; not a verified root-cause label",
+        }
+
+
 def _run_smoke(
     example_path: Path,
     *,
@@ -71,13 +147,37 @@ def _run_smoke(
 
     run_dir.mkdir(parents=True, exist_ok=True)
     service_runs.DEFAULT_RUNS_DIR = run_dir
+    material_root = run_dir / "materials"
+    service_kg_materials.DEFAULT_SOURCE_KG_MATERIAL_DIR = material_root
+    service_kg_materials.configure_material_store_for_testing(
+        service_kg_materials.FileKGMaterialStore(material_root)
+    )
 
     def record_kg_draft_to_smoke_path(
         request: service_kg_drafts.KGDraftRequest,
     ) -> dict[str, object]:
         return service_kg_drafts.record_kg_draft(request, output_path=draft_path)
 
+    def list_kg_drafts_from_smoke_path(
+        request: service_kg_drafts.KGDraftListRequest,
+    ) -> service_kg_drafts.KGDraftListResponse:
+        return service_kg_drafts.list_kg_drafts(request, input_path=draft_path)
+
+    def extract_material_with_smoke_ie(
+        material_id: str,
+        request: service_kg_materials.KGMaterialExtractionRunRequest | None = None,
+    ) -> service_kg_materials.KGMaterialExtractionRunResponse:
+        return service_kg_materials.extract_kg_material_to_structured_records(
+            material_id,
+            request or service_kg_materials.KGMaterialExtractionRunRequest(),
+            client=_SmokeIEClient(),
+        )
+
     service_api.record_kg_draft = record_kg_draft_to_smoke_path
+    service_api.list_kg_drafts = list_kg_drafts_from_smoke_path
+    service_api.extract_kg_material_to_structured_records = extract_material_with_smoke_ie
+    feedback_store = _SmokeFeedbackStore()
+    service_handlers._default_feedback_store = lambda: feedback_store
 
     client = TestClient(service_api.create_app())
     _require(client.get("/api/health").json()["status"] == "ok", "health route failed")
@@ -120,6 +220,15 @@ def _run_smoke(
         _require(kg_draft.status_code == 200, f"KG draft submit failed: {kg_draft.text}")
         _require(kg_draft.json()["status"] == "recorded", "KG draft was not recorded")
         _require(draft_path.is_file(), "KG draft JSONL was not written")
+        kg_draft_history = client.get(
+            "/api/kg/drafts",
+            params={"target_key": kg_target["target_key"], "limit": 20},
+        )
+        _require(kg_draft_history.status_code == 200, f"KG draft history failed: {kg_draft_history.text}")
+        _require(
+            kg_draft_history.json()["returned_count"] >= 1,
+            "KG draft history returned no records",
+        )
     source_draft = client.post(
         "/api/kg/source-draft",
         json={
@@ -141,6 +250,45 @@ def _run_smoke(
         len(source_draft.json()["candidate_edges"]) == 1,
         "source-to-KG draft returned no candidates",
     )
+    _require(
+        client.get("/api/kg/drafts").json()["total_count"] >= 1,
+        "source-to-KG preview should not clear persisted KG drafts",
+    )
+
+    material_upload = client.post(
+        "/api/kg/materials/upload",
+        files={"file": ("pump_note.txt", "Pump cavitation indicates seal wear.", "text/plain")},
+        data={
+            "title": "Pump note",
+            "scenario": "tep",
+            "source_type": "text",
+            "material_id": "pump_note",
+        },
+    )
+    _require(material_upload.status_code == 200, f"material upload failed: {material_upload.text}")
+    material_extract = client.post(
+        "/api/kg/materials/pump_note/extract",
+        json={"overwrite": True},
+    )
+    _require(material_extract.status_code == 200, f"material extract failed: {material_extract.text}")
+    chunks = client.get("/api/kg/materials/pump_note/chunks")
+    extraction_runs = client.get("/api/kg/materials/pump_note/extractions")
+    extraction_artifacts = client.get("/api/kg/materials/pump_note/artifacts")
+    _require(chunks.status_code == 200, f"material chunks failed: {chunks.text}")
+    _require(extraction_runs.status_code == 200, f"material extraction runs failed: {extraction_runs.text}")
+    _require(extraction_artifacts.status_code == 200, f"material artifacts failed: {extraction_artifacts.text}")
+    _require(chunks.json()["count"] >= 1, "material chunks returned no records")
+    _require(extraction_runs.json()["count"] >= 1, "material extraction runs returned no records")
+    _require(extraction_artifacts.json()["count"] >= 1, "material extraction artifacts returned no records")
+    build_sources = client.post(
+        "/api/kg/materials/build-sources",
+        json={"material_ids": ["pump_note"], "output_name": "smoke_material_build", "overwrite": True},
+    )
+    _require(build_sources.status_code == 200, f"material build-sources failed: {build_sources.text}")
+    _require(
+        len(build_sources.json()["sources"]) == 1,
+        "material build-sources returned no construction inputs",
+    )
 
     with example_path.open("rb") as handle:
         upload = client.post(
@@ -152,6 +300,12 @@ def _run_smoke(
     run_detail = upload.json()
     run_id = run_detail["run"]["run_id"]
     _require(run_detail["run"]["case_count"] > 0, "upload created no cases")
+    _require(len(run_detail["cases"]) > 0, "upload returned no case rows")
+    _require(all(case.get("case_label") for case in run_detail["cases"]), "case rows are missing case labels")
+    _require(
+        all(isinstance(case.get("generated_evidence"), dict) for case in run_detail["cases"]),
+        "case rows are missing generated evidence payloads",
+    )
     _require(len(run_detail["workflow_steps"]) > 0, "upload returned no workflow steps")
     _require(len(run_detail["top_k_paths"]) > 0, "upload returned no candidate paths")
     _require("visual_evidence" in run_detail, "upload omitted visual evidence field")
@@ -199,6 +353,17 @@ def _run_smoke(
     )
     _require(feedback.status_code == 200, f"feedback submit failed: {feedback.text}")
     _require(feedback.json()["status"] == "recorded", "feedback was not recorded")
+    ledger = client.get(
+        "/api/feedback",
+        params={"run_id": run_id, "limit": 20},
+    )
+    _require(ledger.status_code == 200, f"feedback ledger failed: {ledger.text}")
+    ledger_payload = ledger.json()
+    _require(ledger_payload["returned_count"] >= 1, "feedback ledger returned no records")
+    _require(
+        any(record.get("target_key") == target["target_key"] for record in ledger_payload["records"]),
+        "feedback ledger did not return the submitted target key",
+    )
 
     print(
         "RootLens dashboard smoke passed: "

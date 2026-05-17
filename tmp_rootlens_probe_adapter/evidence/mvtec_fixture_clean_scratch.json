@@ -1,0 +1,132 @@
+{
+  "case_id": "mvtec_fixture_clean_scratch",
+  "dataset": "mvtec",
+  "source": "image",
+  "object": "bottle",
+  "anomaly_type": "scratch",
+  "location": "surface",
+  "morphology": "linear",
+  "severity": 0.18,
+  "confidence": 0.86,
+  "timestamp": null,
+  "raw_evidence": {
+    "image_region": null,
+    "heatmap_path": null,
+    "variables": [],
+    "variable_contributions": {},
+    "log_events": [],
+    "description": "Scratch-like surface defect evidence from a tiny fixture record.",
+    "extra": {
+      "dataset": "mvtec",
+      "image_path": "fixtures/mvtec/bottle_clean_scratch.png",
+      "mask_path": "fixtures/mvtec/bottle_clean_scratch_mask.png"
+    }
+  },
+  "observations": [
+    {
+      "obs_id": "obs_mvtec_fixture_clean_scratch_object_bottle",
+      "facet": "object",
+      "name": "bottle",
+      "display_name": null,
+      "value": null,
+      "value_type": null,
+      "unit": null,
+      "direction": null,
+      "confidence": 0.86,
+      "source_ref": "adapter:mvtec",
+      "raw_ref": "object",
+      "time_window": null,
+      "metadata": {}
+    },
+    {
+      "obs_id": "obs_mvtec_fixture_clean_scratch_anomaly_type_scratch",
+      "facet": "anomaly_type",
+      "name": "scratch",
+      "display_name": null,
+      "value": null,
+      "value_type": null,
+      "unit": null,
+      "direction": null,
+      "confidence": 0.86,
+      "source_ref": "adapter:mvtec",
+      "raw_ref": "anomaly_type",
+      "time_window": null,
+      "metadata": {}
+    },
+    {
+      "obs_id": "obs_mvtec_fixture_clean_scratch_location_surface",
+      "facet": "location",
+      "name": "surface",
+      "display_name": null,
+      "value": null,
+      "value_type": null,
+      "unit": null,
+      "direction": null,
+      "confidence": 0.86,
+      "source_ref": "adapter:mvtec",
+      "raw_ref": "location",
+      "time_window": null,
+      "metadata": {}
+    },
+    {
+      "obs_id": "obs_mvtec_fixture_clean_scratch_morphology_linear",
+      "facet": "morphology",
+      "name": "linear",
+      "display_name": null,
+      "value": null,
+      "value_type": null,
+      "unit": null,
+      "direction": null,
+      "confidence": 0.86,
+      "source_ref": "adapter:mvtec",
+      "raw_ref": "morphology",
+      "time_window": null,
+      "metadata": {}
+    },
+    {
+      "obs_id": "obs_mvtec_fixture_clean_scratch_severity_severity",
+      "facet": "severity",
+      "name": "severity",
+      "display_name": null,
+      "value": 0.18,
+      "value_type": "float",
+      "unit": null,
+      "direction": null,
+      "confidence": 0.86,
+      "source_ref": "adapter:mvtec",
+      "raw_ref": "severity",
+      "time_window": null,
+      "metadata": {}
+    },
+    {
+      "obs_id": "obs_mvtec_fixture_clean_scratch_confidence_adapter_confidence",
+      "facet": "confidence",
+      "name": "adapter_confidence",
+      "display_name": null,
+      "value": 0.86,
+      "value_type": "float",
+      "unit": null,
+      "direction": null,
+      "confidence": 0.86,
+      "source_ref": "adapter:mvtec",
+      "raw_ref": "confidence",
+      "time_window": null,
+      "metadata": {}
+    }
+  ],
+  "adapter": {
+    "name": "mvtec",
+    "version": null,
+    "produces_root_cause": false,
+    "metadata": {}
+  },
+  "normalized_evidence": {},
+  "kg_analysis": {
+    "linked_entities": [],
+    "consistency_score": null,
+    "inconsistent_fields": [],
+    "correction_candidates": [],
+    "top_k_paths": []
+  },
+  "human_feedback": null
+}

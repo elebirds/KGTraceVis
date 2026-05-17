@@ -650,8 +650,11 @@ Implemented in:
 - `src/kgtracevis/workflows/root_cause_provider_selection.py`
 - `scripts/evaluate_tep_rca.py`
 
-TEP uses `TepRootKgdRcaProvider` as the single supported scenario-specific RCA
-reasoner. It is called through the same `KGTracePipeline` output contract.
+TEP uses `TepRootKgdRcaProvider` as the current domain-specific RCA adapter.
+By default it is resolved through the `tep_root_kgd_default` reasoning profile
+and called through the same `KGTracePipeline` output contract as the generic
+graph-path adapter. Compatible profiles may be selected explicitly without
+changing the RCA output schema.
 
 The provider loads checked-in Root-KGD assets from:
 

@@ -25,6 +25,7 @@ class RankedRootCause(BaseModel):
     explanation_paths: list[dict[str, Any]] = Field(default_factory=list)
     supporting_edges: list[dict[str, Any]] = Field(default_factory=list)
     supporting_evidence: list[dict[str, Any]] = Field(default_factory=list)
+    support_evidence_ids: list[str] = Field(default_factory=list)
     scoring_method: str
     scoring_details: dict[str, Any] = Field(default_factory=dict)
     source: str | None = None
@@ -66,6 +67,7 @@ class AnalysisResult(BaseModel):
     correction_candidates: list[dict[str, Any]] = Field(default_factory=list)
     top_k_paths: list[dict[str, Any]] = Field(default_factory=list)
     ranked_root_causes: list[RankedRootCause] = Field(default_factory=list)
+    reasoning_metadata: dict[str, Any] = Field(default_factory=dict)
     human_feedback: dict[str, Any] | None = None
 
 
@@ -92,7 +94,9 @@ def ranked_root_causes_from_paths(
                 "explanation_paths": [],
                 "supporting_edges_by_id": {},
                 "supporting_evidence": [],
+                "support_evidence_ids": [],
                 "source_path_ids": [],
+                "kg_build_ids": set(),
             },
         )
         score = float(path.get("score") or 0.0)
@@ -104,10 +108,19 @@ def ranked_root_causes_from_paths(
         candidate["explanation_paths"].append(dict(path))
         if path.get("path_id"):
             candidate["source_path_ids"].append(str(path["path_id"]))
+        for kg_build_id in path.get("kg_build_ids") or []:
+            if str(kg_build_id):
+                candidate["kg_build_ids"].add(str(kg_build_id))
         for edge in _dict_items(path.get("source_edges")):
             edge_id = str(edge.get("edge_id") or "")
             if edge_id:
                 candidate["supporting_edges_by_id"].setdefault(edge_id, edge)
+            kg_build_id = str(edge.get("kg_build_id") or "")
+            if kg_build_id:
+                candidate["kg_build_ids"].add(kg_build_id)
+        for obs_id in _support_evidence_ids_from_path(path):
+            if obs_id not in candidate["support_evidence_ids"]:
+                candidate["support_evidence_ids"].append(obs_id)
         for index, evidence in enumerate(path.get("supporting_evidence") or []):
             candidate["supporting_evidence"].append(
                 {
@@ -138,8 +151,12 @@ def ranked_root_causes_from_paths(
                 for edge_id in sorted(item["supporting_edges_by_id"])
             ],
             supporting_evidence=list(item["supporting_evidence"]),
+            support_evidence_ids=list(item["support_evidence_ids"]),
             scoring_method="relation_weighted_path",
-            scoring_details={"source_path_ids": list(item["source_path_ids"])},
+            scoring_details={
+                "source_path_ids": list(item["source_path_ids"]),
+                "kg_build_ids": sorted(item["kg_build_ids"]),
+            },
             source="top_k_paths_projection",
             review_status="auto",
         )
@@ -158,6 +175,26 @@ def _path_candidate_name(path: dict[str, Any], candidate_id: str) -> str:
     if nodes and names and nodes[-1] == candidate_id and len(names) >= len(nodes):
         return str(names[-1])
     return candidate_id
+
+
+def _support_evidence_ids_from_path(path: dict[str, Any]) -> list[str]:
+    support_obs_ids = [
+        str(item)
+        for item in path.get("support_obs_ids") or []
+        if item is not None
+    ]
+    if support_obs_ids:
+        return list(dict.fromkeys(support_obs_ids))
+
+    derived: list[str] = []
+    for item in path.get("supporting_evidence") or []:
+        if isinstance(item, str) and item.startswith("obs"):
+            derived.append(item)
+        elif isinstance(item, dict):
+            evidence_id = item.get("evidence_id")
+            if isinstance(evidence_id, str) and evidence_id.startswith("obs"):
+                derived.append(evidence_id)
+    return list(dict.fromkeys(derived))
 
 
 def _optional_float(value: Any) -> float | None:

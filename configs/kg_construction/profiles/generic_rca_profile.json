@@ -1,0 +1,107 @@
+{
+  "confidence_policy": "source_confidence",
+  "domain_id": "generic",
+  "keep_labels": [
+    "Alert",
+    "Component",
+    "Equipment",
+    "Event",
+    "Fault",
+    "FaultType",
+    "AnomalyType",
+    "Metric",
+    "RootCause",
+    "Signal",
+    "Variable",
+    "DefectType"
+  ],
+  "observable_labels": [
+    "Alert",
+    "AnomalyType",
+    "DefectType",
+    "Event",
+    "FaultType",
+    "Metric",
+    "Signal",
+    "Variable"
+  ],
+  "ontology": "generic_rca_v1",
+  "propagation_families": [
+    "AFFECTS",
+    "CAUSES",
+    "DEPENDS_ON",
+    "OBSERVATION"
+  ],
+  "relation_families": {
+    "AFFECTS": "AFFECTS",
+    "CAUSES": "CAUSES",
+    "DEPENDS_ON": "DEPENDS_ON",
+    "HAS_COMPONENT": "PART_OF",
+    "HAS_PLAUSIBLE_CAUSE": "CAUSES",
+    "OBSERVED_BY": "OBSERVATION",
+    "PART_OF": "PART_OF",
+    "SUGGESTS_ROOT_CAUSE": "CAUSES"
+  },
+  "relation_family_policies": {
+    "AFFECTS": {
+      "attenuation": 0.9,
+      "edge_weight_multiplier": 1.0,
+      "propagation_direction": "forward",
+      "propagation_enabled": true,
+      "propagation_priority": 0.85
+    },
+    "CAUSES": {
+      "attenuation": 1.0,
+      "edge_weight_multiplier": 1.0,
+      "propagation_direction": "forward",
+      "propagation_enabled": true,
+      "propagation_priority": 1.0
+    },
+    "DEPENDS_ON": {
+      "attenuation": 0.8,
+      "edge_weight_multiplier": 0.9,
+      "propagation_direction": "reverse",
+      "propagation_enabled": true,
+      "propagation_priority": 0.6
+    },
+    "OBSERVATION": {
+      "attenuation": 0.85,
+      "edge_weight_multiplier": 0.8,
+      "propagation_direction": "reverse",
+      "propagation_enabled": true,
+      "propagation_priority": 0.7
+    },
+    "PART_OF": {
+      "propagation_enabled": false
+    }
+  },
+  "relation_rewrites": {
+    "CALLS": "DEPENDS_ON",
+    "CONTAINS": "HAS_COMPONENT",
+    "MEASURES": "OBSERVED_BY"
+  },
+  "relation_whitelist": [
+    "AFFECTS",
+    "CAUSES",
+    "DEPENDS_ON",
+    "HAS_COMPONENT",
+    "HAS_PLAUSIBLE_CAUSE",
+    "OBSERVED_BY",
+    "PART_OF",
+    "SUGGESTS_ROOT_CAUSE"
+  ],
+  "root_candidate_labels": [
+    "Component",
+    "Equipment",
+    "Fault",
+    "RootCause"
+  ],
+  "scenario": "shared",
+  "semantic_projection_rules": {
+    "METRIC_OF": {
+      "swap_endpoints": true,
+      "target_relation": "OBSERVED_BY"
+    }
+  },
+  "task_view": "path_ranking_view"
+}

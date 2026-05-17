@@ -151,16 +151,17 @@ def run_tep_rca_evaluation(
 
 Runtime contracts:
 
-- `build_pipeline()` attaches `TepRootKgdRcaProvider` as the single supported
-  scenario-specific RCA reasoner.
-- Generic adapter, upload, and evaluation callers must not expose
-  `tep_rca_provider` switches. TEP RCA has no public `none/native/simple/artifact`
-  mode split.
-- `TepRootKgdRcaProvider` returns rankings only for TEP Evidence. For non-TEP
-  Evidence it returns an empty RCA result, and `KGTracePipeline` falls back to
-  the generic graph path reasoner.
-- `TepRootKgdRcaProvider` loads static model assets from
-  `data/kg/tep_root_kgd/`.
+- `build_root_cause_reasoner()` returns a default profile-resolving
+  `RcaReasoner`, not a hard-coded provider instance.
+- The built-in default resolver maps `tep` Evidence to the checked-in
+  `tep_root_kgd_default` profile / `tep_root_kgd` adapter and maps all other
+  datasets to `generic_graph_path_default`.
+- Generic adapter, upload, and evaluation callers may expose an explicit
+  `reasoning_profile_id` selector once it validates dataset compatibility and
+  leaves default routing unchanged; they must still not expose ad-hoc provider
+  mode switches such as `tep_rca_provider`.
+- The resolved TEP adapter is `TepRootKgdRcaProvider`, and its default profile
+  points at checked-in assets under `data/kg/tep_root_kgd/`.
 - Runtime scoring reads the current `Evidence` payload:
   `raw_evidence.variable_contributions`, `raw_evidence.extra.graph_contributions`,
   `raw_evidence.extra.channel_contributions`, and
@@ -172,6 +173,9 @@ Runtime contracts:
   but must not be used as scoring inputs.
 - `ranked_root_causes[*].explanation_paths` must be a subset of returned
   `top_k_paths`, so visual review and feedback IDs stay aligned.
+- When invoked directly, `TepRootKgdRcaProvider` still returns an empty RCA
+  result for non-TEP Evidence or missing Root-KGD contributions; the pipeline's
+  generic fallback remains the safety net.
 
 Validation:
 

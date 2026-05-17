@@ -11,7 +11,14 @@ from kgtracevis.kg.entity_linker import selected_entities_by_field
 from kgtracevis.kg.graph import KGEdge, KnowledgeGraph
 from kgtracevis.schema.evidence_schema import Evidence
 
-ROOT_CAUSE_LABELS = {"RootCause", "CauseCategory", "FaultType"}
+ROOT_CAUSE_LABELS = {
+    "CandidateCause",
+    "CauseCategory",
+    "Fault",
+    "FaultType",
+    "Mechanism",
+    "RootCause",
+}
 SOURCE_FIELDS = {"anomaly_type", "variable", "log_event"}
 
 
@@ -55,9 +62,18 @@ def rank_root_cause_paths(
                     continue
                 relations = [edge.relation for edge in edges]
                 conf = sum(edge.confidence for edge in edges) / len(edges)
+                rca_score = _path_rca_score(edges)
+                path_strength = _path_strength(edges)
                 evidence_match = len(set(path) & selected_ids) / max(1, len(selected_ids))
                 length_penalty = (len(path) - 1) / max_depth
-                score = alpha * conf + beta * evidence_match - gamma * length_penalty
+                support_obs_ids = list(
+                    dict.fromkeys(
+                        str(link.get("obs_id"))
+                        for link in linked_entities
+                        if link.get("selected_entity_id") in path and link.get("obs_id")
+                    )
+                )
+                score = alpha * path_strength + beta * evidence_match - gamma * length_penalty
                 ranked.append(
                     {
                         "path_id": "",
@@ -68,11 +84,15 @@ def rank_root_cause_paths(
                         "relations": relations,
                         "score": round(score, 4),
                         "confidence": round(conf, 4),
+                        "path_strength": round(path_strength, 4),
+                        "rca_score": round(rca_score, 4),
                         "evidence_match": round(evidence_match, 4),
                         "length": len(path) - 1,
                         "supporting_evidence": [edge.evidence for edge in edges],
+                        "support_obs_ids": support_obs_ids,
                         "source_edge_ids": [edge.edge_id for edge in edges],
                         "source_edges": [edge.model_dump() for edge in edges],
+                        "kg_build_ids": _path_kg_build_ids(edges),
                     }
                 )
 
@@ -116,8 +136,39 @@ def _path_edges(
         edge_options = graph.edge_between(head, tail, scenario=scenario)
         if not edge_options:
             return []
-        edges.append(max(edge_options, key=lambda edge: edge.confidence))
+        edges.append(max(edge_options, key=_edge_rank_key))
     return edges
+
+
+def _path_strength(edges: list[KGEdge]) -> float:
+    return sum(_edge_strength(edge) for edge in edges) / len(edges)
+
+
+def _path_rca_score(edges: list[KGEdge]) -> float:
+    scores = [edge.rca_score for edge in edges if edge.rca_score > 0]
+    if not scores:
+        return 0.0
+    return sum(scores) / len(scores)
+
+
+def _path_kg_build_ids(edges: list[KGEdge]) -> list[str]:
+    return sorted({edge.kg_build_id for edge in edges if edge.kg_build_id})
+
+
+def _edge_strength(edge: KGEdge) -> float:
+    if edge.rca_score > 0:
+        return edge.rca_score
+    if edge.edge_weight is not None and edge.propagation_enabled:
+        return _clamp01(1.0 - edge.edge_weight)
+    return edge.confidence
+
+
+def _edge_rank_key(edge: KGEdge) -> tuple[float, float]:
+    return (_edge_strength(edge), edge.confidence)
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
 
 
 def _path_id(case_id: str, nodes: list[str], relations: list[str]) -> str:

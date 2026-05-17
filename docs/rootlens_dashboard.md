@@ -22,7 +22,7 @@ npm install
 npm run dev
 ```
 
-The API runs on `http://127.0.0.1:8000`. Vite runs on
+The API runs on `http://127.0.0.1:8081`. Vite runs on
 `http://127.0.0.1:5173` and proxies `/api` to the API server. The maintained
 dashboard under `web/` uses Arco React for application components, ECharts for
 graph exploration, plain CSS tokens for layout polish, and React Router for
@@ -87,23 +87,45 @@ the baseline dashboard smoke.
   `path_graph`, visual evidence previews, source edge provenance, and review
   targets. Each review target includes a stable `target_key` in addition to
   `target_type` and `target_id` so UI state can distinguish different target
-  categories with similar IDs.
+  categories with similar IDs. Single-case uploads are normalized into
+  `cases[]` as well, so RootLens can always treat `cases[]` as the primary
+  case-level display unit.
 - `GET /api/runs/{run_id}/artifacts/{artifact_name}` serves browser-safe
   preview artifacts generated under that run's own `artifacts/` directory.
+  `visual_evidence[*].url` is the canonical browser field; `preview_path`
+  is normalized for browser compatibility and may mirror `url`, while the
+  original server-side preview path is preserved in metadata when needed.
 - `GET /api/kg/studio` returns the read-only KG Studio payload: source registry
   rows, local source documents, the selected candidate KG artifact directory,
   node/edge counts, validation summary, bounded graph preview, and edge review
   targets.
+- `GET /api/kg/drafts` returns append-only KG draft adjustment history with
+  `target_key` filtering and pagination so the dashboard can reload prior Draft
+  Lab decisions.
 - `POST /api/kg/source-draft` converts structured source lines into
   schema-compatible candidate edge drafts. The default `heuristic` provider runs
   without external LLM credentials and keeps all generated rows review-only.
+  This remains a stateless preview route in v1; source-draft previews are not
+  persisted as draft history.
+- `GET /api/kg/materials/{material_id}/chunks`,
+  `GET /api/kg/materials/{material_id}/extractions`, and
+  `GET /api/kg/materials/{material_id}/artifacts` expose the parsed document
+  chunks, extraction-run metadata, and generated candidate-record artifacts for
+  one material so the Sources workspace can inspect the full provenance chain.
+- `GET /api/feedback` returns append-only review ledger records for one run,
+  case, target type, or target ID, with `target_key`, pagination, and the same
+  claim-boundary wording used by the rest of the dashboard contract.
 - `POST /api/feedback` writes review feedback records to Postgres
   `feedback_records` with `target_type`,
   `target_id`, `action`, optional note/reviewer/source metadata, and run/case
-  context.
+  context. Supported review targets include path, edge, entity link,
+  correction, and root-cause candidate targets.
 
 Review feedback does not promote or mutate KG edges directly. It remains
-reviewable application state in Postgres.
+reviewable application state in Postgres and can be read back through the
+append-only ledger route.
+
+Analysis run resources stay append-only in v1: uploads create runs, history lists runs, and detail/artifact routes read them back. The service does not expose update/delete for run sessions or generated reasoning results.
 
 The run detail view includes a focused evidence workspace. MVTec producer
 records can expose source image, mask, and heatmap previews; WM811K records can
@@ -206,16 +228,25 @@ uv run python scripts/smoke_rootlens_dashboard.py
 
 The smoke uses FastAPI `TestClient` instead of launching a browser. It exercises
 the same API path used by the Vite client: bootstrap, producer-record upload,
-run history, run detail, path graph/review target linkage, and review feedback.
-It also exercises the KG Studio route and verifies candidate edge review targets
-plus append-only draft submission when local candidate KG artifacts are
-available. It always exercises source-to-KG draft generation.
+run history, run detail, path graph/review target linkage, review feedback,
+append-only KG draft history, material extraction read-back, and build-sources
+bridging. It also exercises the KG Studio route and verifies candidate edge
+review targets when local candidate KG artifacts are available. It always
+exercises source-to-KG draft generation while keeping that route stateless.
 By default it stores run and feedback artifacts in a temporary directory; pass
 this if you want to inspect the generated manifest afterward:
 
 ```bash
 uv run python scripts/smoke_rootlens_dashboard.py --persist-runs runs/rootlens_smoke
 ```
+
+Section 5 acceptance bundle:
+
+```bash
+uv run python scripts/build_rootlens_phase4_acceptance_bundle.py --overwrite
+```
+
+This writes a backend-mode acceptance bundle under `runs/rootlens_phase4_acceptance/` with section manifests, notes, and saved API payloads that can be used to justify or shrink Section 5 paper claims.
 
 Optional browser spot check:
 

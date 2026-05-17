@@ -1,7 +1,7 @@
 UV ?= uv
 PYTHON ?= $(UV) run python
 API_HOST ?= 127.0.0.1
-API_PORT ?= 8000
+API_PORT ?= 8001
 OUTPUT_ROOT ?= runs/real_model_pipeline
 TORCH_CUDA_INDEX ?= https://download.pytorch.org/whl/cu128
 

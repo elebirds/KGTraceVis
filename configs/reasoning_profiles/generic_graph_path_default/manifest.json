@@ -1,0 +1,15 @@
+{
+  "reasoning_profile_id": "generic_graph_path_default",
+  "dataset_scope": [
+    "mvtec",
+    "tep",
+    "wafer",
+    "shared"
+  ],
+  "reasoner_adapter": "generic_graph_path",
+  "version": "1.0.0",
+  "required_evidence_fields": [],
+  "runtime_overlay": {},
+  "reasoning_assets": {},
+  "claim_boundary": "Profile config records the default generic graph-path RCA packaging; adapter code still defines runtime reasoning behavior."
+}

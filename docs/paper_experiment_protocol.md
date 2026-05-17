@@ -55,8 +55,10 @@ TEP:
   defines process fault types, but they must not be used as scoring input.
 - Native TEP RCA runs through the same `KGTracePipeline` output contract:
   adapter evidence plus Root-KGD support paths produce both
-  `ranked_root_causes` and `top_k_paths`. Public workflows do not expose
-  provider mode switches.
+  `ranked_root_causes` and `top_k_paths`. Public workflows may explicitly
+  select a compatible reasoning profile while keeping the default TEP mapping on
+  `tep_root_kgd_default`; profiles externalize prior assets/policy rather than
+  defining new algorithms by config alone.
 
 ## Reference Eligibility Rules
 

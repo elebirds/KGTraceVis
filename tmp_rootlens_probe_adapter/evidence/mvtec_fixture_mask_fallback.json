@@ -1,0 +1,149 @@
+{
+  "case_id": "mvtec_fixture_mask_fallback",
+  "dataset": "mvtec",
+  "source": "image",
+  "object": "bottle",
+  "anomaly_type": "scratch",
+  "location": "surface",
+  "morphology": "linear",
+  "severity": 0.16,
+  "confidence": 0.81,
+  "timestamp": null,
+  "raw_evidence": {
+    "image_region": null,
+    "heatmap_path": null,
+    "variables": [],
+    "variable_contributions": {},
+    "log_events": [],
+    "description": "Fixture omits explicit location and morphology so mask geometry supplies fallback evidence.",
+    "extra": {
+      "dataset": "mvtec",
+      "image_path": "fixtures/mvtec/bottle_fallback.png",
+      "mask_path": "fixtures/mvtec/bottle_fallback_mask.png",
+      "mask_stats": {
+        "centroid": [
+          0.48,
+          0.52
+        ],
+        "area_ratio": 0.16,
+        "eccentricity": 0.93,
+        "component_count": 1,
+        "centroid_norm": [
+          0.48,
+          0.52
+        ]
+      },
+      "detector": {
+        "name": "fixture_detector",
+        "pred_score": 0.81
+      }
+    }
+  },
+  "observations": [
+    {
+      "obs_id": "obs_mvtec_fixture_mask_fallback_object_bottle",
+      "facet": "object",
+      "name": "bottle",
+      "display_name": null,
+      "value": null,
+      "value_type": null,
+      "unit": null,
+      "direction": null,
+      "confidence": 0.81,
+      "source_ref": "adapter:mvtec",
+      "raw_ref": "object",
+      "time_window": null,
+      "metadata": {}
+    },
+    {
+      "obs_id": "obs_mvtec_fixture_mask_fallback_anomaly_type_scratch",
+      "facet": "anomaly_type",
+      "name": "scratch",
+      "display_name": null,
+      "value": null,
+      "value_type": null,
+      "unit": null,
+      "direction": null,
+      "confidence": 0.81,
+      "source_ref": "adapter:mvtec",
+      "raw_ref": "anomaly_type",
+      "time_window": null,
+      "metadata": {}
+    },
+    {
+      "obs_id": "obs_mvtec_fixture_mask_fallback_location_surface",
+      "facet": "location",
+      "name": "surface",
+      "display_name": null,
+      "value": null,
+      "value_type": null,
+      "unit": null,
+      "direction": null,
+      "confidence": 0.81,
+      "source_ref": "mask_geometry",
+      "raw_ref": "raw_evidence.extra.mask_stats",
+      "time_window": null,
+      "metadata": {}
+    },
+    {
+      "obs_id": "obs_mvtec_fixture_mask_fallback_morphology_linear",
+      "facet": "morphology",
+      "name": "linear",
+      "display_name": null,
+      "value": null,
+      "value_type": null,
+      "unit": null,
+      "direction": null,
+      "confidence": 0.81,
+      "source_ref": "mask_geometry",
+      "raw_ref": "raw_evidence.extra.mask_stats",
+      "time_window": null,
+      "metadata": {}
+    },
+    {
+      "obs_id": "obs_mvtec_fixture_mask_fallback_severity_severity",
+      "facet": "severity",
+      "name": "severity",
+      "display_name": null,
+      "value": 0.16,
+      "value_type": "float",
+      "unit": null,
+      "direction": null,
+      "confidence": 0.81,
+      "source_ref": "mask_geometry",
+      "raw_ref": "raw_evidence.extra.mask_stats.area_ratio",
+      "time_window": null,
+      "metadata": {}
+    },
+    {
+      "obs_id": "obs_mvtec_fixture_mask_fallback_confidence_adapter_confidence",
+      "facet": "confidence",
+      "name": "adapter_confidence",
+      "display_name": null,
+      "value": 0.81,
+      "value_type": "float",
+      "unit": null,
+      "direction": null,
+      "confidence": 0.81,
+      "source_ref": "detector_output",
+      "raw_ref": "raw_evidence.extra.detector",
+      "time_window": null,
+      "metadata": {}
+    }
+  ],
+  "adapter": {
+    "name": "mvtec",
+    "version": null,
+    "produces_root_cause": false,
+    "metadata": {}
+  },
+  "normalized_evidence": {},
+  "kg_analysis": {
+    "linked_entities": [],
+    "consistency_score": null,
+    "inconsistent_fields": [],
+    "correction_candidates": [],
+    "top_k_paths": []
+  },
+  "human_feedback": null
+}

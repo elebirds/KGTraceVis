@@ -1,0 +1,3 @@
+case_id,dataset,adapter_name,anomaly_type,location,morphology,consistency_score,linked_entity_count,correction_candidate_count,path_count,top_target_entity_id,top_target_name,top_target_label,best_score,explanation_scope,claim_boundary
+mvtec_fixture_clean_scratch,mvtec,mvtec,scratch,surface,linear,1.0,4,0,3,MechanicalContact,Mechanical contact,RootCause,0.48,candidate_plausible_explanation_not_verified_rca,candidate/plausible explanation only; not a verified root-cause label
+mvtec_fixture_mask_fallback,mvtec,mvtec,scratch,surface,linear,1.0,4,0,3,MechanicalContact,Mechanical contact,RootCause,0.48,candidate_plausible_explanation_not_verified_rca,candidate/plausible explanation only; not a verified root-cause label

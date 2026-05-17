@@ -36,6 +36,28 @@ REQUIRED_EDGE_COLUMNS = {
     "accepted_count",
     "rejected_count",
 }
+OPTIONAL_RCA_EDGE_COLUMNS = {
+    "relation_family",
+    "propagation_enabled",
+    "propagation_direction",
+    "propagation_priority",
+    "attenuation",
+    "edge_weight",
+    "root_candidate",
+    "observable",
+    "event_anchor",
+    "fault_anchor",
+    "task_view",
+    "confidence_policy",
+    "source_trust",
+    "rca_score",
+    "rca_score_confidence",
+    "rca_score_priority",
+    "rca_score_attenuation",
+    "rca_score_source_trust",
+    "external_edge_id",
+    "kg_build_id",
+}
 DEFAULT_NODE_PATHS = (
     Path("data/kg/nodes.csv"),
     Path("data/kg/mvtec_nodes.csv"),
@@ -98,6 +120,26 @@ class KGEdge:
     feedback_count: int
     accepted_count: int
     rejected_count: int
+    relation_family: str = ""
+    propagation_enabled: bool = False
+    propagation_direction: str = "forward"
+    propagation_priority: float = 0.0
+    attenuation: float = 1.0
+    edge_weight: float | None = None
+    root_candidate: bool = False
+    observable: bool = False
+    event_anchor: str = ""
+    fault_anchor: str = ""
+    task_view: str = ""
+    confidence_policy: str = ""
+    source_trust: float = 0.0
+    rca_score: float = 0.0
+    rca_score_confidence: float = 0.0
+    rca_score_priority: float = 0.0
+    rca_score_attenuation: float = 0.0
+    rca_score_source_trust: float = 0.0
+    external_edge_id: str = ""
+    kg_build_id: str = ""
 
     @property
     def edge_id(self) -> str:
@@ -120,6 +162,26 @@ class KGEdge:
             "feedback_count": self.feedback_count,
             "accepted_count": self.accepted_count,
             "rejected_count": self.rejected_count,
+            "relation_family": self.relation_family,
+            "propagation_enabled": self.propagation_enabled,
+            "propagation_direction": self.propagation_direction,
+            "propagation_priority": self.propagation_priority,
+            "attenuation": self.attenuation,
+            "edge_weight": self.edge_weight if self.edge_weight is not None else self.weight,
+            "root_candidate": self.root_candidate,
+            "observable": self.observable,
+            "event_anchor": self.event_anchor,
+            "fault_anchor": self.fault_anchor,
+            "task_view": self.task_view,
+            "confidence_policy": self.confidence_policy,
+            "source_trust": self.source_trust,
+            "rca_score": self.rca_score,
+            "rca_score_confidence": self.rca_score_confidence,
+            "rca_score_priority": self.rca_score_priority,
+            "rca_score_attenuation": self.rca_score_attenuation,
+            "rca_score_source_trust": self.rca_score_source_trust,
+            "external_edge_id": self.external_edge_id,
+            "kg_build_id": self.kg_build_id,
         }
 
 
@@ -349,6 +411,30 @@ def _load_edges(path: Path) -> list[KGEdge]:
                 feedback_count=int(row["feedback_count"]),
                 accepted_count=int(row["accepted_count"]),
                 rejected_count=int(row["rejected_count"]),
+                relation_family=row.get("relation_family", "").strip(),
+                propagation_enabled=_bool_cell(row.get("propagation_enabled")),
+                propagation_direction=row.get("propagation_direction", "forward").strip()
+                or "forward",
+                propagation_priority=_float_cell(row.get("propagation_priority"), 0.0),
+                attenuation=_float_cell(row.get("attenuation"), 1.0),
+                edge_weight=_optional_float_cell(row.get("edge_weight")),
+                root_candidate=_bool_cell(row.get("root_candidate")),
+                observable=_bool_cell(row.get("observable")),
+                event_anchor=row.get("event_anchor", "").strip(),
+                fault_anchor=row.get("fault_anchor", "").strip(),
+                task_view=row.get("task_view", "").strip(),
+                confidence_policy=row.get("confidence_policy", "").strip(),
+                source_trust=_float_cell(row.get("source_trust"), 0.0),
+                rca_score=_float_cell(row.get("rca_score"), 0.0),
+                rca_score_confidence=_float_cell(row.get("rca_score_confidence"), 0.0),
+                rca_score_priority=_float_cell(row.get("rca_score_priority"), 0.0),
+                rca_score_attenuation=_float_cell(row.get("rca_score_attenuation"), 0.0),
+                rca_score_source_trust=_float_cell(
+                    row.get("rca_score_source_trust"),
+                    0.0,
+                ),
+                external_edge_id=row.get("external_edge_id", "").strip(),
+                kg_build_id=row.get("kg_build_id", "").strip(),
             )
             for row in reader
         ]
@@ -417,6 +503,26 @@ def _require_columns(path: Path, actual: Sequence[str] | None, required: set[str
     missing = sorted(required - actual_set)
     if missing:
         raise ValueError(f"{path} missing required columns: {', '.join(missing)}")
+
+
+def _bool_cell(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _float_cell(value: str | None, default: float) -> float:
+    parsed = _optional_float_cell(value)
+    return default if parsed is None else parsed
+
+
+def _optional_float_cell(value: str | None) -> float | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    return float(text)
 
 
 def _match_score(normalized_mention: str, term: str, node: KGNode) -> tuple[float, str]:

@@ -6,11 +6,13 @@ import csv
 import json
 import uuid
 from collections.abc import Generator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from kgtracevis.producers.backends import AMAZON_PATCHCORE_BACKEND, ANOMALIB_ENGINE_BACKEND
 from kgtracevis.service import api as service_api
@@ -18,9 +20,11 @@ from kgtracevis.service import dashboard as service_dashboard
 from kgtracevis.service import kg_construction as service_kg_construction
 from kgtracevis.service import kg_materials as service_kg_materials
 from kgtracevis.service import runs as service_runs
+from kgtracevis.service import visual_evidence as service_visual_evidence
 from kgtracevis.service.api import app
 from kgtracevis.service.handlers import (
     FeedbackRequest,
+    ReviewLedgerListRequest,
     WhatIfRequest,
     get_case_detail,
     list_cases,
@@ -60,14 +64,72 @@ class InMemoryRunStore:
         return str(artifact_path)
 
     def record_feedback(self, request: FeedbackRequest) -> dict[str, object]:
+        target_id = request.target_id or request.case_id or request.run_id or request.target_type
+        metadata = dict(request.metadata or {})
         record = {
             "feedback_id": str(uuid.uuid4()),
+            "created_at": datetime.now(UTC).isoformat(),
             **request.model_dump(mode="json"),
+            "target_id": target_id,
+            "target_key": str(metadata.get("target_key") or f"{request.target_type}:{target_id}"),
             "action": request.review_action(),
             "note": request.review_note(),
+            "source": request.source or "unknown",
+            "metadata": metadata,
         }
         self.feedback.append(record)
         return {"status": "recorded", "record": record}
+
+    def list_feedback(
+        self, request: ReviewLedgerListRequest | dict[str, object]
+    ) -> dict[str, object]:
+        if isinstance(request, dict):
+            run_id = request.get("run_id")
+            case_id = request.get("case_id")
+            target_type = request.get("target_type")
+            target_id = request.get("target_id")
+            offset = int(request.get("offset", 0))
+            limit = int(request.get("limit", 50))
+        else:
+            run_id = request.run_id
+            case_id = request.case_id
+            target_type = request.target_type
+            target_id = request.target_id
+            offset = request.offset
+            limit = request.limit
+
+        filtered = [
+            {
+                "feedback_id": record["feedback_id"],
+                "created_at": record["created_at"],
+                "run_id": record.get("run_id"),
+                "case_id": record.get("case_id"),
+                "target_type": record.get("target_type"),
+                "target_id": record.get("target_id"),
+                "target_key": record.get("target_key"),
+                "action": record.get("action"),
+                "note": record.get("note"),
+                "reviewer": record.get("reviewer"),
+                "source": record.get("source") or "unknown",
+                "metadata": record.get("metadata") or None,
+            }
+            for record in sorted(self.feedback, key=lambda item: item["created_at"], reverse=True)
+            if (run_id is None or record.get("run_id") == run_id)
+            and (case_id is None or record.get("case_id") == case_id)
+            and (target_type is None or record.get("target_type") == target_type)
+            and (target_id is None or record.get("target_id") == target_id)
+        ]
+        paged = filtered[offset : offset + limit]
+        return {
+            "records": paged,
+            "total_count": len(filtered),
+            "returned_count": len(paged),
+            "offset": offset,
+            "limit": limit,
+            "claim_boundary": (
+                "candidate/plausible explanation only; not a verified root-cause label"
+            ),
+        }
 
 
 @pytest.fixture(autouse=True)
@@ -147,6 +209,16 @@ def test_upload_run_route_persists_a_run_manifest(tmp_path: Path, monkeypatch) -
     assert len(payload["cases"]) == 2
     assert all("path_graph" in case for case in payload["cases"])
     assert all("review_targets" in case for case in payload["cases"])
+    assert all(case.get("case_label") for case in payload["cases"])
+    assert all(case.get("label") for case in payload["cases"])
+    assert all(isinstance(case.get("generated_evidence"), dict) for case in payload["cases"])
+    assert all(case["generated_evidence"].get("source") == "image" for case in payload["cases"])
+    assert all(case["generated_evidence"].get("observations") for case in payload["cases"])
+    assert all(case["top_k_paths"][0].get("support_obs_ids") for case in payload["cases"])
+    assert all(
+        case["ranked_root_causes"][0].get("support_evidence_ids")
+        for case in payload["cases"]
+    )
 
     run_id = payload["run"]["run_id"]
     assert not (tmp_path / "run_artifacts" / run_id / "manifest.json").exists()
@@ -162,6 +234,35 @@ def test_upload_run_route_persists_a_run_manifest(tmp_path: Path, monkeypatch) -
     assert payload["source_edge_provenance"]
     assert any(target["target_type"] == "path" for target in payload["review_targets"])
     assert all("target_key" in target for target in payload["review_targets"])
+
+
+def test_upload_run_route_rejects_incompatible_reasoning_profile(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """The upload route should reject explicit profiles that do not support the dataset."""
+    original = service_api.create_run_from_upload
+
+    def _patched_create_run_from_upload(*args, **kwargs):
+        kwargs["runs_dir"] = tmp_path / "run_artifacts"
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
+    client = TestClient(app)
+    with Path("data/examples/records/mvtec_records.jsonl").open("rb") as handle:
+        response = client.post(
+            "/api/runs/upload",
+            files={"file": ("mvtec_records.jsonl", handle, "application/jsonl")},
+            data={
+                "mode": "records",
+                "dataset": "mvtec",
+                "reasoning_profile_id": "tep_root_kgd_default",
+                "top_k": "2",
+            },
+        )
+
+    assert response.status_code == 400
+    assert "not compatible with dataset mvtec" in response.json()["detail"]
 
 
 def test_default_upload_run_persists_detail_to_postgres(
@@ -182,6 +283,19 @@ def test_default_upload_run_persists_detail_to_postgres(
     uuid.UUID(detail.run.run_id)
     assert postgres_run_store_fixture.details[detail.run.run_id].run.run_id == detail.run.run_id
     assert not (Path(detail.run.run_dir) / "manifest.json").exists()
+    assert len(detail.cases) == 1
+    assert detail.cases[0]["case_id"] == detail.evidence["case_id"]
+    assert detail.cases[0]["case_label"]
+    assert detail.cases[0]["generated_evidence"]["case_id"] == detail.evidence["case_id"]
+    reloaded = service_runs.get_run_detail(detail.run.run_id)
+    assert len(reloaded.cases) == 1
+    assert reloaded.cases[0]["case_id"] == detail.evidence["case_id"]
+    assert reloaded.cases[0]["case_label"]
+    assert reloaded.cases[0]["generated_evidence"]["observations"]
+    assert reloaded.cases[0]["top_k_paths"][0]["support_obs_ids"]
+    assert reloaded.cases[0]["ranked_root_causes"][0]["support_evidence_ids"]
+    assert reloaded.cases[0]["path_graph"]["path_count"] >= 1
+    assert reloaded.cases[0]["review_targets"]
 
 
 def test_upload_run_uses_tep_root_kgd_reasoner(
@@ -202,11 +316,41 @@ def test_upload_run_uses_tep_root_kgd_reasoner(
     assert detail.run.dataset == "tep"
     assert detail.summary is not None
     assert detail.summary["pipeline"]["tep_rca_reasoner"] == "tep_root_kgd"
+    assert detail.summary["pipeline"]["reasoning_profile_id"] == "tep_root_kgd_default"
+    assert detail.summary["pipeline"]["selection_mode"] == "default"
     assert detail.cases is not None
     ranked = detail.cases[0]["ranked_root_causes"]
     assert ranked
     assert ranked[0]["candidate_id"] == "faultanchor:stream_1_a_feed_loss"
     assert ranked[0]["scoring_method"] == "tep_root_kgd"
+
+
+def test_upload_run_accepts_explicit_generic_reasoning_profile_for_tep(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TEP record uploads should support an explicit generic graph-path profile."""
+    monkeypatch.setattr(service_runs, "DEFAULT_RUNS_DIR", tmp_path / "rootlens_sessions")
+
+    detail = service_runs.create_run_from_upload(
+        "tep_records.jsonl",
+        _tep_record_jsonl_bytes(),
+        mode="records",
+        dataset="tep",
+        top_k=2,
+        reasoning_profile_id="generic_graph_path_default",
+    )
+
+    assert detail.summary is not None
+    assert detail.summary["pipeline"]["reasoning_profile_id"] == "generic_graph_path_default"
+    assert detail.summary["pipeline"]["reasoner_adapter"] == "generic_graph_path"
+    assert detail.summary["pipeline"]["selection_mode"] == "explicit"
+    assert (
+        detail.cases[0]["reasoning_metadata"]["reasoning_profile_id"]
+        == "generic_graph_path_default"
+    )
+    assert detail.cases[0]["reasoning_metadata"]["selection_mode"] == "explicit"
+    assert detail.cases[0]["ranked_root_causes"][0]["scoring_method"] == "relation_weighted_path"
 
 
 def test_kg_construction_build_route_writes_runtime_artifacts(
@@ -775,6 +919,159 @@ def test_kg_material_routes_upload_register_and_list(
     }
 
 
+def test_kg_material_read_side_routes_expose_chunks_runs_and_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Material routes should expose extraction chunks, runs, and artifacts."""
+    material_root = tmp_path / "materials"
+    monkeypatch.setattr(
+        service_kg_materials,
+        "DEFAULT_SOURCE_KG_MATERIAL_DIR",
+        material_root,
+    )
+    original_extract = service_api.extract_kg_material_to_structured_records
+
+    class FakeIEClient:
+        def extract_candidates(self, chunk, *, prompt: str, response_schema: dict[str, object]):
+            del prompt, response_schema
+            return {
+                "entities": [
+                    {
+                        "id": "PumpCavitation",
+                        "name": "Pump cavitation",
+                        "label": "FaultEvent",
+                        "evidence": "Pump cavitation",
+                    },
+                    {
+                        "id": "SealWear",
+                        "name": "Seal wear",
+                        "label": "RootCause",
+                        "evidence": "seal wear",
+                    },
+                ],
+                "relations": [
+                    {
+                        "head": "PumpCavitation",
+                        "relation": "SUGGESTS_ROOT_CAUSE",
+                        "tail": "SealWear",
+                        "evidence": chunk.text,
+                        "confidence": 0.55,
+                    }
+                ],
+            }
+
+    def _patched_extract(material_id: str, request=None):
+        return original_extract(
+            material_id,
+            request or service_kg_materials.KGMaterialExtractionRunRequest(),
+            client=FakeIEClient(),
+        )
+
+    monkeypatch.setattr(service_api, "extract_kg_material_to_structured_records", _patched_extract)
+    client = TestClient(app)
+
+    upload = client.post(
+        "/api/kg/materials/upload",
+        files={"file": ("pump_note.txt", "Pump cavitation indicates seal wear.", "text/plain")},
+        data={
+            "title": "Pump note",
+            "scenario": "tep",
+            "source_type": "text",
+            "material_id": "pump_note",
+        },
+    )
+    assert upload.status_code == 200
+
+    extract = client.post(
+        "/api/kg/materials/pump_note/extract",
+        json={"overwrite": True},
+    )
+    assert extract.status_code == 200
+
+    chunks = client.get("/api/kg/materials/pump_note/chunks")
+    runs = client.get("/api/kg/materials/pump_note/extractions")
+    artifacts = client.get("/api/kg/materials/pump_note/artifacts")
+
+    assert chunks.status_code == 200
+    assert chunks.json()["count"] >= 1
+    assert chunks.json()["chunks"][0]["material_id"] == "pump_note"
+    assert runs.status_code == 200
+    assert runs.json()["count"] == 1
+    assert runs.json()["runs"][0]["status"] == "extracted"
+    assert artifacts.status_code == 200
+    assert artifacts.json()["count"] == 1
+    assert artifacts.json()["artifacts"][0]["artifact_type"] == "structured_records"
+
+
+
+def test_kg_draft_history_route_lists_append_only_records(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Draft route should expose append-only history without source-draft previews."""
+    draft_path = tmp_path / "kg_drafts.jsonl"
+    original_record_draft = service_api.record_kg_draft
+    original_list_drafts = service_api.list_kg_drafts
+
+    def _patched_record_draft(request):
+        return original_record_draft(request, output_path=draft_path)
+
+    def _patched_list_drafts(request):
+        return original_list_drafts(request, input_path=draft_path)
+
+    monkeypatch.setattr(service_api, "record_kg_draft", _patched_record_draft)
+    monkeypatch.setattr(service_api, "list_kg_drafts", _patched_list_drafts)
+    client = TestClient(app)
+
+    source_preview = client.post(
+        "/api/kg/source-draft",
+        json={
+            "source_id": "preview_source",
+            "source_text": (
+                "ScratchDefect,SUGGESTS_PLAUSIBLE_MECHANISM,"
+                "MechanicalContact,mvtec,preview evidence"
+            ),
+            "provider": "heuristic",
+            "default_scenario": "mvtec",
+            "confidence": 0.55,
+        },
+    )
+    assert source_preview.status_code == 200
+
+    empty_history = client.get("/api/kg/drafts")
+    assert empty_history.status_code == 200
+    assert empty_history.json()["total_count"] == 0
+
+    recorded = client.post(
+        "/api/kg/drafts",
+        json={
+            "target_type": "edge",
+            "target_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+            "target_key": "edge:ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+            "draft_action": "revise",
+            "proposed_relation": "SUGGESTS_PLAUSIBLE_MECHANISM",
+            "note": "Prefer weaker wording.",
+            "source": "rootlens-kg-studio",
+        },
+    )
+    assert recorded.status_code == 200
+
+    history = client.get(
+        "/api/kg/drafts",
+        params={"target_key": "edge:ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec"},
+    )
+    assert history.status_code == 200
+    payload = history.json()
+    assert payload["total_count"] == 1
+    assert payload["returned_count"] == 1
+    assert (
+        payload["records"][0]["target_key"]
+        == "edge:ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec"
+    )
+    assert payload["claim_boundary"].startswith("KG draft records are append-only")
+
+
 def test_kg_material_build_sources_feed_existing_construction_pipeline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -890,7 +1187,44 @@ def test_upload_run_prepares_visual_evidence_artifacts(
 
     monkeypatch.setattr(service_api, "create_run_from_upload", _patched_create_run_from_upload)
     monkeypatch.setattr(service_api, "get_run_artifact_path", _patched_get_run_artifact_path)
+    monkeypatch.setattr(service_visual_evidence, "PROJECT_ROOT", tmp_path.resolve())
     client = TestClient(app)
+
+    image_path = (
+        tmp_path
+        / "runs"
+        / "real_model_pipeline"
+        / "assets"
+        / "mvtec"
+        / "input_root"
+        / "capsule"
+        / "test"
+        / "crack"
+        / "000.png"
+    )
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(np.array([[0, 255], [255, 0]], dtype=np.uint8), mode="L").save(image_path)
+    mask_path = (
+        tmp_path
+        / "runs"
+        / "real_model_pipeline"
+        / "assets"
+        / "mvtec"
+        / "generated_records"
+        / "mvtec_capsule_test_crack_000_mask.json"
+    )
+    mask_path.parent.mkdir(parents=True, exist_ok=True)
+    mask_path.write_text(json.dumps([[0, 1], [0, 1]]), encoding="utf-8")
+    heatmap_path = (
+        tmp_path
+        / "runs"
+        / "real_model_pipeline"
+        / "assets"
+        / "mvtec"
+        / "generated_records"
+        / "mvtec_capsule_test_crack_000_heatmap.json"
+    )
+    heatmap_path.write_text(json.dumps([[0.1, 0.6], [0.2, 0.8]]), encoding="utf-8")
 
     mvtec_record = {
         "dataset": "mvtec",
@@ -947,11 +1281,30 @@ def test_upload_run_prepares_visual_evidence_artifacts(
     assert all(
         item["url"].startswith(artifact_prefix) for item in visual_items if item["available"]
     )
+    assert all(
+        item["preview_path"].startswith(artifact_prefix)
+        for item in visual_items
+        if item["available"]
+    )
+    assert any(
+        item["metadata"].get("server_preview_path") for item in visual_items if item["available"]
+    )
+    case_visuals = {
+        case["case_id"]: case.get("visual_evidence", [])
+        for case in payload["cases"]
+    }
+    assert any(item["kind"] == "image" for item in case_visuals["mvtec_visual_fixture"])
+    assert any(item["kind"] == "wafer_map" for item in case_visuals["wafer_visual_fixture"])
 
     first_url = next(item["url"] for item in visual_items if item["kind"] == "wafer_map")
     artifact_response = client.get(first_url)
     assert artifact_response.status_code == 200
     assert artifact_response.headers["content-type"] == "image/png"
+
+    blocked_input_response = client.get(
+        f"/api/runs/{payload['run']['run_id']}/artifacts/visual_records.jsonl"
+    )
+    assert blocked_input_response.status_code == 404
 
 
 def test_default_run_store_reads_configured_store() -> None:
@@ -1057,6 +1410,33 @@ def test_dashboard_bootstrap_route_exposes_contract(monkeypatch) -> None:
         "edge",
         "entity_link",
         "correction",
+        "root_cause_candidate",
+    ]
+    assert payload["reasoning_profile_options"]["mvtec"] == [
+        {
+            "profile_id": "generic_graph_path_default",
+            "reasoner_adapter": "generic_graph_path",
+            "default": True,
+        }
+    ]
+    assert payload["reasoning_profile_options"]["wafer"] == [
+        {
+            "profile_id": "generic_graph_path_default",
+            "reasoner_adapter": "generic_graph_path",
+            "default": True,
+        }
+    ]
+    assert payload["reasoning_profile_options"]["tep"] == [
+        {
+            "profile_id": "generic_graph_path_default",
+            "reasoner_adapter": "generic_graph_path",
+            "default": False,
+        },
+        {
+            "profile_id": "tep_root_kgd_default",
+            "reasoner_adapter": "tep_root_kgd",
+            "default": True,
+        },
     ]
     assert "presets" in payload["mvtec_model_presets"]
 
@@ -1378,6 +1758,47 @@ def test_review_feedback_contract_accepts_dashboard_actions() -> None:
     assert saved["action"] == "needs_review"
     assert saved["note"] == "expert wants source checked"
     assert saved["source"] == "rootlens-dashboard"
+
+
+def test_feedback_ledger_route_returns_filtered_records() -> None:
+    """The feedback ledger route should return append-only records using RootLens fields."""
+    client = TestClient(app)
+
+    post_response = client.post(
+        "/api/feedback",
+        json={
+            "run_id": "33333333-3333-3333-3333-333333333333",
+            "case_id": "mvtec_0001",
+            "target_type": "root_cause_candidate",
+            "target_id": "rca_tep_0001_reactorcoolingfault",
+            "action": "needs_review",
+            "note": "expert wants source checked",
+            "reviewer": "analyst",
+            "source": "rootlens-dashboard",
+            "metadata": {"target_key": "root_cause_candidate:rca_tep_0001_reactorcoolingfault"},
+        },
+    )
+
+    assert post_response.status_code == 200
+    ledger_response = client.get(
+        "/api/feedback",
+        params={
+            "run_id": "33333333-3333-3333-3333-333333333333",
+            "case_id": "mvtec_0001",
+            "target_type": "root_cause_candidate",
+        },
+    )
+
+    assert ledger_response.status_code == 200
+    payload = ledger_response.json()
+    assert payload["total_count"] == 1
+    assert payload["returned_count"] == 1
+    record = payload["records"][0]
+    assert record["target_type"] == "root_cause_candidate"
+    assert record["action"] == "needs_review"
+    assert record["source"] == "rootlens-dashboard"
+    assert record["target_key"] == "root_cause_candidate:rca_tep_0001_reactorcoolingfault"
+    assert payload["claim_boundary"].startswith("candidate/plausible explanation")
 
 
 def test_feedback_record_defaults_to_postgres_store(monkeypatch) -> None:

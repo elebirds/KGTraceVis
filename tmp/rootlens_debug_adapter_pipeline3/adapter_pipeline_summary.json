@@ -1,0 +1,1524 @@
+{
+  "artifact_type": "adapter_pipeline_v0",
+  "artifact_scope": "generated_reproducibility_output",
+  "explanation_scope": "candidate_plausible_explanation_not_verified_rca",
+  "generated_at": "2026-05-17T04:04:05.085188+00:00",
+  "input": {
+    "record_path": "/Users/bytedance/my_project/RootLens/src/test_file/01_analysis_records_mvtec.jsonl",
+    "dataset_override": "mvtec"
+  },
+  "output": {
+    "output_dir": "tmp/rootlens_debug_adapter_pipeline3",
+    "evidence_dir": "tmp/rootlens_debug_adapter_pipeline3/evidence",
+    "summary_path": "tmp/rootlens_debug_adapter_pipeline3/adapter_pipeline_summary.json",
+    "table_path": "tmp/rootlens_debug_adapter_pipeline3/adapter_pipeline_table.csv",
+    "evidence_paths": [
+      "tmp/rootlens_debug_adapter_pipeline3/evidence/mvtec_fixture_clean_scratch.json",
+      "tmp/rootlens_debug_adapter_pipeline3/evidence/mvtec_fixture_mask_fallback.json"
+    ]
+  },
+  "pipeline": {
+    "name": "KGTracePipeline",
+    "kg_backend": "neo4j_runtime",
+    "top_k": 5,
+    "kg_node_paths": [],
+    "kg_edge_paths": [],
+    "tep_rca_reasoner": "tep_root_kgd"
+  },
+  "note": "Path targets are candidate/plausible explanation nodes generated from source-constrained KG edges; they are not verified process RCA claims.",
+  "case_count": 2,
+  "cases": [
+    {
+      "case_id": "mvtec_fixture_clean_scratch",
+      "dataset": "mvtec",
+      "source": "image",
+      "adapter_name": "mvtec",
+      "generated_evidence_path": "tmp/rootlens_debug_adapter_pipeline3/evidence/mvtec_fixture_clean_scratch.json",
+      "generated_evidence": {
+        "case_id": "mvtec_fixture_clean_scratch",
+        "dataset": "mvtec",
+        "object": "bottle",
+        "anomaly_type": "scratch",
+        "location": "surface",
+        "morphology": "linear",
+        "severity": 0.18,
+        "confidence": 0.86,
+        "observation_count": 6
+      },
+      "linked_entity_count": 4,
+      "linked_entities": [
+        {
+          "link_id": "link_mvtec_fixture_clean_scratch_object_bottle",
+          "field": "object",
+          "mention": "bottle",
+          "selected_entity_id": "BottleObject",
+          "score": 0.98,
+          "match_type": "exact_name",
+          "ambiguous": false,
+          "ambiguity_margin": 0.2086,
+          "candidates": [
+            {
+              "entity_id": "BottleObject",
+              "name": "Bottle",
+              "label": "Object",
+              "scenario": "mvtec",
+              "score": 0.98,
+              "match_type": "exact_name",
+              "matched_term": "BottleObject"
+            },
+            {
+              "entity_id": "TileObject",
+              "name": "Tile",
+              "label": "Object",
+              "scenario": "mvtec",
+              "score": 0.7714,
+              "match_type": "fuzzy",
+              "matched_term": "Tile"
+            }
+          ],
+          "obs_id": "obs_mvtec_fixture_clean_scratch_object_bottle",
+          "facet": "object"
+        },
+        {
+          "link_id": "link_mvtec_fixture_clean_scratch_anomaly_type_scratch",
+          "field": "anomaly_type",
+          "mention": "scratch",
+          "selected_entity_id": "ScratchDefect",
+          "score": 0.95,
+          "match_type": "alias",
+          "ambiguous": true,
+          "ambiguity_margin": 0.0,
+          "candidates": [
+            {
+              "entity_id": "ScratchDefect",
+              "name": "Scratch defect",
+              "label": "AnomalyType",
+              "scenario": "mvtec",
+              "score": 0.95,
+              "match_type": "alias",
+              "matched_term": "scratch"
+            },
+            {
+              "entity_id": "ScratchHeadDefect",
+              "name": "Scratch head defect",
+              "label": "AnomalyType",
+              "scenario": "mvtec",
+              "score": 0.95,
+              "match_type": "alias",
+              "matched_term": "scratch"
+            },
+            {
+              "entity_id": "ScratchNeckDefect",
+              "name": "Scratch neck defect",
+              "label": "AnomalyType",
+              "scenario": "mvtec",
+              "score": 0.95,
+              "match_type": "alias",
+              "matched_term": "scratch"
+            }
+          ],
+          "obs_id": "obs_mvtec_fixture_clean_scratch_anomaly_type_scratch",
+          "facet": "anomaly_type"
+        },
+        {
+          "link_id": "link_mvtec_fixture_clean_scratch_location_surface",
+          "field": "location",
+          "mention": "surface",
+          "selected_entity_id": "SurfaceLocation",
+          "score": 0.95,
+          "match_type": "alias",
+          "ambiguous": false,
+          "ambiguity_margin": null,
+          "candidates": [
+            {
+              "entity_id": "SurfaceLocation",
+              "name": "Surface location",
+              "label": "Location",
+              "scenario": "mvtec",
+              "score": 0.95,
+              "match_type": "alias",
+              "matched_term": "surface"
+            }
+          ],
+          "obs_id": "obs_mvtec_fixture_clean_scratch_location_surface",
+          "facet": "location"
+        },
+        {
+          "link_id": "link_mvtec_fixture_clean_scratch_morphology_linear",
+          "field": "morphology",
+          "mention": "linear",
+          "selected_entity_id": "LinearMorphology",
+          "score": 0.95,
+          "match_type": "alias",
+          "ambiguous": false,
+          "ambiguity_margin": null,
+          "candidates": [
+            {
+              "entity_id": "LinearMorphology",
+              "name": "Linear morphology",
+              "label": "Morphology",
+              "scenario": "mvtec",
+              "score": 0.95,
+              "match_type": "alias",
+              "matched_term": "linear"
+            }
+          ],
+          "obs_id": "obs_mvtec_fixture_clean_scratch_morphology_linear",
+          "facet": "morphology"
+        }
+      ],
+      "consistency_score": 1.0,
+      "inconsistent_fields": [],
+      "correction_candidates": [],
+      "top_k_paths": [
+        {
+          "path_id": "path_mvtec_fixture_clean_scratch_742df5e1c9",
+          "source_entity_id": "ScratchDefect",
+          "target_entity_id": "MechanicalContact",
+          "nodes": [
+            "ScratchDefect",
+            "MechanicalContact"
+          ],
+          "node_names": [
+            "Scratch defect",
+            "Mechanical contact"
+          ],
+          "relations": [
+            "HAS_PLAUSIBLE_CAUSE"
+          ],
+          "score": 0.48,
+          "confidence": 0.75,
+          "evidence_match": 0.25,
+          "length": 1,
+          "supporting_evidence": [
+            "Scratch is a linear surface defect consistent with contact damage"
+          ],
+          "source_edge_ids": [
+            "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        },
+        {
+          "path_id": "path_mvtec_fixture_clean_scratch_1d95ec6da3",
+          "source_entity_id": "ScratchDefect",
+          "target_entity_id": "HandlingDamage",
+          "nodes": [
+            "ScratchDefect",
+            "MechanicalContact",
+            "HandlingDamage"
+          ],
+          "node_names": [
+            "Scratch defect",
+            "Mechanical contact",
+            "Handling damage"
+          ],
+          "relations": [
+            "HAS_PLAUSIBLE_CAUSE",
+            "PART_OF"
+          ],
+          "score": 0.4462,
+          "confidence": 0.725,
+          "evidence_match": 0.25,
+          "length": 2,
+          "supporting_evidence": [
+            "Scratch is a linear surface defect consistent with contact damage",
+            "Mechanical contact is grouped under handling-related damage"
+          ],
+          "source_edge_ids": [
+            "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+            "MechanicalContact|PART_OF|HandlingDamage|mvtec"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            },
+            {
+              "edge_id": "MechanicalContact|PART_OF|HandlingDamage|mvtec",
+              "head": "MechanicalContact",
+              "relation": "PART_OF",
+              "tail": "HandlingDamage",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Mechanical contact is grouped under handling-related damage",
+              "confidence": 0.7,
+              "weight": 0.3,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        },
+        {
+          "path_id": "path_mvtec_fixture_clean_scratch_951a9bc496",
+          "source_entity_id": "ScratchDefect",
+          "target_entity_id": "SurfaceWear",
+          "nodes": [
+            "ScratchDefect",
+            "SurfaceWear"
+          ],
+          "node_names": [
+            "Scratch defect",
+            "Surface wear"
+          ],
+          "relations": [
+            "HAS_PLAUSIBLE_CAUSE"
+          ],
+          "score": 0.4085,
+          "confidence": 0.62,
+          "evidence_match": 0.25,
+          "length": 1,
+          "supporting_evidence": [
+            "Repeated surface abrasion can produce shallow scratch-like marks"
+          ],
+          "source_edge_ids": [
+            "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "SurfaceWear",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Repeated surface abrasion can produce shallow scratch-like marks",
+              "confidence": 0.62,
+              "weight": 0.38,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        }
+      ],
+      "ranked_root_causes": [
+        {
+          "ranking_id": "rca_mvtec_fixture_clean_scratch_mechanicalcontact",
+          "rank": 1,
+          "candidate_id": "MechanicalContact",
+          "candidate_name": "Mechanical contact",
+          "candidate_label": "RootCause",
+          "candidate_role": "path_target",
+          "score": 0.48,
+          "confidence": 0.75,
+          "evidence_match": 0.25,
+          "explanation_paths": [
+            {
+              "path_id": "path_mvtec_fixture_clean_scratch_742df5e1c9",
+              "source_entity_id": "ScratchDefect",
+              "target_entity_id": "MechanicalContact",
+              "nodes": [
+                "ScratchDefect",
+                "MechanicalContact"
+              ],
+              "node_names": [
+                "Scratch defect",
+                "Mechanical contact"
+              ],
+              "relations": [
+                "HAS_PLAUSIBLE_CAUSE"
+              ],
+              "score": 0.48,
+              "confidence": 0.75,
+              "evidence_match": 0.25,
+              "length": 1,
+              "supporting_evidence": [
+                "Scratch is a linear surface defect consistent with contact damage"
+              ],
+              "source_edge_ids": [
+                "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec"
+              ],
+              "source_edges": [
+                {
+                  "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+                  "head": "ScratchDefect",
+                  "relation": "HAS_PLAUSIBLE_CAUSE",
+                  "tail": "MechanicalContact",
+                  "scenario": "mvtec",
+                  "source": "manual_curation",
+                  "evidence": "Scratch is a linear surface defect consistent with contact damage",
+                  "confidence": 0.75,
+                  "weight": 0.25,
+                  "review_status": "reviewed",
+                  "feedback_count": 0,
+                  "accepted_count": 0,
+                  "rejected_count": 0
+                }
+              ]
+            }
+          ],
+          "supporting_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ],
+          "supporting_evidence": [
+            {
+              "evidence_id": "path_mvtec_fixture_clean_scratch_742df5e1c9_evidence_1",
+              "source": "kg_path_edge",
+              "text": "Scratch is a linear surface defect consistent with contact damage"
+            }
+          ],
+          "scoring_method": "relation_weighted_path",
+          "scoring_details": {
+            "source_path_ids": [
+              "path_mvtec_fixture_clean_scratch_742df5e1c9"
+            ]
+          },
+          "source": "top_k_paths_projection",
+          "review_status": "auto"
+        },
+        {
+          "ranking_id": "rca_mvtec_fixture_clean_scratch_handlingdamage",
+          "rank": 2,
+          "candidate_id": "HandlingDamage",
+          "candidate_name": "Handling damage",
+          "candidate_label": "RootCause",
+          "candidate_role": "path_target",
+          "score": 0.4462,
+          "confidence": 0.725,
+          "evidence_match": 0.25,
+          "explanation_paths": [
+            {
+              "path_id": "path_mvtec_fixture_clean_scratch_1d95ec6da3",
+              "source_entity_id": "ScratchDefect",
+              "target_entity_id": "HandlingDamage",
+              "nodes": [
+                "ScratchDefect",
+                "MechanicalContact",
+                "HandlingDamage"
+              ],
+              "node_names": [
+                "Scratch defect",
+                "Mechanical contact",
+                "Handling damage"
+              ],
+              "relations": [
+                "HAS_PLAUSIBLE_CAUSE",
+                "PART_OF"
+              ],
+              "score": 0.4462,
+              "confidence": 0.725,
+              "evidence_match": 0.25,
+              "length": 2,
+              "supporting_evidence": [
+                "Scratch is a linear surface defect consistent with contact damage",
+                "Mechanical contact is grouped under handling-related damage"
+              ],
+              "source_edge_ids": [
+                "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+                "MechanicalContact|PART_OF|HandlingDamage|mvtec"
+              ],
+              "source_edges": [
+                {
+                  "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+                  "head": "ScratchDefect",
+                  "relation": "HAS_PLAUSIBLE_CAUSE",
+                  "tail": "MechanicalContact",
+                  "scenario": "mvtec",
+                  "source": "manual_curation",
+                  "evidence": "Scratch is a linear surface defect consistent with contact damage",
+                  "confidence": 0.75,
+                  "weight": 0.25,
+                  "review_status": "reviewed",
+                  "feedback_count": 0,
+                  "accepted_count": 0,
+                  "rejected_count": 0
+                },
+                {
+                  "edge_id": "MechanicalContact|PART_OF|HandlingDamage|mvtec",
+                  "head": "MechanicalContact",
+                  "relation": "PART_OF",
+                  "tail": "HandlingDamage",
+                  "scenario": "mvtec",
+                  "source": "manual_curation",
+                  "evidence": "Mechanical contact is grouped under handling-related damage",
+                  "confidence": 0.7,
+                  "weight": 0.3,
+                  "review_status": "reviewed",
+                  "feedback_count": 0,
+                  "accepted_count": 0,
+                  "rejected_count": 0
+                }
+              ]
+            }
+          ],
+          "supporting_edges": [
+            {
+              "edge_id": "MechanicalContact|PART_OF|HandlingDamage|mvtec",
+              "head": "MechanicalContact",
+              "relation": "PART_OF",
+              "tail": "HandlingDamage",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Mechanical contact is grouped under handling-related damage",
+              "confidence": 0.7,
+              "weight": 0.3,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            },
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ],
+          "supporting_evidence": [
+            {
+              "evidence_id": "path_mvtec_fixture_clean_scratch_1d95ec6da3_evidence_1",
+              "source": "kg_path_edge",
+              "text": "Scratch is a linear surface defect consistent with contact damage"
+            },
+            {
+              "evidence_id": "path_mvtec_fixture_clean_scratch_1d95ec6da3_evidence_2",
+              "source": "kg_path_edge",
+              "text": "Mechanical contact is grouped under handling-related damage"
+            }
+          ],
+          "scoring_method": "relation_weighted_path",
+          "scoring_details": {
+            "source_path_ids": [
+              "path_mvtec_fixture_clean_scratch_1d95ec6da3"
+            ]
+          },
+          "source": "top_k_paths_projection",
+          "review_status": "auto"
+        },
+        {
+          "ranking_id": "rca_mvtec_fixture_clean_scratch_surfacewear",
+          "rank": 3,
+          "candidate_id": "SurfaceWear",
+          "candidate_name": "Surface wear",
+          "candidate_label": "RootCause",
+          "candidate_role": "path_target",
+          "score": 0.4085,
+          "confidence": 0.62,
+          "evidence_match": 0.25,
+          "explanation_paths": [
+            {
+              "path_id": "path_mvtec_fixture_clean_scratch_951a9bc496",
+              "source_entity_id": "ScratchDefect",
+              "target_entity_id": "SurfaceWear",
+              "nodes": [
+                "ScratchDefect",
+                "SurfaceWear"
+              ],
+              "node_names": [
+                "Scratch defect",
+                "Surface wear"
+              ],
+              "relations": [
+                "HAS_PLAUSIBLE_CAUSE"
+              ],
+              "score": 0.4085,
+              "confidence": 0.62,
+              "evidence_match": 0.25,
+              "length": 1,
+              "supporting_evidence": [
+                "Repeated surface abrasion can produce shallow scratch-like marks"
+              ],
+              "source_edge_ids": [
+                "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec"
+              ],
+              "source_edges": [
+                {
+                  "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+                  "head": "ScratchDefect",
+                  "relation": "HAS_PLAUSIBLE_CAUSE",
+                  "tail": "SurfaceWear",
+                  "scenario": "mvtec",
+                  "source": "manual_curation",
+                  "evidence": "Repeated surface abrasion can produce shallow scratch-like marks",
+                  "confidence": 0.62,
+                  "weight": 0.38,
+                  "review_status": "reviewed",
+                  "feedback_count": 0,
+                  "accepted_count": 0,
+                  "rejected_count": 0
+                }
+              ]
+            }
+          ],
+          "supporting_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "SurfaceWear",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Repeated surface abrasion can produce shallow scratch-like marks",
+              "confidence": 0.62,
+              "weight": 0.38,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ],
+          "supporting_evidence": [
+            {
+              "evidence_id": "path_mvtec_fixture_clean_scratch_951a9bc496_evidence_1",
+              "source": "kg_path_edge",
+              "text": "Repeated surface abrasion can produce shallow scratch-like marks"
+            }
+          ],
+          "scoring_method": "relation_weighted_path",
+          "scoring_details": {
+            "source_path_ids": [
+              "path_mvtec_fixture_clean_scratch_951a9bc496"
+            ]
+          },
+          "source": "top_k_paths_projection",
+          "review_status": "auto"
+        }
+      ],
+      "candidate_plausible_explanation_targets": [
+        {
+          "target_entity_id": "MechanicalContact",
+          "target_name": "Mechanical contact",
+          "target_label": "RootCause",
+          "interpretation": "candidate_plausible_explanation",
+          "best_score": 0.48,
+          "supporting_path_ids": [
+            "path_mvtec_fixture_clean_scratch_742df5e1c9"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        },
+        {
+          "target_entity_id": "HandlingDamage",
+          "target_name": "Handling damage",
+          "target_label": "CauseCategory",
+          "interpretation": "candidate_plausible_explanation",
+          "best_score": 0.4462,
+          "supporting_path_ids": [
+            "path_mvtec_fixture_clean_scratch_1d95ec6da3"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            },
+            {
+              "edge_id": "MechanicalContact|PART_OF|HandlingDamage|mvtec",
+              "head": "MechanicalContact",
+              "relation": "PART_OF",
+              "tail": "HandlingDamage",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Mechanical contact is grouped under handling-related damage",
+              "confidence": 0.7,
+              "weight": 0.3,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        },
+        {
+          "target_entity_id": "SurfaceWear",
+          "target_name": "Surface wear",
+          "target_label": "RootCause",
+          "interpretation": "candidate_plausible_explanation",
+          "best_score": 0.4085,
+          "supporting_path_ids": [
+            "path_mvtec_fixture_clean_scratch_951a9bc496"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "SurfaceWear",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Repeated surface abrasion can produce shallow scratch-like marks",
+              "confidence": 0.62,
+              "weight": 0.38,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        }
+      ],
+      "source_edge_provenance": [
+        {
+          "edge_id": "MechanicalContact|PART_OF|HandlingDamage|mvtec",
+          "head": "MechanicalContact",
+          "relation": "PART_OF",
+          "tail": "HandlingDamage",
+          "scenario": "mvtec",
+          "source": "manual_curation",
+          "evidence": "Mechanical contact is grouped under handling-related damage",
+          "confidence": 0.7,
+          "weight": 0.3,
+          "review_status": "reviewed",
+          "feedback_count": 0,
+          "accepted_count": 0,
+          "rejected_count": 0
+        },
+        {
+          "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+          "head": "ScratchDefect",
+          "relation": "HAS_PLAUSIBLE_CAUSE",
+          "tail": "MechanicalContact",
+          "scenario": "mvtec",
+          "source": "manual_curation",
+          "evidence": "Scratch is a linear surface defect consistent with contact damage",
+          "confidence": 0.75,
+          "weight": 0.25,
+          "review_status": "reviewed",
+          "feedback_count": 0,
+          "accepted_count": 0,
+          "rejected_count": 0
+        },
+        {
+          "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+          "head": "ScratchDefect",
+          "relation": "HAS_PLAUSIBLE_CAUSE",
+          "tail": "SurfaceWear",
+          "scenario": "mvtec",
+          "source": "manual_curation",
+          "evidence": "Repeated surface abrasion can produce shallow scratch-like marks",
+          "confidence": 0.62,
+          "weight": 0.38,
+          "review_status": "reviewed",
+          "feedback_count": 0,
+          "accepted_count": 0,
+          "rejected_count": 0
+        }
+      ],
+      "claim_boundary": "candidate/plausible explanation only; not a verified root-cause label"
+    },
+    {
+      "case_id": "mvtec_fixture_mask_fallback",
+      "dataset": "mvtec",
+      "source": "image",
+      "adapter_name": "mvtec",
+      "generated_evidence_path": "tmp/rootlens_debug_adapter_pipeline3/evidence/mvtec_fixture_mask_fallback.json",
+      "generated_evidence": {
+        "case_id": "mvtec_fixture_mask_fallback",
+        "dataset": "mvtec",
+        "object": "bottle",
+        "anomaly_type": "scratch",
+        "location": "surface",
+        "morphology": "linear",
+        "severity": 0.16,
+        "confidence": 0.81,
+        "observation_count": 6
+      },
+      "linked_entity_count": 4,
+      "linked_entities": [
+        {
+          "link_id": "link_mvtec_fixture_mask_fallback_object_bottle",
+          "field": "object",
+          "mention": "bottle",
+          "selected_entity_id": "BottleObject",
+          "score": 0.98,
+          "match_type": "exact_name",
+          "ambiguous": false,
+          "ambiguity_margin": 0.2086,
+          "candidates": [
+            {
+              "entity_id": "BottleObject",
+              "name": "Bottle",
+              "label": "Object",
+              "scenario": "mvtec",
+              "score": 0.98,
+              "match_type": "exact_name",
+              "matched_term": "BottleObject"
+            },
+            {
+              "entity_id": "TileObject",
+              "name": "Tile",
+              "label": "Object",
+              "scenario": "mvtec",
+              "score": 0.7714,
+              "match_type": "fuzzy",
+              "matched_term": "Tile"
+            }
+          ],
+          "obs_id": "obs_mvtec_fixture_mask_fallback_object_bottle",
+          "facet": "object"
+        },
+        {
+          "link_id": "link_mvtec_fixture_mask_fallback_anomaly_type_scratch",
+          "field": "anomaly_type",
+          "mention": "scratch",
+          "selected_entity_id": "ScratchDefect",
+          "score": 0.95,
+          "match_type": "alias",
+          "ambiguous": true,
+          "ambiguity_margin": 0.0,
+          "candidates": [
+            {
+              "entity_id": "ScratchDefect",
+              "name": "Scratch defect",
+              "label": "AnomalyType",
+              "scenario": "mvtec",
+              "score": 0.95,
+              "match_type": "alias",
+              "matched_term": "scratch"
+            },
+            {
+              "entity_id": "ScratchHeadDefect",
+              "name": "Scratch head defect",
+              "label": "AnomalyType",
+              "scenario": "mvtec",
+              "score": 0.95,
+              "match_type": "alias",
+              "matched_term": "scratch"
+            },
+            {
+              "entity_id": "ScratchNeckDefect",
+              "name": "Scratch neck defect",
+              "label": "AnomalyType",
+              "scenario": "mvtec",
+              "score": 0.95,
+              "match_type": "alias",
+              "matched_term": "scratch"
+            }
+          ],
+          "obs_id": "obs_mvtec_fixture_mask_fallback_anomaly_type_scratch",
+          "facet": "anomaly_type"
+        },
+        {
+          "link_id": "link_mvtec_fixture_mask_fallback_location_surface",
+          "field": "location",
+          "mention": "surface",
+          "selected_entity_id": "SurfaceLocation",
+          "score": 0.95,
+          "match_type": "alias",
+          "ambiguous": false,
+          "ambiguity_margin": null,
+          "candidates": [
+            {
+              "entity_id": "SurfaceLocation",
+              "name": "Surface location",
+              "label": "Location",
+              "scenario": "mvtec",
+              "score": 0.95,
+              "match_type": "alias",
+              "matched_term": "surface"
+            }
+          ],
+          "obs_id": "obs_mvtec_fixture_mask_fallback_location_surface",
+          "facet": "location"
+        },
+        {
+          "link_id": "link_mvtec_fixture_mask_fallback_morphology_linear",
+          "field": "morphology",
+          "mention": "linear",
+          "selected_entity_id": "LinearMorphology",
+          "score": 0.95,
+          "match_type": "alias",
+          "ambiguous": false,
+          "ambiguity_margin": null,
+          "candidates": [
+            {
+              "entity_id": "LinearMorphology",
+              "name": "Linear morphology",
+              "label": "Morphology",
+              "scenario": "mvtec",
+              "score": 0.95,
+              "match_type": "alias",
+              "matched_term": "linear"
+            }
+          ],
+          "obs_id": "obs_mvtec_fixture_mask_fallback_morphology_linear",
+          "facet": "morphology"
+        }
+      ],
+      "consistency_score": 1.0,
+      "inconsistent_fields": [],
+      "correction_candidates": [],
+      "top_k_paths": [
+        {
+          "path_id": "path_mvtec_fixture_mask_fallback_742df5e1c9",
+          "source_entity_id": "ScratchDefect",
+          "target_entity_id": "MechanicalContact",
+          "nodes": [
+            "ScratchDefect",
+            "MechanicalContact"
+          ],
+          "node_names": [
+            "Scratch defect",
+            "Mechanical contact"
+          ],
+          "relations": [
+            "HAS_PLAUSIBLE_CAUSE"
+          ],
+          "score": 0.48,
+          "confidence": 0.75,
+          "evidence_match": 0.25,
+          "length": 1,
+          "supporting_evidence": [
+            "Scratch is a linear surface defect consistent with contact damage"
+          ],
+          "source_edge_ids": [
+            "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        },
+        {
+          "path_id": "path_mvtec_fixture_mask_fallback_1d95ec6da3",
+          "source_entity_id": "ScratchDefect",
+          "target_entity_id": "HandlingDamage",
+          "nodes": [
+            "ScratchDefect",
+            "MechanicalContact",
+            "HandlingDamage"
+          ],
+          "node_names": [
+            "Scratch defect",
+            "Mechanical contact",
+            "Handling damage"
+          ],
+          "relations": [
+            "HAS_PLAUSIBLE_CAUSE",
+            "PART_OF"
+          ],
+          "score": 0.4462,
+          "confidence": 0.725,
+          "evidence_match": 0.25,
+          "length": 2,
+          "supporting_evidence": [
+            "Scratch is a linear surface defect consistent with contact damage",
+            "Mechanical contact is grouped under handling-related damage"
+          ],
+          "source_edge_ids": [
+            "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+            "MechanicalContact|PART_OF|HandlingDamage|mvtec"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            },
+            {
+              "edge_id": "MechanicalContact|PART_OF|HandlingDamage|mvtec",
+              "head": "MechanicalContact",
+              "relation": "PART_OF",
+              "tail": "HandlingDamage",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Mechanical contact is grouped under handling-related damage",
+              "confidence": 0.7,
+              "weight": 0.3,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        },
+        {
+          "path_id": "path_mvtec_fixture_mask_fallback_951a9bc496",
+          "source_entity_id": "ScratchDefect",
+          "target_entity_id": "SurfaceWear",
+          "nodes": [
+            "ScratchDefect",
+            "SurfaceWear"
+          ],
+          "node_names": [
+            "Scratch defect",
+            "Surface wear"
+          ],
+          "relations": [
+            "HAS_PLAUSIBLE_CAUSE"
+          ],
+          "score": 0.4085,
+          "confidence": 0.62,
+          "evidence_match": 0.25,
+          "length": 1,
+          "supporting_evidence": [
+            "Repeated surface abrasion can produce shallow scratch-like marks"
+          ],
+          "source_edge_ids": [
+            "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "SurfaceWear",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Repeated surface abrasion can produce shallow scratch-like marks",
+              "confidence": 0.62,
+              "weight": 0.38,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        }
+      ],
+      "ranked_root_causes": [
+        {
+          "ranking_id": "rca_mvtec_fixture_mask_fallback_mechanicalcontact",
+          "rank": 1,
+          "candidate_id": "MechanicalContact",
+          "candidate_name": "Mechanical contact",
+          "candidate_label": "RootCause",
+          "candidate_role": "path_target",
+          "score": 0.48,
+          "confidence": 0.75,
+          "evidence_match": 0.25,
+          "explanation_paths": [
+            {
+              "path_id": "path_mvtec_fixture_mask_fallback_742df5e1c9",
+              "source_entity_id": "ScratchDefect",
+              "target_entity_id": "MechanicalContact",
+              "nodes": [
+                "ScratchDefect",
+                "MechanicalContact"
+              ],
+              "node_names": [
+                "Scratch defect",
+                "Mechanical contact"
+              ],
+              "relations": [
+                "HAS_PLAUSIBLE_CAUSE"
+              ],
+              "score": 0.48,
+              "confidence": 0.75,
+              "evidence_match": 0.25,
+              "length": 1,
+              "supporting_evidence": [
+                "Scratch is a linear surface defect consistent with contact damage"
+              ],
+              "source_edge_ids": [
+                "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec"
+              ],
+              "source_edges": [
+                {
+                  "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+                  "head": "ScratchDefect",
+                  "relation": "HAS_PLAUSIBLE_CAUSE",
+                  "tail": "MechanicalContact",
+                  "scenario": "mvtec",
+                  "source": "manual_curation",
+                  "evidence": "Scratch is a linear surface defect consistent with contact damage",
+                  "confidence": 0.75,
+                  "weight": 0.25,
+                  "review_status": "reviewed",
+                  "feedback_count": 0,
+                  "accepted_count": 0,
+                  "rejected_count": 0
+                }
+              ]
+            }
+          ],
+          "supporting_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ],
+          "supporting_evidence": [
+            {
+              "evidence_id": "path_mvtec_fixture_mask_fallback_742df5e1c9_evidence_1",
+              "source": "kg_path_edge",
+              "text": "Scratch is a linear surface defect consistent with contact damage"
+            }
+          ],
+          "scoring_method": "relation_weighted_path",
+          "scoring_details": {
+            "source_path_ids": [
+              "path_mvtec_fixture_mask_fallback_742df5e1c9"
+            ]
+          },
+          "source": "top_k_paths_projection",
+          "review_status": "auto"
+        },
+        {
+          "ranking_id": "rca_mvtec_fixture_mask_fallback_handlingdamage",
+          "rank": 2,
+          "candidate_id": "HandlingDamage",
+          "candidate_name": "Handling damage",
+          "candidate_label": "RootCause",
+          "candidate_role": "path_target",
+          "score": 0.4462,
+          "confidence": 0.725,
+          "evidence_match": 0.25,
+          "explanation_paths": [
+            {
+              "path_id": "path_mvtec_fixture_mask_fallback_1d95ec6da3",
+              "source_entity_id": "ScratchDefect",
+              "target_entity_id": "HandlingDamage",
+              "nodes": [
+                "ScratchDefect",
+                "MechanicalContact",
+                "HandlingDamage"
+              ],
+              "node_names": [
+                "Scratch defect",
+                "Mechanical contact",
+                "Handling damage"
+              ],
+              "relations": [
+                "HAS_PLAUSIBLE_CAUSE",
+                "PART_OF"
+              ],
+              "score": 0.4462,
+              "confidence": 0.725,
+              "evidence_match": 0.25,
+              "length": 2,
+              "supporting_evidence": [
+                "Scratch is a linear surface defect consistent with contact damage",
+                "Mechanical contact is grouped under handling-related damage"
+              ],
+              "source_edge_ids": [
+                "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+                "MechanicalContact|PART_OF|HandlingDamage|mvtec"
+              ],
+              "source_edges": [
+                {
+                  "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+                  "head": "ScratchDefect",
+                  "relation": "HAS_PLAUSIBLE_CAUSE",
+                  "tail": "MechanicalContact",
+                  "scenario": "mvtec",
+                  "source": "manual_curation",
+                  "evidence": "Scratch is a linear surface defect consistent with contact damage",
+                  "confidence": 0.75,
+                  "weight": 0.25,
+                  "review_status": "reviewed",
+                  "feedback_count": 0,
+                  "accepted_count": 0,
+                  "rejected_count": 0
+                },
+                {
+                  "edge_id": "MechanicalContact|PART_OF|HandlingDamage|mvtec",
+                  "head": "MechanicalContact",
+                  "relation": "PART_OF",
+                  "tail": "HandlingDamage",
+                  "scenario": "mvtec",
+                  "source": "manual_curation",
+                  "evidence": "Mechanical contact is grouped under handling-related damage",
+                  "confidence": 0.7,
+                  "weight": 0.3,
+                  "review_status": "reviewed",
+                  "feedback_count": 0,
+                  "accepted_count": 0,
+                  "rejected_count": 0
+                }
+              ]
+            }
+          ],
+          "supporting_edges": [
+            {
+              "edge_id": "MechanicalContact|PART_OF|HandlingDamage|mvtec",
+              "head": "MechanicalContact",
+              "relation": "PART_OF",
+              "tail": "HandlingDamage",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Mechanical contact is grouped under handling-related damage",
+              "confidence": 0.7,
+              "weight": 0.3,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            },
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ],
+          "supporting_evidence": [
+            {
+              "evidence_id": "path_mvtec_fixture_mask_fallback_1d95ec6da3_evidence_1",
+              "source": "kg_path_edge",
+              "text": "Scratch is a linear surface defect consistent with contact damage"
+            },
+            {
+              "evidence_id": "path_mvtec_fixture_mask_fallback_1d95ec6da3_evidence_2",
+              "source": "kg_path_edge",
+              "text": "Mechanical contact is grouped under handling-related damage"
+            }
+          ],
+          "scoring_method": "relation_weighted_path",
+          "scoring_details": {
+            "source_path_ids": [
+              "path_mvtec_fixture_mask_fallback_1d95ec6da3"
+            ]
+          },
+          "source": "top_k_paths_projection",
+          "review_status": "auto"
+        },
+        {
+          "ranking_id": "rca_mvtec_fixture_mask_fallback_surfacewear",
+          "rank": 3,
+          "candidate_id": "SurfaceWear",
+          "candidate_name": "Surface wear",
+          "candidate_label": "RootCause",
+          "candidate_role": "path_target",
+          "score": 0.4085,
+          "confidence": 0.62,
+          "evidence_match": 0.25,
+          "explanation_paths": [
+            {
+              "path_id": "path_mvtec_fixture_mask_fallback_951a9bc496",
+              "source_entity_id": "ScratchDefect",
+              "target_entity_id": "SurfaceWear",
+              "nodes": [
+                "ScratchDefect",
+                "SurfaceWear"
+              ],
+              "node_names": [
+                "Scratch defect",
+                "Surface wear"
+              ],
+              "relations": [
+                "HAS_PLAUSIBLE_CAUSE"
+              ],
+              "score": 0.4085,
+              "confidence": 0.62,
+              "evidence_match": 0.25,
+              "length": 1,
+              "supporting_evidence": [
+                "Repeated surface abrasion can produce shallow scratch-like marks"
+              ],
+              "source_edge_ids": [
+                "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec"
+              ],
+              "source_edges": [
+                {
+                  "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+                  "head": "ScratchDefect",
+                  "relation": "HAS_PLAUSIBLE_CAUSE",
+                  "tail": "SurfaceWear",
+                  "scenario": "mvtec",
+                  "source": "manual_curation",
+                  "evidence": "Repeated surface abrasion can produce shallow scratch-like marks",
+                  "confidence": 0.62,
+                  "weight": 0.38,
+                  "review_status": "reviewed",
+                  "feedback_count": 0,
+                  "accepted_count": 0,
+                  "rejected_count": 0
+                }
+              ]
+            }
+          ],
+          "supporting_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "SurfaceWear",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Repeated surface abrasion can produce shallow scratch-like marks",
+              "confidence": 0.62,
+              "weight": 0.38,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ],
+          "supporting_evidence": [
+            {
+              "evidence_id": "path_mvtec_fixture_mask_fallback_951a9bc496_evidence_1",
+              "source": "kg_path_edge",
+              "text": "Repeated surface abrasion can produce shallow scratch-like marks"
+            }
+          ],
+          "scoring_method": "relation_weighted_path",
+          "scoring_details": {
+            "source_path_ids": [
+              "path_mvtec_fixture_mask_fallback_951a9bc496"
+            ]
+          },
+          "source": "top_k_paths_projection",
+          "review_status": "auto"
+        }
+      ],
+      "candidate_plausible_explanation_targets": [
+        {
+          "target_entity_id": "MechanicalContact",
+          "target_name": "Mechanical contact",
+          "target_label": "RootCause",
+          "interpretation": "candidate_plausible_explanation",
+          "best_score": 0.48,
+          "supporting_path_ids": [
+            "path_mvtec_fixture_mask_fallback_742df5e1c9"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        },
+        {
+          "target_entity_id": "HandlingDamage",
+          "target_name": "Handling damage",
+          "target_label": "CauseCategory",
+          "interpretation": "candidate_plausible_explanation",
+          "best_score": 0.4462,
+          "supporting_path_ids": [
+            "path_mvtec_fixture_mask_fallback_1d95ec6da3"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "MechanicalContact",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Scratch is a linear surface defect consistent with contact damage",
+              "confidence": 0.75,
+              "weight": 0.25,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            },
+            {
+              "edge_id": "MechanicalContact|PART_OF|HandlingDamage|mvtec",
+              "head": "MechanicalContact",
+              "relation": "PART_OF",
+              "tail": "HandlingDamage",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Mechanical contact is grouped under handling-related damage",
+              "confidence": 0.7,
+              "weight": 0.3,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        },
+        {
+          "target_entity_id": "SurfaceWear",
+          "target_name": "Surface wear",
+          "target_label": "RootCause",
+          "interpretation": "candidate_plausible_explanation",
+          "best_score": 0.4085,
+          "supporting_path_ids": [
+            "path_mvtec_fixture_mask_fallback_951a9bc496"
+          ],
+          "source_edges": [
+            {
+              "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+              "head": "ScratchDefect",
+              "relation": "HAS_PLAUSIBLE_CAUSE",
+              "tail": "SurfaceWear",
+              "scenario": "mvtec",
+              "source": "manual_curation",
+              "evidence": "Repeated surface abrasion can produce shallow scratch-like marks",
+              "confidence": 0.62,
+              "weight": 0.38,
+              "review_status": "reviewed",
+              "feedback_count": 0,
+              "accepted_count": 0,
+              "rejected_count": 0
+            }
+          ]
+        }
+      ],
+      "source_edge_provenance": [
+        {
+          "edge_id": "MechanicalContact|PART_OF|HandlingDamage|mvtec",
+          "head": "MechanicalContact",
+          "relation": "PART_OF",
+          "tail": "HandlingDamage",
+          "scenario": "mvtec",
+          "source": "manual_curation",
+          "evidence": "Mechanical contact is grouped under handling-related damage",
+          "confidence": 0.7,
+          "weight": 0.3,
+          "review_status": "reviewed",
+          "feedback_count": 0,
+          "accepted_count": 0,
+          "rejected_count": 0
+        },
+        {
+          "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|MechanicalContact|mvtec",
+          "head": "ScratchDefect",
+          "relation": "HAS_PLAUSIBLE_CAUSE",
+          "tail": "MechanicalContact",
+          "scenario": "mvtec",
+          "source": "manual_curation",
+          "evidence": "Scratch is a linear surface defect consistent with contact damage",
+          "confidence": 0.75,
+          "weight": 0.25,
+          "review_status": "reviewed",
+          "feedback_count": 0,
+          "accepted_count": 0,
+          "rejected_count": 0
+        },
+        {
+          "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+          "head": "ScratchDefect",
+          "relation": "HAS_PLAUSIBLE_CAUSE",
+          "tail": "SurfaceWear",
+          "scenario": "mvtec",
+          "source": "manual_curation",
+          "evidence": "Repeated surface abrasion can produce shallow scratch-like marks",
+          "confidence": 0.62,
+          "weight": 0.38,
+          "review_status": "reviewed",
+          "feedback_count": 0,
+          "accepted_count": 0,
+          "rejected_count": 0
+        }
+      ],
+      "claim_boundary": "candidate/plausible explanation only; not a verified root-cause label"
+    }
+  ]
+}

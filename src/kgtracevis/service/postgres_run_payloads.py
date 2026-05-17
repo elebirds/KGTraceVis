@@ -9,6 +9,8 @@ from typing import Any
 from kgtracevis.core.result import ranked_root_causes_from_paths
 from kgtracevis.service.run_enrichment import (
     path_graph_from_paths,
+    resolve_case_generated_evidence,
+    review_target_key,
     review_targets,
     unique_source_edges,
 )
@@ -47,7 +49,9 @@ def detail_payload(
 
     for row in case_rows:
         case_pk = str(row["case_pk"])
-        evidence = dict_value(row.get("evidence_payload"))
+        evidence = resolve_case_generated_evidence(row)
+        if not evidence:
+            evidence = dict_value(row.get("evidence_payload"))
         if not evidence:
             evidence = _evidence_from_case_row(row)
         case_id = str(evidence.get("case_id") or row.get("case_id"))
@@ -314,6 +318,7 @@ class FeedbackRecordAdapter:
         self.target_type = str(self._record.get("target_type") or "case")
         self.target_id = self._record.get("target_id")
         self.reviewer = self._record.get("reviewer")
+        self.source = self._record.get("source")
         self.metadata = dict_value(self._record.get("metadata"))
 
     def review_action(self) -> str:
@@ -354,6 +359,39 @@ def feedback_target_type(value: str) -> str:
 def feedback_value(value: str) -> str:
     """Map API feedback actions to Postgres enum values."""
     return {"needs_review": "uncertain"}.get(value, value)
+
+
+def api_feedback_target_type(value: str) -> str:
+    """Map stored Postgres feedback target names back to API names."""
+    return {
+        "ranked_path": "path",
+        "kg_edge": "edge",
+        "correction_candidate": "correction",
+        "entity_link": "entity_link",
+        "root_cause_candidate": "root_cause_candidate",
+        "case": "case",
+    }.get(value, value)
+
+
+def api_feedback_value(value: str) -> str:
+    """Map stored Postgres feedback values back to API actions."""
+    return {"uncertain": "needs_review"}.get(value, value)
+
+
+def feedback_target_key(
+    target_type: str,
+    target_id: Any,
+    metadata: Mapping[str, Any] | None = None,
+) -> str | None:
+    """Return the stable API feedback target key for a ledger record."""
+    meta = dict_value(metadata)
+    existing = meta.get("target_key")
+    if existing is not None:
+        return str(existing)
+    normalized_target_id = optional_text(target_id)
+    if normalized_target_id is None:
+        return None
+    return review_target_key(api_feedback_target_type(target_type), normalized_target_id)
 
 
 def dict_value(value: Any) -> dict[str, Any]:
@@ -413,11 +451,15 @@ def _link_payload(row: Mapping[str, Any]) -> dict[str, Any]:
         "link_id": row.get("link_id"),
         "field": row.get("field"),
         "mention": row.get("mention"),
+        "obs_id": row.get("obs_id"),
+        "facet": row.get("facet"),
         "selected_entity_id": row.get("selected_entity_id"),
+        "selected_entity_name": row.get("selected_entity_name"),
         "selected_entity_scenario": row.get("selected_entity_scenario"),
         "score": row.get("score"),
         "match_type": row.get("match_type"),
         "ambiguous": row.get("ambiguous"),
+        "ambiguity_margin": row.get("ambiguity_margin"),
         "candidates": list_value(row.get("candidates")),
     }
 
@@ -474,6 +516,15 @@ def _artifacts_payload(
 
 
 def _case_evidence_payload(case: Mapping[str, Any]) -> dict[str, Any] | None:
+    value = case.get("generated_evidence_full")
+    if isinstance(value, Mapping):
+        payload = dict(value)
+        payload.setdefault("case_id", case.get("case_id", "unknown"))
+        payload.setdefault("dataset", valid_dataset(case.get("dataset")))
+        payload.setdefault("raw_evidence", {})
+        payload.setdefault("normalized_evidence", {})
+        payload.setdefault("human_feedback", {})
+        return payload
     for key in ("evidence", "generated_evidence"):
         value = case.get(key)
         if isinstance(value, Mapping):

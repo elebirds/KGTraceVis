@@ -21,6 +21,9 @@ from kgtracevis.service.kg_materials import (
     configure_material_store_for_testing,
     extract_kg_material_to_structured_records,
     get_kg_material,
+    list_kg_material_chunks,
+    list_kg_material_extraction_artifacts,
+    list_kg_material_extraction_runs,
     list_kg_materials,
     prepare_kg_material_construction_build,
     register_kg_material,
@@ -111,6 +114,40 @@ def test_material_extraction_writes_structured_records_with_fake_ie(
         material_root=tmp_path,
     )
     assert build_sources.sources[0].path == str(records_path)
+
+
+def test_material_read_side_lists_chunks_runs_and_artifacts(tmp_path: Path) -> None:
+    """Extracted materials should expose chunks, extraction runs, and artifacts."""
+    save_kg_material_upload(
+        material_id="pump_note",
+        title="Pump note",
+        filename="pump_note.txt",
+        content=b"Pump cavitation indicates seal wear.",
+        scenario="tep",
+        material_type="text",
+        material_root=tmp_path,
+    )
+
+    response = extract_kg_material_to_structured_records(
+        "pump_note",
+        KGMaterialExtractionRunRequest(overwrite=True),
+        client=FakeIEClient(),
+        material_root=tmp_path,
+    )
+
+    chunks = list_kg_material_chunks("pump_note", material_root=tmp_path)
+    runs = list_kg_material_extraction_runs("pump_note", material_root=tmp_path)
+    artifacts = list_kg_material_extraction_artifacts("pump_note", material_root=tmp_path)
+
+    assert chunks.count >= 1
+    assert chunks.chunks[0].material_id == "pump_note"
+    assert chunks.chunks[0].text_content == "Pump cavitation indicates seal wear."
+    assert runs.count == 1
+    assert runs.runs[0].status == "extracted"
+    assert runs.runs[0].structured_records_path == response.structured_records_path
+    assert artifacts.count == 1
+    assert artifacts.artifacts[0].artifact_type == "structured_records"
+    assert artifacts.artifacts[0].uri == response.structured_records_path
 
 
 def test_runtime_material_store_provider_persists_extraction_state(
@@ -353,6 +390,9 @@ class InMemoryMaterialStore:
         self.chunks[material_id] = chunks
         return chunks
 
+    def list_source_chunks(self, material_id: str) -> list[dict[str, Any]]:
+        return list(self.chunks.get(material_id, []))
+
     def record_extraction_run(
         self,
         material_id: str,
@@ -393,6 +433,13 @@ class InMemoryMaterialStore:
             "uri": uri,
             "media_type": media_type,
             "payload": payload or {},
+            "created_at": "2026-05-16T00:00:00+00:00",
         }
         self.artifacts.append(artifact)
         return artifact
+
+    def list_extraction_runs(self, material_id: str) -> list[dict[str, Any]]:
+        return [run for run in self.runs if run.get("material_id") == material_id]
+
+    def list_extraction_artifacts(self, material_id: str) -> list[dict[str, Any]]:
+        return [artifact for artifact in self.artifacts if artifact.get("material_id") == material_id]

@@ -209,11 +209,15 @@ CREATE TABLE IF NOT EXISTS linked_entities (
     link_id text NOT NULL,
     field text NOT NULL,
     mention text NOT NULL,
+    obs_id text,
+    facet text,
     selected_entity_id text,
+    selected_entity_name text,
     selected_entity_scenario text,
     score double precision NOT NULL DEFAULT 0,
     match_type text NOT NULL,
     ambiguous boolean NOT NULL DEFAULT false,
+    ambiguity_margin double precision,
     candidates jsonb NOT NULL DEFAULT '[]'::jsonb,
     UNIQUE (run_id, case_pk, link_id)
 );
@@ -274,6 +278,8 @@ CREATE TABLE IF NOT EXISTS feedback_records (
     corrected_value jsonb,
     comment text,
     reviewer text,
+    source text NOT NULL DEFAULT 'unknown',
+    metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -314,6 +320,22 @@ CREATE TABLE IF NOT EXISTS artifacts (
     metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
     created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE feedback_records
+    ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'unknown';
+
+ALTER TABLE feedback_records
+    ADD COLUMN IF NOT EXISTS metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE linked_entities
+    ADD COLUMN IF NOT EXISTS obs_id text;
+ALTER TABLE linked_entities
+    ADD COLUMN IF NOT EXISTS facet text;
+ALTER TABLE linked_entities
+    ADD COLUMN IF NOT EXISTS selected_entity_name text;
+ALTER TABLE linked_entities
+    ADD COLUMN IF NOT EXISTS ambiguity_margin double precision;
+
 
 ALTER TABLE evidence_cases
     ADD COLUMN IF NOT EXISTS evidence_payload jsonb NOT NULL DEFAULT '{}'::jsonb;

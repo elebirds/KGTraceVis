@@ -55,6 +55,7 @@ from kgtracevis.service.run_store import (
 from kgtracevis.service.visual_evidence import (
     build_visual_evidence_artifacts,
 )
+from kgtracevis.workflows.reasoning_registry import default_reasoning_registry
 from kgtracevis.workflows.root_cause_provider_selection import build_pipeline
 
 DEFAULT_RUNS_DIR = Path("runs/rootlens_sessions")
@@ -115,6 +116,12 @@ def get_run_artifact_path(
     if store is None:
         raise ValueError("Postgres run store is not configured")
     artifact_path = Path(store.get_artifact_path(run_id, artifact_name))
+    detail = get_run_detail(run_id)
+    artifact_root = Path(detail.run.run_dir) / "artifacts"
+    try:
+        artifact_path.resolve().relative_to(artifact_root.resolve())
+    except ValueError as exc:
+        raise ValueError(f"unknown run artifact: {artifact_name}") from exc
     if not artifact_path.is_file():
         raise ValueError(f"unknown run artifact: {artifact_name}")
     return artifact_path
@@ -130,6 +137,7 @@ def create_run_from_upload(
     object_name: str | None = None,
     defect_type: str | None = None,
     model_preset: str | None = None,
+    reasoning_profile_id: str | None = None,
     runs_dir: str | Path | None = None,
     pipeline: KGTracePipeline | None = None,
 ) -> RunDetail:
@@ -150,7 +158,8 @@ def create_run_from_upload(
     input_path.write_bytes(content)
 
     created_at = datetime.now(timezone.utc).isoformat()
-    active_pipeline = pipeline or build_pipeline()
+    if pipeline is not None and reasoning_profile_id is not None:
+        raise ValueError("pass either pipeline or reasoning_profile_id, not both")
     if mode == "evidence":
         detail = _run_evidence_upload(
             run_id=run_id,
@@ -158,11 +167,16 @@ def create_run_from_upload(
             input_path=input_path,
             source_filename=source_name,
             top_k=top_k,
-            pipeline=active_pipeline,
+            pipeline=pipeline or build_pipeline(reasoning_profile_id=reasoning_profile_id),
         )
     elif mode == "image":
         if dataset is not None and dataset != "mvtec":
             raise ValueError("image upload mode only supports mvtec")
+        if reasoning_profile_id is not None:
+            default_reasoning_registry().validate_profile_for_dataset(
+                reasoning_profile_id,
+                "mvtec",
+            )
         detail = _run_mvtec_image_upload(
             run_id=run_id,
             created_at=created_at,
@@ -172,7 +186,7 @@ def create_run_from_upload(
             defect_type=_optional_text(defect_type),
             model_preset=model_preset,
             top_k=top_k,
-            pipeline=active_pipeline,
+            pipeline=pipeline or build_pipeline(reasoning_profile_id=reasoning_profile_id),
             output_dir=output_dir / "mvtec_image_pipeline",
         )
     elif mode == "records":
@@ -183,7 +197,8 @@ def create_run_from_upload(
             source_filename=source_name,
             top_k=top_k,
             dataset=dataset,
-            pipeline=active_pipeline,
+            pipeline=pipeline,
+            reasoning_profile_id=reasoning_profile_id,
             output_dir=output_dir / "adapter_pipeline",
         )
     else:
@@ -192,7 +207,8 @@ def create_run_from_upload(
     store = run_store()
     if store is None:
         raise ValueError("Postgres run store is not configured")
-    return RunDetail.model_validate(store.save_run(detail))
+    saved_detail = RunDetail.model_validate(store.save_run(detail))
+    return enrich_run_detail(saved_detail)
 
 
 def parse_upload_mode(value: str) -> UploadMode:
@@ -312,7 +328,8 @@ def _run_records_upload(
     source_filename: str,
     top_k: int,
     dataset: DatasetName | None,
-    pipeline: KGTracePipeline,
+    pipeline: KGTracePipeline | None,
+    reasoning_profile_id: str | None,
     output_dir: Path,
 ) -> RunDetail:
     output = run_adapter_pipeline(
@@ -322,6 +339,7 @@ def _run_records_upload(
         top_k=top_k,
         overwrite=True,
         pipeline=pipeline,
+        reasoning_profile_id=reasoning_profile_id,
     )
     summary = output.summary
     records = _load_visual_records(input_path)

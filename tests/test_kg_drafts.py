@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from kgtracevis.service.kg_drafts import KGDraftRequest, record_kg_draft
+from kgtracevis.service.kg_drafts import KGDraftListRequest, KGDraftRequest, list_kg_drafts, record_kg_draft
 
 
 def test_record_kg_draft_writes_append_only_jsonl(tmp_path: Path) -> None:
@@ -46,3 +46,39 @@ def test_kg_draft_rejects_invalid_confidence() -> None:
             draft_action="revise",
             proposed_confidence=1.5,
         )
+
+
+def test_list_kg_drafts_returns_filtered_append_only_history(tmp_path: Path) -> None:
+    """Draft history should be queryable without mutating existing records."""
+    draft_path = tmp_path / "drafts.jsonl"
+    record_kg_draft(
+        KGDraftRequest(
+            target_id="edge-a",
+            target_key="edge:edge-a",
+            draft_action="revise",
+            reviewer="alice",
+            source="kg-studio",
+        ),
+        output_path=draft_path,
+    )
+    record_kg_draft(
+        KGDraftRequest(
+            target_id="edge-b",
+            target_key="edge:edge-b",
+            draft_action="reject",
+            reviewer="bob",
+            source="kg-studio",
+        ),
+        output_path=draft_path,
+    )
+
+    response = list_kg_drafts(
+        KGDraftListRequest(target_key="edge:edge-a", offset=0, limit=10),
+        input_path=draft_path,
+    )
+
+    assert response.total_count == 1
+    assert response.returned_count == 1
+    assert response.records[0].target_key == "edge:edge-a"
+    assert response.records[0].reviewer == "alice"
+    assert response.claim_boundary.startswith("KG draft records are append-only")

@@ -52,5 +52,21 @@ class GenericGraphPathReasoner:
             ),
             metadata={
                 "reasoner": "generic_graph_path",
+                "reasoner_adapter": "generic_graph_path",
+                "reasoning_profile_id": "generic_graph_path_default",
+                "selection_mode": "direct",
+                "kg_build_ids": _kg_build_ids_from_paths(top_k_paths),
             },
         )
+
+
+def _kg_build_ids_from_paths(paths: list[dict[str, Any]]) -> list[str]:
+    build_ids: set[str] = set()
+    for path in paths:
+        for kg_build_id in path.get("kg_build_ids") or []:
+            if str(kg_build_id):
+                build_ids.add(str(kg_build_id))
+        for edge in path.get("source_edges") or []:
+            if isinstance(edge, dict) and str(edge.get("kg_build_id") or ""):
+                build_ids.add(str(edge["kg_build_id"]))
+    return sorted(build_ids)

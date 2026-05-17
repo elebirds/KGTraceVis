@@ -247,6 +247,24 @@ class PostgresMaterialStore:
             "completed_at": _iso_or_none(row.get("completed_at")) if row else None,
         }
 
+    def list_extraction_runs(self, material_id: str) -> list[dict[str, Any]]:
+        """Return stored extraction runs for one material, newest first."""
+        material_id = _require_material_id(material_id)
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT extraction_run_id::text, material_id, status, provider, source_format,
+                       structured_records_path, source_id, extractor_name,
+                       extractor_version, record_count, error_message,
+                       started_at, completed_at, parameters, result_summary
+                FROM material_extraction_runs
+                WHERE material_id = %s
+                ORDER BY started_at DESC, extraction_run_id ASC
+                """,
+                (material_id,),
+            ).fetchall()
+        return [_extraction_run_from_row(row) for row in rows]
+
     def save_extraction_artifact(
         self,
         *,
@@ -293,6 +311,22 @@ class PostgresMaterialStore:
             "payload": dict(payload or {}),
             "created_at": _iso_or_none(row.get("created_at")),
         }
+
+    def list_extraction_artifacts(self, material_id: str) -> list[dict[str, Any]]:
+        """Return stored extraction artifacts for one material, newest first."""
+        material_id = _require_material_id(material_id)
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT artifact_id::text, material_id, extraction_run_id::text,
+                       artifact_type, uri, media_type, payload, created_at
+                FROM material_extraction_artifacts
+                WHERE material_id = %s
+                ORDER BY created_at DESC, artifact_id ASC
+                """,
+                (material_id,),
+            ).fetchall()
+        return [_artifact_from_row(row) for row in rows]
 
     def _connection(self) -> Any:
         if self.connection_factory is not None:
@@ -375,6 +409,39 @@ def _chunk_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "char_start": row.get("char_start"),
         "char_end": row.get("char_end"),
         "metadata": row.get("metadata") or {},
+        "created_at": _iso_or_none(row.get("created_at")),
+    }
+
+
+def _extraction_run_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "extraction_run_id": str(row["extraction_run_id"]),
+        "material_id": row["material_id"],
+        "status": row["status"],
+        "provider": row.get("provider"),
+        "source_format": row.get("source_format"),
+        "structured_records_path": row.get("structured_records_path"),
+        "source_id": row.get("source_id"),
+        "extractor_name": row.get("extractor_name"),
+        "extractor_version": row.get("extractor_version"),
+        "record_count": row.get("record_count"),
+        "error_message": row.get("error_message"),
+        "started_at": _iso_or_none(row.get("started_at")),
+        "completed_at": _iso_or_none(row.get("completed_at")),
+        "parameters": row.get("parameters") or {},
+        "result_summary": row.get("result_summary") or {},
+    }
+
+
+def _artifact_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "artifact_id": str(row["artifact_id"]),
+        "material_id": row["material_id"],
+        "extraction_run_id": row.get("extraction_run_id"),
+        "artifact_type": row["artifact_type"],
+        "uri": row.get("uri"),
+        "media_type": row.get("media_type"),
+        "payload": row.get("payload") or {},
         "created_at": _iso_or_none(row.get("created_at")),
     }
 

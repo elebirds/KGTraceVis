@@ -1,0 +1,42 @@
+{
+  "artifact_type": "coverage_first_candidate_kg_v0",
+  "artifact_scope": "generated_reproducibility_output",
+  "claim_boundary": "candidate/plausible explanation only; not a verified root-cause label",
+  "node_count": 36,
+  "edge_count": 76,
+  "mvtec_source_records": "/Users/bytedance/my_project/MVTec/KGTraceVis/data/examples/records/mvtec_records.jsonl",
+  "wm811k_source_records": [
+    "/Users/bytedance/my_project/MVTec/KGTraceVis/data/examples/records/wm811k_records.jsonl"
+  ],
+  "wm811k_pattern_coverage": [
+    "center",
+    "donut",
+    "edge_loc",
+    "edge_ring",
+    "loc",
+    "random",
+    "scratch",
+    "nearfull"
+  ],
+  "note": "Candidate KG rows are source-constrained paper artifacts. They support candidate paths and must not be described as verified RCA.",
+  "output": {
+    "nodes_candidate": "/Users/bytedance/my_project/MVTec/KGTraceVis/tmp_rootlens_probe_candidate_artifacts/nodes_candidate.csv",
+    "edges_candidate": "/Users/bytedance/my_project/MVTec/KGTraceVis/tmp_rootlens_probe_candidate_artifacts/edges_candidate.csv",
+    "validation_report": "/Users/bytedance/my_project/MVTec/KGTraceVis/tmp_rootlens_probe_candidate_artifacts/validation_report.json",
+    "edge_review_queue": "/Users/bytedance/my_project/MVTec/KGTraceVis/tmp_rootlens_probe_candidate_artifacts/edge_review_queue.csv",
+    "coverage_report": "/Users/bytedance/my_project/MVTec/KGTraceVis/tmp_rootlens_probe_candidate_artifacts/coverage_report.json",
+    "before_after": "/Users/bytedance/my_project/MVTec/KGTraceVis/tmp_rootlens_probe_candidate_artifacts/selected_case_reasoning_before_after.csv",
+    "top_case_explanations": "/Users/bytedance/my_project/MVTec/KGTraceVis/tmp_rootlens_probe_candidate_artifacts/top_case_explanations.md"
+  },
+  "validation_summary": {
+    "passed": true,
+    "node_count": 72,
+    "edge_count": 105,
+    "issue_count": 0,
+    "warning_count": 8,
+    "finding_codes": {
+      "isolated_node": 4,
+      "reviewed_low_confidence": 4
+    }
+  }
+}

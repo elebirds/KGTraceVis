@@ -1,0 +1,118 @@
+{
+  "artifact_type": "kg_qa_v0",
+  "artifact_scope": "generated_reproducibility_output",
+  "node_paths": [
+    "data/kg/nodes.csv",
+    "/Users/bytedance/my_project/MVTec/KGTraceVis/tmp_rootlens_probe_candidate_artifacts/nodes_candidate.csv"
+  ],
+  "edge_paths": [
+    "data/kg/edges.csv",
+    "data/kg/mvtec_rca_reference.csv",
+    "/Users/bytedance/my_project/MVTec/KGTraceVis/tmp_rootlens_probe_candidate_artifacts/edges_candidate.csv"
+  ],
+  "node_count": 72,
+  "edge_count": 105,
+  "reviewed_low_confidence_threshold": 0.7,
+  "metric_note": "KG QA reports source-constrained CSV issues and warnings; it does not edit or invent KG facts.",
+  "summary": {
+    "passed": true,
+    "node_count": 72,
+    "edge_count": 105,
+    "issue_count": 0,
+    "warning_count": 8,
+    "finding_codes": {
+      "isolated_node": 4,
+      "reviewed_low_confidence": 4
+    }
+  },
+  "findings": [
+    {
+      "code": "reviewed_low_confidence",
+      "severity": "warning",
+      "message": "reviewed edge has low confidence for ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+      "file": "data/kg/mvtec_rca_reference.csv",
+      "row_number": 5,
+      "edge_id": "ScratchDefect|HAS_PLAUSIBLE_CAUSE|SurfaceWear|mvtec",
+      "node_id": null,
+      "field": "confidence",
+      "value": "0.62"
+    },
+    {
+      "code": "reviewed_low_confidence",
+      "severity": "warning",
+      "message": "reviewed edge has low confidence for ColorDefect|HAS_PLAUSIBLE_CAUSE|ContaminationCause|mvtec",
+      "file": "data/kg/mvtec_rca_reference.csv",
+      "row_number": 6,
+      "edge_id": "ColorDefect|HAS_PLAUSIBLE_CAUSE|ContaminationCause|mvtec",
+      "node_id": null,
+      "field": "confidence",
+      "value": "0.66"
+    },
+    {
+      "code": "reviewed_low_confidence",
+      "severity": "warning",
+      "message": "reviewed edge has low confidence for CrackDefect|HAS_PLAUSIBLE_CAUSE|PackagingPressure|mvtec",
+      "file": "data/kg/mvtec_rca_reference.csv",
+      "row_number": 15,
+      "edge_id": "CrackDefect|HAS_PLAUSIBLE_CAUSE|PackagingPressure|mvtec",
+      "node_id": null,
+      "field": "confidence",
+      "value": "0.66"
+    },
+    {
+      "code": "reviewed_low_confidence",
+      "severity": "warning",
+      "message": "reviewed edge has low confidence for SqueezeDefect|HAS_PLAUSIBLE_CAUSE|HandlingDamage|mvtec",
+      "file": "data/kg/mvtec_rca_reference.csv",
+      "row_number": 18,
+      "edge_id": "SqueezeDefect|HAS_PLAUSIBLE_CAUSE|HandlingDamage|mvtec",
+      "node_id": null,
+      "field": "confidence",
+      "value": "0.63"
+    },
+    {
+      "code": "isolated_node",
+      "severity": "warning",
+      "message": "node has no incident raw CSV edges: ScrewObject",
+      "file": "data/kg/nodes.csv",
+      "row_number": 5,
+      "edge_id": null,
+      "node_id": "ScrewObject",
+      "field": null,
+      "value": null
+    },
+    {
+      "code": "isolated_node",
+      "severity": "warning",
+      "message": "node has no incident raw CSV edges: CapsuleObject",
+      "file": "data/kg/nodes.csv",
+      "row_number": 6,
+      "edge_id": null,
+      "node_id": "CapsuleObject",
+      "field": null,
+      "value": null
+    },
+    {
+      "code": "isolated_node",
+      "severity": "warning",
+      "message": "node has no incident raw CSV edges: PillObject",
+      "file": "data/kg/nodes.csv",
+      "row_number": 7,
+      "edge_id": null,
+      "node_id": "PillObject",
+      "field": null,
+      "value": null
+    },
+    {
+      "code": "isolated_node",
+      "severity": "warning",
+      "message": "node has no incident raw CSV edges: ProcessObject",
+      "file": "data/kg/nodes.csv",
+      "row_number": 27,
+      "edge_id": null,
+      "node_id": "ProcessObject",
+      "field": null,
+      "value": null
+    }
+  ]
+}

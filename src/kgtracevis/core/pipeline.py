@@ -76,6 +76,7 @@ class KGTracePipeline:
             correction_candidates=correction_candidates,
             top_k_paths=rca_result.top_k_paths,
             ranked_root_causes=rca_result.ranked_root_causes,
+            reasoning_metadata=deepcopy(rca_result.metadata),
             human_feedback=deepcopy(evidence.human_feedback),
         )
 
@@ -116,9 +117,55 @@ class KGTracePipeline:
             )
             if result.top_k_paths or result.ranked_root_causes:
                 return result
+            fallback = self._generic_rca_reasoner.reason_root_causes(
+                evidence,
+                graph=graph,
+                linked_entities=linked_entities,
+                top_k=top_k,
+            )
+            if result.metadata:
+                fallback = fallback.model_copy(
+                    update={
+                        "metadata": _fallback_reasoning_metadata(
+                            requested=result.metadata,
+                            effective=fallback.metadata,
+                        )
+                    }
+                )
+            return fallback
         return self._generic_rca_reasoner.reason_root_causes(
             evidence,
             graph=graph,
             linked_entities=linked_entities,
             top_k=top_k,
         )
+
+
+
+def _fallback_reasoning_metadata(
+    *,
+    requested: dict[str, Any],
+    effective: dict[str, Any],
+) -> dict[str, Any]:
+    merged = dict(effective)
+    requested_profile_id = requested.get("reasoning_profile_id")
+    requested_adapter = requested.get("reasoner_adapter") or requested.get("reasoner")
+    effective_profile_id = effective.get("reasoning_profile_id")
+    effective_adapter = effective.get("reasoner_adapter") or effective.get("reasoner")
+
+    if requested_profile_id and requested_profile_id != effective_profile_id:
+        merged["requested_reasoning_profile_id"] = requested_profile_id
+    if requested_adapter and requested_adapter != effective_adapter:
+        merged["requested_reasoner_adapter"] = requested_adapter
+    if requested.get("selection_mode") is not None:
+        merged["selection_mode"] = requested["selection_mode"]
+    for key, value in requested.items():
+        if key not in merged and key not in {
+            "reasoning_profile_id",
+            "reasoner_adapter",
+            "reasoner",
+        }:
+            merged[key] = deepcopy(value)
+    merged["fallback_applied"] = True
+    merged["fallback_reason"] = "empty_reasoning_result"
+    return merged

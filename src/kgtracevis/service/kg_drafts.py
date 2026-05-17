@@ -59,6 +59,36 @@ class KGDraftRecord(BaseModel):
     review_decision: KGConstructionReviewDecision
 
 
+class KGDraftListRequest(BaseModel):
+    """Read-side filters for append-only KG draft records."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_type: Literal["edge"] | None = None
+    target_id: str | None = None
+    target_key: str | None = None
+    reviewer: str | None = None
+    source: str | None = None
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=50, ge=1, le=500)
+
+
+class KGDraftListResponse(BaseModel):
+    """Paginated list response for KG draft history."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    records: list[KGDraftRecord] = Field(default_factory=list)
+    total_count: int
+    returned_count: int
+    offset: int
+    limit: int
+    claim_boundary: str = (
+        "KG draft records are append-only candidate review adjustments; "
+        "they do not mutate candidate CSV files or publish KG rows"
+    )
+
+
 def record_kg_draft(
     request: KGDraftRequest,
     *,
@@ -99,6 +129,46 @@ def record_kg_draft(
     return {"status": "recorded", "record": record.model_dump(mode="json")}
 
 
+def list_kg_drafts(
+    request: KGDraftListRequest | None = None,
+    *,
+    input_path: str | Path = DEFAULT_KG_DRAFT_PATH,
+) -> KGDraftListResponse:
+    """Return append-only KG draft history for dashboard clients."""
+    active_request = request or KGDraftListRequest()
+    path = Path(input_path)
+    if not path.is_file():
+        return KGDraftListResponse(
+            records=[],
+            total_count=0,
+            returned_count=0,
+            offset=active_request.offset,
+            limit=active_request.limit,
+        )
+
+    records = [
+        KGDraftRecord.model_validate(payload)
+        for payload in _read_jsonl_records(path)
+    ]
+    filtered = [
+        record
+        for record in sorted(records, key=lambda item: item.created_at, reverse=True)
+        if (active_request.target_type is None or record.target_type == active_request.target_type)
+        and (active_request.target_id is None or record.target_id == active_request.target_id)
+        and (active_request.target_key is None or record.target_key == active_request.target_key)
+        and (active_request.reviewer is None or record.reviewer == active_request.reviewer)
+        and (active_request.source is None or record.source == active_request.source)
+    ]
+    paged = filtered[active_request.offset : active_request.offset + active_request.limit]
+    return KGDraftListResponse(
+        records=paged,
+        total_count=len(filtered),
+        returned_count=len(paged),
+        offset=active_request.offset,
+        limit=active_request.limit,
+    )
+
+
 def _review_action(action: KGDraftAction) -> KGConstructionReviewAction:
     actions: dict[KGDraftAction, KGConstructionReviewAction] = {
         "keep": "keep",
@@ -118,3 +188,15 @@ def _proposed_payload(request: KGDraftRequest) -> dict[str, Any]:
     if request.proposed_confidence is not None:
         payload["confidence"] = request.proposed_confidence
     return payload
+
+
+def _read_jsonl_records(path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        if not isinstance(payload, dict):
+            raise ValueError(f"draft history record must be a JSON object: {path}")
+        records.append(dict(payload))
+    return records
