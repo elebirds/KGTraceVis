@@ -19,7 +19,15 @@ DEFAULT_EVIDENCE_DIRS = (
     Path("runs/real_model_pipeline/assets/mvtec/adapter_pipeline/evidence"),
     Path("runs/real_model_pipeline/assets/wm811k/adapter_pipeline/evidence"),
 )
-FeedbackTargetType = Literal["path", "edge", "entity_link", "correction", "case", "link"]
+FeedbackTargetType = Literal[
+    "path",
+    "edge",
+    "entity_link",
+    "correction",
+    "case",
+    "link",
+    "root_cause_candidate",
+]
 FeedbackAction = Literal["accept", "reject", "needs_review"]
 FeedbackDecision = Literal["accept", "reject", "comment"]
 
@@ -228,6 +236,7 @@ def _evidence_with_analysis(evidence: Evidence, analysis: AnalysisResult) -> dic
         "ranked_root_causes": [
             item.model_dump(mode="json") for item in analysis.ranked_root_causes
         ],
+        "reasoning_metadata": analysis.reasoning_metadata,
     }
     return payload
 

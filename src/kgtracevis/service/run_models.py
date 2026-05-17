@@ -60,6 +60,7 @@ class RunDetail(BaseModel):
     correction_candidates: list[dict[str, Any]] = Field(default_factory=list)
     top_k_paths: list[dict[str, Any]] = Field(default_factory=list)
     ranked_root_causes: list[dict[str, Any]] = Field(default_factory=list)
+    reasoning_metadata: dict[str, Any] = Field(default_factory=dict)
     path_graph: dict[str, Any] = Field(default_factory=dict)
     source_edge_provenance: list[dict[str, Any]] = Field(default_factory=list)
     review_targets: list[dict[str, Any]] = Field(default_factory=list)

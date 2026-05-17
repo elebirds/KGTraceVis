@@ -66,6 +66,13 @@ def rank_root_cause_paths(
                 path_strength = _path_strength(edges)
                 evidence_match = len(set(path) & selected_ids) / max(1, len(selected_ids))
                 length_penalty = (len(path) - 1) / max_depth
+                support_obs_ids = list(
+                    dict.fromkeys(
+                        str(link.get("obs_id"))
+                        for link in linked_entities
+                        if link.get("selected_entity_id") in path and link.get("obs_id")
+                    )
+                )
                 score = alpha * path_strength + beta * evidence_match - gamma * length_penalty
                 ranked.append(
                     {
@@ -82,6 +89,7 @@ def rank_root_cause_paths(
                         "evidence_match": round(evidence_match, 4),
                         "length": len(path) - 1,
                         "supporting_evidence": [edge.evidence for edge in edges],
+                        "support_obs_ids": support_obs_ids,
                         "source_edge_ids": [edge.edge_id for edge in edges],
                         "source_edges": [edge.model_dump() for edge in edges],
                         "kg_build_ids": _path_kg_build_ids(edges),

@@ -130,12 +130,15 @@ def create_run_from_upload(
     object_name: str | None = None,
     defect_type: str | None = None,
     model_preset: str | None = None,
+    reasoning_profile_id: str | None = None,
     runs_dir: str | Path | None = None,
     pipeline: KGTracePipeline | None = None,
 ) -> RunDetail:
     """Persist one uploaded sample and run the applicable pipeline path."""
     if top_k < 1:
         raise ValueError("top_k must be >= 1")
+    if pipeline is not None and reasoning_profile_id is not None:
+        raise ValueError("pass either pipeline or reasoning_profile_id, not both")
 
     base_dir = Path(runs_dir or DEFAULT_RUNS_DIR)
     run_id = build_run_id()
@@ -150,7 +153,7 @@ def create_run_from_upload(
     input_path.write_bytes(content)
 
     created_at = datetime.now(timezone.utc).isoformat()
-    active_pipeline = pipeline or build_pipeline()
+    active_pipeline = pipeline or build_pipeline(reasoning_profile_id=reasoning_profile_id)
     if mode == "evidence":
         detail = _run_evidence_upload(
             run_id=run_id,

@@ -58,6 +58,7 @@ class KGAnalysis(BaseModel):
     correction_candidates: list[dict[str, Any]] = Field(default_factory=list)
     top_k_paths: list[dict[str, Any]] = Field(default_factory=list)
     ranked_root_causes: list[dict[str, Any]] = Field(default_factory=list)
+    reasoning_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class Evidence(BaseModel):

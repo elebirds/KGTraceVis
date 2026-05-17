@@ -22,6 +22,7 @@ def evidence_with_analysis(evidence: Evidence, analysis: AnalysisResult) -> dict
         "ranked_root_causes": [
             item.model_dump(mode="json") for item in analysis.ranked_root_causes
         ],
+        "reasoning_metadata": analysis.reasoning_metadata,
     }
     return payload
 
@@ -44,6 +45,7 @@ def dashboard_fields_from_analysis(
         "correction_candidates": correction_candidates,
         "top_k_paths": top_k_paths,
         "ranked_root_causes": ranked_root_causes,
+        "reasoning_metadata": dict(analysis.reasoning_metadata),
         "path_graph": path_graph_from_paths(top_k_paths),
         "source_edge_provenance": source_edges,
         "review_targets": review_targets(

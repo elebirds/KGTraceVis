@@ -83,7 +83,11 @@ class TepRootKgdRcaProvider:
             top_k_paths=paths,
             ranked_root_causes=ranked,
             scoring_method="tep_root_kgd",
-            metadata=metadata,
+            metadata={
+                **metadata,
+                "reasoner_adapter": "tep_root_kgd",
+                "selection_mode": "direct",
+            },
         )
 
     def rank_root_causes(
@@ -559,6 +563,11 @@ def _ranked_root_cause_from_row(
             }
             for index, item in enumerate(row.get("top_affected_variables", []), start=1)
             if isinstance(item, dict)
+        ],
+        support_evidence_ids=[
+            str(item)
+            for item in row.get("support_evidence_ids", [])
+            if item is not None
         ],
         scoring_method="tep_root_kgd",
         scoring_details={

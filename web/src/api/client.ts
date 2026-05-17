@@ -84,6 +84,9 @@ export const api = {
     if (request.object_name) form.append("object_name", request.object_name);
     if (request.defect_type) form.append("defect_type", request.defect_type);
     if (request.model_preset) form.append("model_preset", request.model_preset);
+    if (request.reasoning_profile_id) {
+      form.append("reasoning_profile_id", request.reasoning_profile_id);
+    }
     return requestJson<RunDetail>("/api/runs/upload", {
       method: "POST",
       body: form

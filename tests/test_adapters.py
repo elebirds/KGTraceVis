@@ -431,6 +431,7 @@ def _empty_kg_analysis() -> dict[str, object]:
         "correction_candidates": [],
         "top_k_paths": [],
         "ranked_root_causes": [],
+        "reasoning_metadata": {},
     }
 
 

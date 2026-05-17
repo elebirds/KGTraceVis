@@ -52,6 +52,9 @@ class GenericGraphPathReasoner:
             ),
             metadata={
                 "reasoner": "generic_graph_path",
+                "reasoner_adapter": "generic_graph_path",
+                "reasoning_profile_id": "generic_graph_path_default",
+                "selection_mode": "direct",
                 "kg_build_ids": _kg_build_ids_from_paths(top_k_paths),
             },
         )

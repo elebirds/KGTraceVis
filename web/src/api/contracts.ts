@@ -1,5 +1,10 @@
 export type UploadMode = "evidence" | "records" | "image";
-export type ReviewTargetType = "path" | "edge" | "entity_link" | "correction";
+export type ReviewTargetType =
+  | "path"
+  | "edge"
+  | "entity_link"
+  | "correction"
+  | "root_cause_candidate";
 export type ReviewAction = "accept" | "reject" | "needs_review";
 export type KGConstructionSourceType =
   | "structured_records"
@@ -118,6 +123,8 @@ export interface RunDetail {
   linked_entities: Array<Record<string, unknown>>;
   correction_candidates: Array<Record<string, unknown>>;
   top_k_paths: Array<Record<string, unknown>>;
+  ranked_root_causes: Array<Record<string, unknown>>;
+  reasoning_metadata: Record<string, unknown>;
   path_graph: PathGraph;
   source_edge_provenance: Array<Record<string, unknown>>;
   review_targets: ReviewTarget[];
@@ -133,6 +140,12 @@ export interface UploadModeInfo {
   required_fields: string[];
 }
 
+export interface DashboardReasoningProfileOption {
+  profile_id: string;
+  reasoner_adapter: string;
+  default: boolean;
+}
+
 export interface DashboardBootstrap {
   status: string;
   api_version: string;
@@ -141,6 +154,7 @@ export interface DashboardBootstrap {
   supported_feedback_targets: ReviewTargetType[];
   supported_feedback_actions: ReviewAction[];
   upload_modes: UploadModeInfo[];
+  reasoning_profile_options: Record<string, DashboardReasoningProfileOption[]>;
   mvtec_model_presets: {
     default_preset: string;
     presets: Array<Record<string, unknown>>;
@@ -382,6 +396,7 @@ export interface UploadRequest {
   object_name?: string;
   defect_type?: string;
   model_preset?: string;
+  reasoning_profile_id?: string;
   top_k: number;
 }
 

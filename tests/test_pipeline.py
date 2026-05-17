@@ -68,14 +68,19 @@ def test_pipeline_result_serializes_feedback_compatible_contract() -> None:
     assert payload["correction_candidates"] == []
     assert payload["top_k_paths"]
     assert payload["ranked_root_causes"]
+    assert payload["reasoning_metadata"]["reasoner_adapter"] == "generic_graph_path"
+    assert payload["reasoning_metadata"]["reasoning_profile_id"] == "generic_graph_path_default"
+    assert payload["reasoning_metadata"]["selection_mode"] == "direct"
     assert payload["human_feedback"] == feedback
     kg_analysis = KGAnalysis.model_validate(
         {
             "top_k_paths": payload["top_k_paths"],
             "ranked_root_causes": payload["ranked_root_causes"],
+            "reasoning_metadata": payload["reasoning_metadata"],
         }
     )
     assert kg_analysis.ranked_root_causes[0]["candidate_id"] == "MechanicalContact"
+    assert kg_analysis.reasoning_metadata["reasoner_adapter"] == "generic_graph_path"
 
     anomaly_link = _link_for_field(payload["linked_entities"], "anomaly_type")
     assert anomaly_link["link_id"] == "link_mvtec_0001_anomaly_type_scratch"
@@ -133,6 +138,7 @@ def test_pipeline_path_contract_for_known_example() -> None:
     assert root_cause.explanation_paths[0]["path_id"] == "path_mvtec_0001_742df5e1c9"
     assert root_cause.scoring_details["kg_build_ids"] == []
     assert root_cause.supporting_edges
+    assert root_cause.support_evidence_ids
 
 
 def test_pipeline_does_not_mutate_input_evidence() -> None:

@@ -44,6 +44,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--overwrite", action="store_true", help="Replace existing outputs.")
     parser.add_argument(
+        "--reasoning-profile",
+        default=None,
+        type=str,
+        help="Optional registered reasoning profile ID for explicit RCA selection.",
+    )
+    parser.add_argument(
         "--kg-node-path",
         action="append",
         default=[],
@@ -70,6 +76,7 @@ def main() -> None:
         dataset=dataset,
         top_k=args.top_k,
         overwrite=args.overwrite,
+        reasoning_profile_id=args.reasoning_profile,
         kg_node_paths=args.kg_node_path,
         kg_edge_paths=args.kg_edge_path,
     )

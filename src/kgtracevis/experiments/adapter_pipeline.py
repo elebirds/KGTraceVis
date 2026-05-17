@@ -14,6 +14,7 @@ from kgtracevis.adapters.batch import evidence_from_records, load_records, write
 from kgtracevis.core import KGTracePipeline
 from kgtracevis.kg.graph import DEFAULT_EDGE_PATHS, DEFAULT_NODE_PATHS, KnowledgeGraph
 from kgtracevis.schema.evidence_schema import DatasetName, Evidence
+from kgtracevis.workflows.reasoning_registry import default_reasoning_registry
 from kgtracevis.workflows.root_cause_provider_selection import build_pipeline
 
 SUMMARY_FILENAME = "adapter_pipeline_summary.json"
@@ -59,6 +60,7 @@ def run_adapter_pipeline(
     top_k: int = 5,
     overwrite: bool = False,
     pipeline: KGTracePipeline | None = None,
+    reasoning_profile_id: str | None = None,
     kg_node_paths: list[str | Path] | None = None,
     kg_edge_paths: list[str | Path] | None = None,
 ) -> AdapterPipelineOutput:
@@ -80,16 +82,25 @@ def run_adapter_pipeline(
 
     records = load_records(source_path)
     evidence_items = evidence_from_records(records, dataset=dataset)
+
+    if pipeline is not None and (kg_node_paths or kg_edge_paths):
+        raise ValueError("pass either pipeline or KG CSV overlay paths, not both")
+    if pipeline is not None and reasoning_profile_id is not None:
+        raise ValueError("pass either pipeline or reasoning_profile_id, not both")
+    if pipeline is None and reasoning_profile_id is not None:
+        _validate_reasoning_profile_for_evidence_items(
+            reasoning_profile_id,
+            evidence_items,
+        )
+
     evidence_paths = write_evidence_files(
         evidence_items,
         evidence_dir,
         overwrite=overwrite,
     )
 
-    if pipeline is not None and (kg_node_paths or kg_edge_paths):
-        raise ValueError("pass either pipeline or KG CSV overlay paths, not both")
-
     active_pipeline = pipeline or _pipeline_from_kg_paths(
+        reasoning_profile_id=reasoning_profile_id,
         kg_node_paths=kg_node_paths,
         kg_edge_paths=kg_edge_paths,
     )
@@ -108,6 +119,7 @@ def run_adapter_pipeline(
         output_dir=destination_dir,
         dataset=dataset,
         top_k=top_k,
+        reasoning_profile_id=reasoning_profile_id,
         kg_node_paths=kg_node_paths,
         kg_edge_paths=kg_edge_paths,
         evidence_paths=evidence_paths,
@@ -161,11 +173,17 @@ def _run_summary(
     output_dir: Path,
     dataset: DatasetName | None,
     top_k: int,
+    reasoning_profile_id: str | None,
     kg_node_paths: list[str | Path] | None,
     kg_edge_paths: list[str | Path] | None,
     evidence_paths: list[Path],
     cases: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    pipeline_summary = _pipeline_reasoning_summary(
+        cases,
+        dataset=dataset,
+        reasoning_profile_id=reasoning_profile_id,
+    )
     return {
         "artifact_type": ARTIFACT_TYPE,
         "artifact_scope": "generated_reproducibility_output",
@@ -190,7 +208,7 @@ def _run_summary(
             "top_k": top_k,
             "kg_node_paths": [str(path) for path in kg_node_paths or []],
             "kg_edge_paths": [str(path) for path in kg_edge_paths or []],
-            "tep_rca_reasoner": "tep_root_kgd",
+            **pipeline_summary,
         },
         "note": (
             "Path targets are candidate/plausible explanation nodes generated from "
@@ -203,17 +221,18 @@ def _run_summary(
 
 def _pipeline_from_kg_paths(
     *,
+    reasoning_profile_id: str | None,
     kg_node_paths: list[str | Path] | None,
     kg_edge_paths: list[str | Path] | None,
 ) -> KGTracePipeline:
     if not kg_node_paths and not kg_edge_paths:
-        return build_pipeline()
+        return build_pipeline(reasoning_profile_id=reasoning_profile_id)
     graph = KnowledgeGraph.from_paths(
         [*DEFAULT_NODE_PATHS, *(kg_node_paths or [])],
         [*DEFAULT_EDGE_PATHS, *(kg_edge_paths or [])],
         skip_missing=True,
     )
-    return build_pipeline(graph=graph)
+    return build_pipeline(graph=graph, reasoning_profile_id=reasoning_profile_id)
 
 
 def _case_summary(
@@ -226,6 +245,7 @@ def _case_summary(
     top_k_paths = list(analysis["top_k_paths"])
     ranked_root_causes = list(analysis.get("ranked_root_causes", []))
     source_edges = _unique_source_edges(top_k_paths)
+    full_evidence = evidence.model_dump(mode="json")
     return {
         "case_id": evidence.case_id,
         "dataset": evidence.dataset,
@@ -233,6 +253,7 @@ def _case_summary(
         "adapter_name": evidence.adapter.name if evidence.adapter else None,
         "generated_evidence_path": str(evidence_path),
         "generated_evidence": _compact_evidence_summary(evidence),
+        "generated_evidence_full": full_evidence,
         "linked_entity_count": len(analysis["linked_entities"]),
         "linked_entities": analysis["linked_entities"],
         "consistency_score": analysis["consistency_score"],
@@ -240,6 +261,7 @@ def _case_summary(
         "correction_candidates": analysis["correction_candidates"],
         "top_k_paths": top_k_paths,
         "ranked_root_causes": ranked_root_causes,
+        "reasoning_metadata": dict(analysis.get("reasoning_metadata") or {}),
         "candidate_plausible_explanation_targets": _candidate_targets(
             top_k_paths,
             source_edges=source_edges,
@@ -367,3 +389,98 @@ def _unique_source_edges(top_k_paths: list[Mapping[str, Any]]) -> list[dict[str,
 def _ensure_can_write(path: Path, *, overwrite: bool) -> None:
     if path.exists() and not overwrite:
         raise FileExistsError(f"{path} already exists; pass --overwrite to replace it")
+
+
+def _validate_reasoning_profile_for_evidence_items(
+    reasoning_profile_id: str,
+    evidence_items: list[Evidence],
+) -> None:
+    registry = default_reasoning_registry()
+    datasets = sorted({str(item.dataset) for item in evidence_items})
+    for dataset_name in datasets:
+        registry.validate_profile_for_dataset(reasoning_profile_id, dataset_name)
+
+
+def _pipeline_reasoning_summary(
+    cases: list[dict[str, Any]],
+    *,
+    dataset: DatasetName | None,
+    reasoning_profile_id: str | None,
+) -> dict[str, Any]:
+    metadata_rows = [
+        dict(reasoning_metadata)
+        for case in cases
+        if isinstance((reasoning_metadata := case.get("reasoning_metadata")), Mapping)
+    ]
+    if metadata_rows:
+        profile_ids = _unique_nonempty_values(
+            row.get("reasoning_profile_id") for row in metadata_rows
+        )
+        adapters = _unique_nonempty_values(
+            row.get("reasoner_adapter") or row.get("reasoner") for row in metadata_rows
+        )
+        selection_modes = _unique_nonempty_values(
+            row.get("selection_mode") for row in metadata_rows
+        )
+        requested_profile_ids = _unique_nonempty_values(
+            row.get("requested_reasoning_profile_id") for row in metadata_rows
+        )
+        requested_adapters = _unique_nonempty_values(
+            row.get("requested_reasoner_adapter") for row in metadata_rows
+        )
+        return {
+            "reasoning_profile_id": profile_ids[0] if len(profile_ids) == 1 else None,
+            "reasoner_adapter": adapters[0] if len(adapters) == 1 else None,
+            "selection_mode": selection_modes[0] if len(selection_modes) == 1 else None,
+            "reasoning_profile_ids": profile_ids,
+            "reasoner_adapters": adapters,
+            "selection_modes": selection_modes,
+            "requested_reasoning_profile_ids": requested_profile_ids,
+            "requested_reasoner_adapters": requested_adapters,
+            "tep_rca_reasoner": adapters[0] if len(adapters) == 1 else None,
+        }
+
+    if reasoning_profile_id:
+        profile = default_reasoning_registry().resolve_profile(reasoning_profile_id)
+        return {
+            "reasoning_profile_id": profile.reasoning_profile_id,
+            "reasoner_adapter": profile.reasoner_adapter,
+            "selection_mode": "explicit",
+            "reasoning_profile_ids": [profile.reasoning_profile_id],
+            "reasoner_adapters": [profile.reasoner_adapter],
+            "selection_modes": ["explicit"],
+            "requested_reasoning_profile_ids": [],
+            "requested_reasoner_adapters": [],
+            "tep_rca_reasoner": profile.reasoner_adapter,
+        }
+
+    if dataset is not None:
+        registry = default_reasoning_registry()
+        profile = registry.resolve_profile(registry.default_profile_id_for_dataset(dataset))
+        return {
+            "reasoning_profile_id": profile.reasoning_profile_id,
+            "reasoner_adapter": profile.reasoner_adapter,
+            "selection_mode": "default",
+            "reasoning_profile_ids": [profile.reasoning_profile_id],
+            "reasoner_adapters": [profile.reasoner_adapter],
+            "selection_modes": ["default"],
+            "requested_reasoning_profile_ids": [],
+            "requested_reasoner_adapters": [],
+            "tep_rca_reasoner": profile.reasoner_adapter,
+        }
+
+    return {
+        "reasoning_profile_id": None,
+        "reasoner_adapter": None,
+        "selection_mode": None,
+        "reasoning_profile_ids": [],
+        "reasoner_adapters": [],
+        "selection_modes": [],
+        "requested_reasoning_profile_ids": [],
+        "requested_reasoner_adapters": [],
+        "tep_rca_reasoner": None,
+    }
+
+
+def _unique_nonempty_values(values: Any) -> list[str]:
+    return sorted({str(value) for value in values if str(value)})

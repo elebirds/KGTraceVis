@@ -405,7 +405,14 @@ def test_dashboard_bootstrap_route_exposes_contract(monkeypatch) -> None:
         "edge",
         "entity_link",
         "correction",
+        "root_cause_candidate",
     ]
+    assert payload["reasoning_profile_options"]["mvtec"][0]["profile_id"] == (
+        "generic_graph_path_default"
+    )
+    assert payload["reasoning_profile_options"]["tep"][-1]["profile_id"] == (
+        "tep_root_kgd_default"
+    )
     assert "presets" in payload["mvtec_model_presets"]
 
 
