@@ -74,6 +74,7 @@ def normalize_visual_evidence_items(
     normalized: list[dict[str, Any]] = []
     for item in items:
         row = dict(item)
+        _normalize_browser_preview_reference(row)
         _apply_visual_item_classification(row)
         normalized.append(row)
     return normalized
@@ -443,6 +444,26 @@ def _classified_visual_item(item: VisualEvidenceItem) -> VisualEvidenceItem:
     return VisualEvidenceItem.model_validate(row)
 
 
+def _normalize_browser_preview_reference(item: dict[str, Any]) -> None:
+    url = _text(item.get("url"))
+    preview_path = _text(item.get("preview_path"))
+    if not url:
+        return
+
+    metadata: dict[str, Any] = (
+        dict(item["metadata"]) if isinstance(item.get("metadata"), dict) else {}
+    )
+    if preview_path and not _is_browser_safe_reference(preview_path):
+        metadata.setdefault("server_preview_path", preview_path)
+        item["preview_path"] = url
+        item["metadata"] = metadata
+        return
+    if not preview_path:
+        item["preview_path"] = url
+        if metadata:
+            item["metadata"] = metadata
+
+
 def _apply_visual_item_classification(item: dict[str, Any]) -> None:
     if not _is_mvtec_model_visualization_item(item):
         return
@@ -460,6 +481,20 @@ def _apply_visual_item_classification(item: dict[str, Any]) -> None:
     item["note"] = (
         "This preview is a generated MVTec model-visualization panel "
         "(image, ground-truth mask, anomaly map, predicted mask), not the raw source image."
+    )
+
+
+def _is_browser_safe_reference(value: str) -> bool:
+    lowered = value.lower()
+    return lowered.startswith(
+        (
+            "/api/",
+            "/generated/",
+            "http://",
+            "https://",
+            "data:",
+            "blob:",
+        )
     )
 
 

@@ -195,7 +195,7 @@ def create_run_from_upload(
     store = run_store()
     if store is None:
         raise ValueError("Postgres run store is not configured")
-    return RunDetail.model_validate(store.save_run(detail))
+    return enrich_run_detail(RunDetail.model_validate(store.save_run(detail)))
 
 
 def parse_upload_mode(value: str) -> UploadMode:
@@ -328,8 +328,13 @@ def _run_records_upload(
     )
     summary = output.summary
     records = _load_visual_records(input_path)
+    visual_evidence = build_visual_evidence_artifacts(
+        records,
+        run_id=run_id,
+        run_dir=input_path.parent.parent,
+    )
     summary_cases = list_of_dicts(summary.get("cases"))
-    case_rows = enriched_case_rows(summary_cases)
+    case_rows = enriched_case_rows(summary_cases, visual_evidence=visual_evidence)
     inferred_dataset = None
     if case_rows:
         first_case = case_rows[0]
@@ -404,11 +409,7 @@ def _run_records_upload(
             "summary_path": str(output.summary_path),
             "table_path": str(output.table_path),
         },
-        visual_evidence=build_visual_evidence_artifacts(
-            records,
-            run_id=run_id,
-            run_dir=input_path.parent.parent,
-        ),
+        visual_evidence=visual_evidence,
     )
     return detail
 
